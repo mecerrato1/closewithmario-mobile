@@ -2056,10 +2056,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#777',
   },
-  noTasksText: {
-    textAlign: 'center',
-    color: '#777',
-  },
   // Dashboard Styles
   dashboardContent: {
     paddingBottom: 32,
