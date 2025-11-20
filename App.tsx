@@ -831,26 +831,71 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
 
   useEffect(() => {
     const init = async () => {
+      if (!session?.user?.id) {
+        setErrorMessage('No user session found');
+        setLoading(false);
+        return;
+      }
+
       try {
-        const { data: leadsData, error: leadsError } = await supabase
+        setLoading(true);
+
+        // First, determine user's role and team member ID
+        // Check if user is a loan officer
+        const { data: loData } = await supabase
+          .from('loan_officers')
+          .select('id, first_name, last_name')
+          .eq('id', session.user.id)
+          .single();
+
+        // Check if user is a realtor
+        const { data: realtorData } = await supabase
+          .from('realtors')
+          .select('id, first_name, last_name')
+          .eq('id', session.user.id)
+          .single();
+
+        // Determine role and filter column
+        let filterColumn: 'lo_id' | 'realtor_id' | null = null;
+        let teamMemberId: string | null = null;
+
+        if (loData) {
+          filterColumn = 'lo_id';
+          teamMemberId = loData.id;
+        } else if (realtorData) {
+          filterColumn = 'realtor_id';
+          teamMemberId = realtorData.id;
+        }
+
+        // If user is not a team member, show all leads (admin view)
+        let leadsQuery = supabase
           .from('leads')
           .select(
-            'id, created_at, first_name, last_name, email, phone, status, loan_purpose, price, down_payment, credit_score, message'
+            'id, created_at, first_name, last_name, email, phone, status, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id'
           )
           .order('created_at', { ascending: false })
           .limit(50);
+
+        let metaQuery = supabase
+          .from('meta_ads')
+          .select(
+            'id, created_at, first_name, last_name, email, phone, status, platform, campaign_name, subject_address, preferred_language, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id'
+          )
+          .order('created_at', { ascending: false })
+          .limit(50);
+
+        // Apply filter if user is a team member
+        if (filterColumn && teamMemberId) {
+          leadsQuery = leadsQuery.eq(filterColumn, teamMemberId);
+          metaQuery = metaQuery.eq(filterColumn, teamMemberId);
+        }
+
+        const { data: leadsData, error: leadsError } = await leadsQuery;
+        const { data: metaData, error: metaError } = await metaQuery;
 
         if (leadsError) {
           console.error('Supabase leads error:', leadsError);
         }
-
-        const { data: metaData, error: metaError } = await supabase
-          .from('meta_ads')
-          .select(
-            'id, created_at, first_name, last_name, email, phone, status, platform, campaign_name, subject_address, preferred_language, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes'
-          )
-          .order('created_at', { ascending: false })
-          .limit(50);
 
         if (metaError) {
           console.error('Supabase meta_ads error:', metaError);
@@ -880,7 +925,7 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
     };
 
     init();
-  }, []);
+  }, [session?.user?.id]);
 
   // Auto-switch to leads tab if no meta leads
   useEffect(() => {
