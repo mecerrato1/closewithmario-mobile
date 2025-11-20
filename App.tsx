@@ -106,9 +106,9 @@ const STATUS_COLOR_MAP: Record<string, { bg: string; text: string; border: strin
   'new': { bg: '#E3F2FD', text: '#1976D2', border: '#90CAF9' },
   'contacted': { bg: '#FFF3E0', text: '#F57C00', border: '#FFB74D' },
   'gathering_docs': { bg: '#F3E5F5', text: '#7B1FA2', border: '#CE93D8' },
-  'qualified': { bg: '#E8F5E9', text: '#388E3C', border: '#81C784' },
+  'qualified': { bg: '#D1FAE5', text: '#059669', border: '#10B981' },
   'nurturing': { bg: '#FFF9C4', text: '#F9A825', border: '#FFF59D' },
-  'closed': { bg: '#C8E6C9', text: '#2E7D32', border: '#66BB6A' },
+  'closed': { bg: '#D1FAE5', text: '#047857', border: '#10B981' },
   'unqualified': { bg: '#FFEBEE', text: '#C62828', border: '#EF5350' },
   'no_response': { bg: '#F5F5F5', text: '#616161', border: '#BDBDBD' },
 };
@@ -219,86 +219,103 @@ function AuthScreen({ onAuth }: AuthScreenProps) {
       style={styles.authContainer}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View style={styles.logoContainer}>
-        <Image
-          source={require('./assets/CWMLogo.png')}
-          style={styles.logo}
-          resizeMode="contain"
-        />
-      </View>
-
-      <Text style={styles.title}>CloseWithMario Mobile</Text>
-      <Text style={styles.subtitle}>
-        {mode === 'signIn' ? 'Sign in to continue' : 'Create an account'}
-      </Text>
-
-      <View style={styles.formContainer}>
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#999"
-          autoCapitalize="none"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#999"
-          secureTextEntry
-          autoCapitalize="none"
-          value={password}
-          onChangeText={setPassword}
-        />
-
-        {authError && <Text style={styles.errorText}>{authError}</Text>}
-
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={handleEmailPasswordAuth}
-          disabled={authLoading}
-        >
-          <Text style={styles.primaryButtonText}>
-            {authLoading
-              ? 'Please wait...'
-              : mode === 'signIn'
-              ? 'Sign In'
-              : 'Sign Up'}
+      <ScrollView 
+        contentContainerStyle={styles.authScrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Logo Section */}
+        <View style={styles.authHeader}>
+          <View style={styles.logoContainer}>
+            <Image
+              source={require('./assets/CWMLogo.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          </View>
+          <Text style={styles.authTitle}>Close With Mario</Text>
+          <Text style={styles.authSubtitle}>
+            {mode === 'signIn' ? 'Welcome back! Sign in to continue' : 'Create your account'}
           </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() =>
-            setMode(mode === 'signIn' ? 'signUp' : 'signIn')
-          }
-        >
-          <Text style={styles.switchModeText}>
-            {mode === 'signIn'
-              ? "Don't have an account? Sign up"
-              : 'Already have an account? Sign in'}
-          </Text>
-        </TouchableOpacity>
-
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>OR</Text>
-          <View style={styles.dividerLine} />
         </View>
 
-        <TouchableOpacity
-          style={styles.googleButton}
-          onPress={handleGoogleSignIn}
-          disabled={authLoading}
-        >
-          <Text style={styles.googleButtonText}>Continue with Google</Text>
-        </TouchableOpacity>
+        {/* Form Card */}
+        <View style={styles.authCard}>
+          <TextInput
+            style={styles.authInput}
+            placeholder="Email address"
+            placeholderTextColor="#94A3B8"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={email}
+            onChangeText={setEmail}
+          />
 
-        <Text style={styles.googleHint}>
-          Google login requires a dev / standalone build (not Expo Go).
-        </Text>
-      </View>
+          <TextInput
+            style={styles.authInput}
+            placeholder="Password"
+            placeholderTextColor="#94A3B8"
+            secureTextEntry
+            autoCapitalize="none"
+            value={password}
+            onChangeText={setPassword}
+          />
+
+          {authError && (
+            <View style={styles.authErrorContainer}>
+              <Text style={styles.authErrorText}>⚠️ {authError}</Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[styles.authPrimaryButton, authLoading && styles.authButtonDisabled]}
+            onPress={handleEmailPasswordAuth}
+            disabled={authLoading}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.authPrimaryButtonText}>
+              {authLoading
+                ? 'Please wait...'
+                : mode === 'signIn'
+                ? 'Sign In'
+                : 'Create Account'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setMode(mode === 'signIn' ? 'signUp' : 'signIn')}
+            style={styles.authSwitchButton}
+          >
+            <Text style={styles.authSwitchText}>
+              {mode === 'signIn'
+                ? "Don't have an account? "
+                : 'Already have an account? '}
+              <Text style={styles.authSwitchTextBold}>
+                {mode === 'signIn' ? 'Sign up' : 'Sign in'}
+              </Text>
+            </Text>
+          </TouchableOpacity>
+
+          <View style={styles.authDivider}>
+            <View style={styles.authDividerLine} />
+            <Text style={styles.authDividerText}>OR</Text>
+            <View style={styles.authDividerLine} />
+          </View>
+
+          <TouchableOpacity
+            style={[styles.authGoogleButton, authLoading && styles.authButtonDisabled]}
+            onPress={handleGoogleSignIn}
+            disabled={authLoading}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.authGoogleIcon}>G</Text>
+            <Text style={styles.authGoogleButtonText}>Continue with Google</Text>
+          </TouchableOpacity>
+
+          <Text style={styles.authHint}>
+            💡 Google login requires a development or standalone build
+          </Text>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -549,15 +566,37 @@ function LeadDetailView({
 
       <ScrollView contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
         <View style={styles.detailCard}>
-          <Text style={styles.detailName}>{fullName}</Text>
+          <View style={styles.detailNameRow}>
+            <Text style={styles.detailName}>{fullName}</Text>
+          </View>
           <Text style={styles.detailMeta}>
-            Created: {new Date(record.created_at).toLocaleString()}
+            📅 {new Date(record.created_at).toLocaleDateString('en-US', { 
+              month: 'long', 
+              day: 'numeric',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
           </Text>
 
+          {/* Divider */}
+          <View style={styles.sectionDivider} />
+
           {/* Status buttons */}
-          <Text style={[styles.sectionTitle, { marginTop: 16 }]}>
-            Status: {status ? formatStatus(status) : 'N/A'}
-          </Text>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitle}>🏷️ Status</Text>
+            <View style={[
+              styles.currentStatusBadge,
+              { backgroundColor: STATUS_COLOR_MAP[status || 'new']?.bg || '#F5F5F5' }
+            ]}>
+              <Text style={[
+                styles.currentStatusText,
+                { color: STATUS_COLOR_MAP[status || 'new']?.text || '#666' }
+              ]}>
+                {status ? formatStatus(status) : 'N/A'}
+              </Text>
+            </View>
+          </View>
           <View style={styles.statusRow}>
             {STATUSES.map((s) => {
               const active = s === status;
@@ -585,10 +624,11 @@ function LeadDetailView({
             })}
           </View>
 
+          {/* Divider */}
+          <View style={styles.sectionDivider} />
+
           {/* Contact buttons */}
-          <Text style={[styles.sectionTitle, { marginTop: 16 }]}>
-            Contact
-          </Text>
+          <Text style={styles.sectionTitle}>📞 Contact</Text>
           <View style={styles.contactRow}>
             <TouchableOpacity
               style={[
@@ -598,6 +638,7 @@ function LeadDetailView({
               onPress={handleCall}
               disabled={!phone}
             >
+              <Text style={styles.contactButtonIcon}>☎</Text>
               <Text style={styles.contactButtonText}>Call</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -608,6 +649,7 @@ function LeadDetailView({
               onPress={handleText}
               disabled={!phone}
             >
+              <Text style={styles.contactButtonIcon}>💬</Text>
               <Text style={styles.contactButtonText}>Text</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -618,14 +660,17 @@ function LeadDetailView({
               onPress={handleEmail}
               disabled={!email}
             >
+              <Text style={styles.contactButtonIcon}>✉</Text>
               <Text style={styles.contactButtonText}>Email</Text>
             </TouchableOpacity>
           </View>
 
+          {/* Divider */}
+          <View style={styles.sectionDivider} />
+
           {/* Basic fields */}
-          <Text style={[styles.sectionTitle, { marginTop: 16 }]}>
-            Basic Info
-          </Text>
+          <Text style={styles.sectionTitle}>ℹ️ Basic Info</Text>
+          <View style={styles.infoGrid}>
           <Text style={styles.detailField}>Email: {email || 'N/A'}</Text>
           <Text style={styles.detailField}>Phone: {phone || 'N/A'}</Text>
 
@@ -709,11 +754,13 @@ function LeadDetailView({
               </Text>
             </>
           )}
+          </View>
+
+          {/* Divider */}
+          <View style={styles.sectionDivider} />
 
           {/* Tasks / Logging Section */}
-          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>
-            Log Activity
-          </Text>
+          <Text style={styles.sectionTitle}>✍️ Log Activity</Text>
           
           {/* Activity Type Buttons */}
           <View style={styles.activityTypeRow}>
@@ -827,10 +874,11 @@ function LeadDetailView({
             </TouchableOpacity>
           </View>
 
+          {/* Divider */}
+          <View style={styles.sectionDivider} />
+
           {/* Activity History */}
-          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>
-            Activity History
-          </Text>
+          <Text style={styles.sectionTitle}>📋 Activity History</Text>
 
           {loadingActivities ? (
             <ActivityIndicator size="small" color="#007aff" style={{ marginTop: 12 }} />
@@ -1239,7 +1287,7 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
       <View style={styles.headerContainer}>
         <View style={styles.headerContent}>
           <View>
-            <Text style={styles.headerTitle}>CloseWithMario</Text>
+            <Text style={styles.headerTitle}>Close With Mario</Text>
             <Text style={styles.headerSubtitle}>Lead Management</Text>
           </View>
           <TouchableOpacity onPress={onSignOut} style={styles.signOutButton}>
@@ -1414,27 +1462,173 @@ const styles = StyleSheet.create({
   },
   authContainer: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-    paddingTop: 60,
+    backgroundColor: '#F5F7FA',
+  },
+  authScrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingBottom: 40,
+  },
+  authHeader: {
+    alignItems: 'center',
+    marginBottom: 32,
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
+    backgroundColor: '#FFFFFF',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    justifyContent: 'center',
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
   },
   logo: {
-    width: 120,
-    height: 120,
+    width: 100,
+    height: 100,
   },
-  formContainer: {
-    width: '100%',
+  authTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#1E293B',
+    marginBottom: 8,
+    letterSpacing: 0.5,
+  },
+  authSubtitle: {
+    fontSize: 15,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  authCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  authInput: {
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 16,
+    fontSize: 16,
+    backgroundColor: '#F8FAFC',
+    color: '#1E293B',
+    fontWeight: '500',
+  },
+  authErrorContainer: {
+    backgroundColor: '#FEE2E2',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#DC2626',
+  },
+  authErrorText: {
+    fontSize: 13,
+    color: '#991B1B',
+    fontWeight: '600',
+  },
+  authPrimaryButton: {
+    backgroundColor: '#7C3AED',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
     marginTop: 8,
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  authPrimaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  authButtonDisabled: {
+    opacity: 0.6,
+  },
+  authSwitchButton: {
+    marginTop: 16,
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  authSwitchText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '500',
+  },
+  authSwitchTextBold: {
+    color: '#7C3AED',
+    fontWeight: '700',
+  },
+  authDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 24,
+  },
+  authDividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E2E8F0',
+  },
+  authDividerText: {
+    marginHorizontal: 16,
+    fontSize: 13,
+    color: '#94A3B8',
+    fontWeight: '600',
+  },
+  authGoogleButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  authGoogleIcon: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#4285F4',
+    marginRight: 12,
+  },
+  authGoogleButtonText: {
+    color: '#1E293B',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  authHint: {
+    fontSize: 12,
+    marginTop: 16,
+    textAlign: 'center',
+    color: '#64748B',
+    lineHeight: 18,
+    fontWeight: '500',
   },
   headerContainer: {
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: 20,
     paddingHorizontal: 20,
-    backgroundColor: '#1E3A8A',
+    backgroundColor: '#7C3AED',
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
     shadowColor: '#000',
@@ -1490,11 +1684,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 2,
+    borderTopWidth: 3,
+    borderTopColor: '#10B981',
   },
   statNumber: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#1E3A8A',
+    color: '#10B981',
   },
   statLabel: {
     fontSize: 12,
@@ -1542,12 +1738,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginTop: 8,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 8,
-    marginTop: 8,
-  },
   listContent: {
     paddingHorizontal: 16,
     paddingBottom: 32,
@@ -1557,13 +1747,13 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     borderRadius: 16,
     backgroundColor: '#FFFFFF',
-    shadowColor: '#1E3A8A',
+    shadowColor: '#7C3AED',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08,
     shadowRadius: 12,
     elevation: 4,
     borderLeftWidth: 4,
-    borderLeftColor: '#3B82F6',
+    borderLeftColor: '#7C3AED',
   },
   leadHeader: {
     flexDirection: 'row',
@@ -1718,7 +1908,7 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: 16,
     paddingHorizontal: 20,
-    backgroundColor: '#1E3A8A',
+    backgroundColor: '#7C3AED',
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
     shadowColor: '#000',
@@ -1786,25 +1976,69 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.3)',
   },
   detailCard: {
+    marginHorizontal: 16,
     marginTop: 16,
-    padding: 16,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#eee',
-    backgroundColor: '#fafafa',
+    padding: 20,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  detailNameRow: {
+    marginBottom: 8,
   },
   detailName: {
-    fontSize: 20,
-    fontWeight: '700',
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#1E293B',
+    letterSpacing: 0.3,
   },
   detailMeta: {
     fontSize: 13,
-    color: '#777',
+    color: '#64748B',
     marginTop: 4,
+    fontWeight: '500',
+  },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
+    marginVertical: 20,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 12,
+    letterSpacing: 0.2,
+  },
+  currentStatusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  currentStatusText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  infoGrid: {
+    gap: 8,
   },
   detailField: {
     fontSize: 14,
-    marginTop: 6,
+    marginTop: 8,
+    color: '#475569',
+    lineHeight: 20,
   },
   statusRow: {
     flexDirection: 'row',
@@ -1822,8 +2056,8 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   statusChipActive: {
-    backgroundColor: '#007aff',
-    borderColor: '#007aff',
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
   },
   statusChipText: {
     fontSize: 12,
@@ -1835,21 +2069,34 @@ const styles = StyleSheet.create({
   contactRow: {
     flexDirection: 'row',
     marginTop: 8,
-    gap: 8,
+    gap: 10,
   },
   contactButton: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#007aff',
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: '#7C3AED',
     alignItems: 'center',
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
   contactButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: '#CBD5E1',
+    shadowOpacity: 0,
+  },
+  contactButtonIcon: {
+    fontSize: 18,
+    marginBottom: 4,
+    color: '#FFFFFF',
   },
   contactButtonText: {
-    color: '#fff',
-    fontWeight: '600',
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+    letterSpacing: 0.3,
   },
   tabBar: {
     flexDirection: 'row',
@@ -1858,7 +2105,7 @@ const styles = StyleSheet.create({
     padding: 6,
     marginHorizontal: 16,
     marginBottom: 16,
-    shadowColor: '#1E3A8A',
+    shadowColor: '#7C3AED',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -1872,8 +2119,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   tabActive: {
-    backgroundColor: '#1E3A8A',
-    shadowColor: '#1E3A8A',
+    backgroundColor: '#7C3AED',
+    shadowColor: '#7C3AED',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
@@ -1897,15 +2144,20 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     paddingHorizontal: 8,
-    borderRadius: 8,
-    backgroundColor: '#e8e8e8',
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#ddd',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
   },
   activityTypeButtonActive: {
-    backgroundColor: '#007aff',
-    borderColor: '#007aff',
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
   },
   activityTypeText: {
     fontSize: 13,
@@ -1970,14 +2222,20 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   logActivityButton: {
-    backgroundColor: '#007aff',
-    borderRadius: 8,
-    paddingVertical: 12,
+    backgroundColor: '#10B981',
+    borderRadius: 12,
+    paddingVertical: 14,
     marginTop: 12,
     alignItems: 'center',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   logActivityButtonDisabled: {
     backgroundColor: '#ccc',
+    shadowOpacity: 0,
   },
   logActivityButtonText: {
     color: '#fff',
