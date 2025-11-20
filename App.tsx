@@ -13,6 +13,7 @@ import {
   ScrollView,
   Linking,
   Image,
+  RefreshControl,
 } from 'react-native';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './src/lib/supabase';
@@ -98,6 +99,18 @@ const STATUS_DISPLAY_MAP: Record<string, string> = {
   'closed': 'Closed',
   'unqualified': 'Unqualified',
   'no_response': 'No Response',
+};
+
+// Map status to colors for visual distinction
+const STATUS_COLOR_MAP: Record<string, { bg: string; text: string; border: string }> = {
+  'new': { bg: '#E3F2FD', text: '#1976D2', border: '#90CAF9' },
+  'contacted': { bg: '#FFF3E0', text: '#F57C00', border: '#FFB74D' },
+  'gathering_docs': { bg: '#F3E5F5', text: '#7B1FA2', border: '#CE93D8' },
+  'qualified': { bg: '#E8F5E9', text: '#388E3C', border: '#81C784' },
+  'nurturing': { bg: '#FFF9C4', text: '#F9A825', border: '#FFF59D' },
+  'closed': { bg: '#C8E6C9', text: '#2E7D32', border: '#66BB6A' },
+  'unqualified': { bg: '#FFEBEE', text: '#C62828', border: '#EF5350' },
+  'no_response': { bg: '#F5F5F5', text: '#616161', border: '#BDBDBD' },
 };
 
 // Helper to format status for display using the map
@@ -296,6 +309,7 @@ type LeadDetailViewProps = {
   leads: Lead[];
   metaLeads: MetaLead[];
   onBack: () => void;
+  onNavigate: (leadRef: SelectedLeadRef) => void;
   onStatusChange: (
     source: 'lead' | 'meta',
     id: string,
@@ -320,6 +334,7 @@ function LeadDetailView({
   leads,
   metaLeads,
   onBack,
+  onNavigate,
   onStatusChange,
   session,
 }: LeadDetailViewProps) {
@@ -342,19 +357,36 @@ function LeadDetailView({
   ];
   
   const isMeta = selected.source === 'meta';
-  const record = isMeta
-    ? metaLeads.find((m) => m.id === selected.id)
-    : leads.find((l) => l.id === selected.id);
+  const currentList = isMeta ? metaLeads : leads;
+  const currentIndex = currentList.findIndex((item) => item.id === selected.id);
+  const record = currentList[currentIndex];
+
+  const hasPrevious = currentIndex > 0;
+  const hasNext = currentIndex < currentList.length - 1;
+
+  const handlePrevious = () => {
+    if (hasPrevious) {
+      const prevLead = currentList[currentIndex - 1];
+      onNavigate({ source: selected.source, id: prevLead.id });
+    }
+  };
+
+  const handleNext = () => {
+    if (hasNext) {
+      const nextLead = currentList[currentIndex + 1];
+      onNavigate({ source: selected.source, id: nextLead.id });
+    }
+  };
 
   if (!record) {
     return (
       <View style={styles.container}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity onPress={onBack}>
-            <Text style={styles.signOutText}>{'< Leads'}</Text>
+        <View style={styles.detailHeader}>
+          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+            <Text style={styles.backButtonText}>✕</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Lead not found</Text>
-          <View style={{ width: 60 }} />
+          <Text style={styles.detailHeaderTitle}>Lead not found</Text>
+          <View style={{ width: 40 }} />
         </View>
         <View style={styles.centerContent}>
           <Text>We couldn&apos;t find this lead in memory.</Text>
@@ -486,20 +518,38 @@ function LeadDetailView({
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <TouchableOpacity onPress={onBack}>
-          <Text style={styles.signOutText}>{'< Leads'}</Text>
+      {/* Modern Detail Header with Navigation */}
+      <View style={styles.detailHeader}>
+        <TouchableOpacity onPress={onBack} style={styles.backButton}>
+          <Text style={styles.backButtonText}>✕</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Lead Details</Text>
-        <View style={{ width: 60 }} />
+        <View style={styles.detailHeaderCenter}>
+          <Text style={styles.detailHeaderTitle}>Lead Details</Text>
+          <Text style={styles.detailHeaderSubtitle}>
+            {currentIndex + 1} of {currentList.length}
+          </Text>
+        </View>
+        <View style={styles.navButtons}>
+          <TouchableOpacity 
+            onPress={handlePrevious} 
+            style={[styles.navButton, !hasPrevious && styles.navButtonDisabled]}
+            disabled={!hasPrevious}
+          >
+            <Text style={[styles.navButtonText, !hasPrevious && styles.navButtonTextDisabled]}>‹</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={handleNext} 
+            style={[styles.navButton, !hasNext && styles.navButtonDisabled]}
+            disabled={!hasNext}
+          >
+            <Text style={[styles.navButtonText, !hasNext && styles.navButtonTextDisabled]}>›</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
         <View style={styles.detailCard}>
           <Text style={styles.detailName}>{fullName}</Text>
-          <Text style={styles.detailMeta}>
-            Source: {isMeta ? 'Meta Ad' : 'Website / CTA'}
-          </Text>
           <Text style={styles.detailMeta}>
             Created: {new Date(record.created_at).toLocaleString()}
           </Text>
@@ -822,6 +872,7 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [metaLeads, setMetaLeads] = useState<MetaLead[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string>('');
   const [selectedLead, setSelectedLead] = useState<SelectedLeadRef | null>(
@@ -976,7 +1027,9 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
     const fullName =
       [item.first_name, item.last_name].filter(Boolean).join(' ') ||
       '(No name)';
-    const status = item.status ? formatStatus(item.status) : 'No status';
+    const status = item.status || 'new';
+    const statusDisplay = formatStatus(status);
+    const statusColors = STATUS_COLOR_MAP[status] || STATUS_COLOR_MAP['new'];
     const emailOrPhone = item.email || item.phone || 'No contact info';
 
     return (
@@ -985,10 +1038,34 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
         onPress={() =>
           setSelectedLead({ source: 'lead', id: item.id })
         }
+        activeOpacity={0.7}
       >
-        <Text style={styles.leadName}>{fullName}</Text>
-        <Text style={styles.leadStatus}>{status}</Text>
-        <Text style={styles.leadContact}>📧 {emailOrPhone}</Text>
+        <View style={styles.leadHeader}>
+          <Text style={styles.leadName}>{fullName}</Text>
+          <View style={styles.leadSourceBadge}>
+            <Text style={styles.leadSourceText}>🌐 Web</Text>
+          </View>
+        </View>
+        <View style={[
+          styles.statusBadge,
+          { backgroundColor: statusColors.bg, borderColor: statusColors.border }
+        ]}>
+          <Text style={[styles.statusBadgeText, { color: statusColors.text }]}>
+            {statusDisplay}
+          </Text>
+        </View>
+        <View style={styles.leadContactRow}>
+          <Text style={styles.leadContactIcon}>📧</Text>
+          <Text style={styles.leadContact} numberOfLines={1}>{emailOrPhone}</Text>
+        </View>
+        <Text style={styles.leadTimestamp}>
+          {new Date(item.created_at).toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })}
+        </Text>
       </TouchableOpacity>
     );
   };
@@ -1002,48 +1079,49 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
     const platform = item.platform || 'Facebook';
     const campaign = item.campaign_name || '';
 
-    // Get platform icon component
-    const getPlatformIcon = (platform: string) => {
+    // Get platform badge component
+    const getPlatformBadge = (platform: string) => {
       const platformLower = platform.toLowerCase();
       
-      // Check for Facebook (fb, facebook, etc.)
-      if (platformLower.includes('facebook') || platformLower.includes('fb')) {
-        return (
-          <Image
-            source={require('./assets/fb.png')}
-            style={styles.platformIcon}
-            resizeMode="contain"
-          />
-        );
-      }
+      let badgeText = 'FB';
+      let badgeColor = '#1877F2'; // Facebook blue
+      let badgeBg = '#E7F3FF';
       
       // Check for Instagram (ig, instagram, etc.)
       if (platformLower.includes('instagram') || platformLower.includes('ig')) {
-        return (
-          <Image
-            source={require('./assets/IG.png')}
-            style={styles.platformIcon}
-            resizeMode="contain"
-          />
-        );
+        badgeText = 'IG';
+        badgeColor = '#E4405F'; // Instagram pink
+        badgeBg = '#FFE8ED';
+      }
+      // Check for Facebook (fb, facebook, etc.)
+      else if (platformLower.includes('facebook') || platformLower.includes('fb')) {
+        badgeText = 'FB';
+        badgeColor = '#1877F2';
+        badgeBg = '#E7F3FF';
+      }
+      // Check for Messenger
+      else if (platformLower.includes('messenger')) {
+        badgeText = 'MSG';
+        badgeColor = '#0084FF';
+        badgeBg = '#E5F2FF';
+      }
+      // Check for WhatsApp
+      else if (platformLower.includes('whatsapp')) {
+        badgeText = 'WA';
+        badgeColor = '#25D366';
+        badgeBg = '#E8F8EF';
       }
       
-      if (platformLower.includes('messenger')) {
-        return <Text style={styles.platformEmoji}>💬</Text>;
-      }
-      if (platformLower.includes('whatsapp')) {
-        return <Text style={styles.platformEmoji}>💚</Text>;
-      }
-      
-      // Default to Facebook icon if platform is not recognized
       return (
-        <Image
-          source={require('./assets/fb.png')}
-          style={styles.platformIcon}
-          resizeMode="contain"
-        />
+        <View style={[styles.platformBadge, { backgroundColor: badgeBg }]}>
+          <Text style={[styles.platformBadgeText, { color: badgeColor }]}>
+            {badgeText}
+          </Text>
+        </View>
       );
     };
+
+    const statusColors = STATUS_COLOR_MAP[item.status || 'new'] || STATUS_COLOR_MAP['new'];
 
     return (
       <TouchableOpacity
@@ -1051,16 +1129,38 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
         onPress={() =>
           setSelectedLead({ source: 'meta', id: item.id })
         }
+        activeOpacity={0.7}
       >
         <View style={styles.leadHeader}>
           <Text style={styles.leadName}>{fullName}</Text>
-          {getPlatformIcon(platform)}
+          {getPlatformBadge(platform)}
         </View>
-        <Text style={styles.leadStatus}>{status}</Text>
+        <View style={[
+          styles.statusBadge,
+          { backgroundColor: statusColors.bg, borderColor: statusColors.border }
+        ]}>
+          <Text style={[styles.statusBadgeText, { color: statusColors.text }]}>
+            {status}
+          </Text>
+        </View>
         {campaign ? (
-          <Text style={styles.leadCampaign}>📢 {campaign}</Text>
+          <View style={styles.campaignRow}>
+            <Text style={styles.campaignIcon}>📢</Text>
+            <Text style={styles.leadCampaign} numberOfLines={1}>{campaign}</Text>
+          </View>
         ) : null}
-        <Text style={styles.leadContact}>📧 {emailOrPhone}</Text>
+        <View style={styles.leadContactRow}>
+          <Text style={styles.leadContactIcon}>📧</Text>
+          <Text style={styles.leadContact} numberOfLines={1}>{emailOrPhone}</Text>
+        </View>
+        <Text style={styles.leadTimestamp}>
+          {new Date(item.created_at).toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })}
+        </Text>
       </TouchableOpacity>
     );
   };
@@ -1072,6 +1172,7 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
         leads={leads}
         metaLeads={metaLeads}
         onBack={() => setSelectedLead(null)}
+        onNavigate={(leadRef) => setSelectedLead(leadRef)}
         onStatusChange={handleStatusChange}
         session={session}
       />
@@ -1081,19 +1182,86 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
   const hasLeads = leads.length > 0;
   const hasMetaLeads = metaLeads.length > 0;
 
+  const onRefresh = async () => {
+    setRefreshing(true);
+    if (!session?.user?.id || !session?.user?.email) {
+      setRefreshing(false);
+      return;
+    }
+
+    try {
+      const userRole = await getUserRole(session.user.id, session.user.email);
+      
+      let leadsQuery = supabase
+        .from('leads')
+        .select('id, created_at, first_name, last_name, email, phone, status, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      let metaQuery = supabase
+        .from('meta_ads')
+        .select('id, created_at, first_name, last_name, email, phone, status, platform, campaign_name, subject_address, preferred_language, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id')
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (!canSeeAllLeads(userRole)) {
+        if (userRole === 'loan_officer') {
+          const teamMemberId = await getUserTeamMemberId(session.user.id, 'loan_officer');
+          if (teamMemberId) {
+            leadsQuery = leadsQuery.eq('lo_id', teamMemberId);
+            metaQuery = metaQuery.eq('lo_id', teamMemberId);
+          }
+        } else if (userRole === 'realtor') {
+          const teamMemberId = await getUserTeamMemberId(session.user.id, 'realtor');
+          if (teamMemberId) {
+            leadsQuery = leadsQuery.eq('realtor_id', teamMemberId);
+            metaQuery = metaQuery.eq('realtor_id', teamMemberId);
+          }
+        }
+      }
+
+      const { data: leadsData } = await leadsQuery;
+      const { data: metaData } = await metaQuery;
+
+      setLeads((leadsData || []) as Lead[]);
+      setMetaLeads((metaData || []) as MetaLead[]);
+      setDebugInfo(`leads rows: ${(leadsData || []).length} · meta_ads rows: ${(metaData || []).length}`);
+    } catch (e) {
+      console.error('Refresh error:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>CloseWithMario Mobile</Text>
-        <TouchableOpacity onPress={onSignOut}>
-          <Text style={styles.signOutText}>Sign out</Text>
-        </TouchableOpacity>
+      {/* Modern Header */}
+      <View style={styles.headerContainer}>
+        <View style={styles.headerContent}>
+          <View>
+            <Text style={styles.headerTitle}>CloseWithMario</Text>
+            <Text style={styles.headerSubtitle}>Lead Management</Text>
+          </View>
+          <TouchableOpacity onPress={onSignOut} style={styles.signOutButton}>
+            <Text style={styles.signOutText}>Sign Out</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
-      <Text style={styles.debugText}>
-        {debugInfo}
-        {statusUpdating ? ' · Updating status…' : ''}
-      </Text>
+      <View style={styles.statsRow}>
+        <View style={styles.statCard}>
+          <Text style={styles.statNumber}>{metaLeads.length}</Text>
+          <Text style={styles.statLabel}>Meta Ads</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statNumber}>{leads.length}</Text>
+          <Text style={styles.statLabel}>Organic</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={styles.statNumber}>{metaLeads.length + leads.length}</Text>
+          <Text style={styles.statLabel}>Total</Text>
+        </View>
+      </View>
 
       {loading && (
         <View style={styles.centerContent}>
@@ -1165,6 +1333,10 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
               keyExtractor={(item) => item.id}
               renderItem={renderLeadItem}
               contentContainerStyle={styles.listContent}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+              }
+              showsVerticalScrollIndicator={false}
             />
           )}
 
@@ -1174,6 +1346,10 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
               keyExtractor={(item) => item.id}
               renderItem={renderMetaLeadItem}
               contentContainerStyle={styles.listContent}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+              }
+              showsVerticalScrollIndicator={false}
             />
           )}
         </>
@@ -1234,9 +1410,7 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-    paddingTop: 60,
-    paddingHorizontal: 16,
+    backgroundColor: '#F5F7FA',
   },
   authContainer: {
     flex: 1,
@@ -1255,6 +1429,78 @@ const styles = StyleSheet.create({
   formContainer: {
     width: '100%',
     marginTop: 8,
+  },
+  headerContainer: {
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    backgroundColor: '#1E3A8A',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#93C5FD',
+    marginTop: 2,
+  },
+  signOutButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  signOutText: {
+    fontSize: 14,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  statNumber: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#1E3A8A',
+  },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+    marginTop: 4,
   },
   headerRow: {
     flexDirection: 'row',
@@ -1277,15 +1523,12 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#666',
   },
-  signOutText: {
-    fontSize: 14,
-    color: '#007aff',
-  },
   debugText: {
-    fontSize: 12,
+    fontSize: 11,
     textAlign: 'center',
-    color: '#888',
-    marginBottom: 12,
+    color: '#94A3B8',
+    marginBottom: 8,
+    fontWeight: '500',
   },
   centerContent: {
     flex: 1,
@@ -1306,55 +1549,104 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   listContent: {
-    paddingBottom: 24,
+    paddingHorizontal: 16,
+    paddingBottom: 32,
   },
   leadCard: {
-    padding: 16,
-    marginBottom: 12,
-    borderRadius: 12,
-    borderWidth: 0,
-    backgroundColor: '#fff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    padding: 18,
+    marginBottom: 14,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowRadius: 12,
+    elevation: 4,
+    borderLeftWidth: 4,
+    borderLeftColor: '#3B82F6',
   },
   leadHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 10,
   },
   leadName: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '700',
-    color: '#1a1a1a',
+    color: '#1E293B',
     flex: 1,
+    letterSpacing: 0.2,
   },
-  platformIcon: {
-    width: 28,
-    height: 28,
+  leadSourceBadge: {
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
   },
-  platformEmoji: {
-    fontSize: 24,
+  leadSourceText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#1E40AF',
   },
-  leadStatus: {
-    fontSize: 13,
-    marginTop: 2,
-    color: '#666',
-    fontWeight: '500',
+  platformBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  platformBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  statusBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  campaignRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  campaignIcon: {
+    fontSize: 14,
+    marginRight: 6,
   },
   leadCampaign: {
     fontSize: 13,
-    marginTop: 4,
-    color: '#007aff',
-    fontWeight: '500',
+    color: '#3B82F6',
+    fontWeight: '600',
+    flex: 1,
+  },
+  leadContactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  leadContactIcon: {
+    fontSize: 14,
+    marginRight: 6,
   },
   leadContact: {
     fontSize: 14,
-    marginTop: 6,
-    color: '#333',
+    color: '#475569',
+    fontWeight: '500',
+    flex: 1,
+  },
+  leadTimestamp: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '500',
+    marginTop: 4,
   },
   input: {
     borderWidth: 1,
@@ -1418,6 +1710,80 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
     color: '#777',
+  },
+  detailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    backgroundColor: '#1E3A8A',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  backButtonText: {
+    fontSize: 24,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  detailHeaderCenter: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 12,
+  },
+  detailHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+  detailHeaderSubtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#93C5FD',
+    marginTop: 2,
+  },
+  navButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  navButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  navButtonDisabled: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  navButtonText: {
+    fontSize: 28,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  navButtonTextDisabled: {
+    color: 'rgba(255, 255, 255, 0.3)',
   },
   detailCard: {
     marginTop: 16,
@@ -1487,33 +1853,40 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 4,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 6,
+    marginHorizontal: 16,
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
   tab: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: 12,
     alignItems: 'center',
-    borderRadius: 8,
+    borderRadius: 12,
     backgroundColor: 'transparent',
   },
   tabActive: {
-    backgroundColor: '#007aff',
+    backgroundColor: '#1E3A8A',
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   tabText: {
     fontSize: 15,
-    fontWeight: '600',
-    color: '#666',
+    fontWeight: '700',
+    color: '#64748B',
+    letterSpacing: 0.3,
   },
   tabTextActive: {
-    color: '#fff',
+    color: '#FFFFFF',
   },
   activityTypeRow: {
     flexDirection: 'row',
