@@ -310,7 +310,20 @@ function LeadDetailView({
   onStatusChange,
 }: LeadDetailViewProps) {
   const [taskNote, setTaskNote] = useState('');
-  const [tasks, setTasks] = useState<Array<{ id: string; note: string; timestamp: string }>>([]);
+  const [tasks, setTasks] = useState<Array<{ id: string; type: 'call' | 'text' | 'email' | 'note'; note: string; timestamp: string }>>([]);
+  const [selectedActivityType, setSelectedActivityType] = useState<'call' | 'text' | 'email' | 'note'>('call');
+  const [showQuickPhrases, setShowQuickPhrases] = useState(false);
+  
+  const quickPhrases = [
+    'Left voicemail',
+    'Spoke with client',
+    'Sent documents',
+    'Scheduled follow-up',
+    'No answer',
+    'Client requested callback',
+    'Discussed rates',
+    'Pre-approval sent',
+  ];
   
   const isMeta = selected.source === 'meta';
   const record = isMeta
@@ -364,11 +377,35 @@ function LeadDetailView({
     if (!taskNote.trim()) return;
     const newTask = {
       id: Date.now().toString(),
+      type: selectedActivityType,
       note: taskNote.trim(),
       timestamp: new Date().toLocaleString(),
     };
     setTasks([newTask, ...tasks]);
     setTaskNote('');
+  };
+
+  const handleQuickPhrase = (phrase: string) => {
+    setTaskNote(phrase);
+    setShowQuickPhrases(false);
+  };
+
+  const getActivityIcon = (type: 'call' | 'text' | 'email' | 'note') => {
+    switch (type) {
+      case 'call': return '📞';
+      case 'text': return '💬';
+      case 'email': return '📧';
+      case 'note': return '📝';
+    }
+  };
+
+  const getActivityLabel = (type: 'call' | 'text' | 'email' | 'note') => {
+    switch (type) {
+      case 'call': return 'Call';
+      case 'text': return 'Text';
+      case 'email': return 'Email';
+      case 'note': return 'Note';
+    }
   };
 
   return (
@@ -549,13 +586,99 @@ function LeadDetailView({
 
           {/* Tasks / Logging Section */}
           <Text style={[styles.sectionTitle, { marginTop: 24 }]}>
-            Activity Log
+            Log Activity
           </Text>
           
-          <View style={styles.taskInputContainer}>
+          {/* Activity Type Buttons */}
+          <View style={styles.activityTypeRow}>
+            <TouchableOpacity
+              style={[
+                styles.activityTypeButton,
+                selectedActivityType === 'call' && styles.activityTypeButtonActive,
+              ]}
+              onPress={() => setSelectedActivityType('call')}
+            >
+              <Text style={[
+                styles.activityTypeText,
+                selectedActivityType === 'call' && styles.activityTypeTextActive,
+              ]}>
+                📞 Call
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.activityTypeButton,
+                selectedActivityType === 'text' && styles.activityTypeButtonActive,
+              ]}
+              onPress={() => setSelectedActivityType('text')}
+            >
+              <Text style={[
+                styles.activityTypeText,
+                selectedActivityType === 'text' && styles.activityTypeTextActive,
+              ]}>
+                💬 Text
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.activityTypeButton,
+                selectedActivityType === 'email' && styles.activityTypeButtonActive,
+              ]}
+              onPress={() => setSelectedActivityType('email')}
+            >
+              <Text style={[
+                styles.activityTypeText,
+                selectedActivityType === 'email' && styles.activityTypeTextActive,
+              ]}>
+                📧 Email
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.activityTypeButton,
+                selectedActivityType === 'note' && styles.activityTypeButtonActive,
+              ]}
+              onPress={() => setSelectedActivityType('note')}
+            >
+              <Text style={[
+                styles.activityTypeText,
+                selectedActivityType === 'note' && styles.activityTypeTextActive,
+              ]}>
+                📝 Note
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Quick Phrases Button */}
+          <TouchableOpacity
+            style={styles.quickPhrasesButton}
+            onPress={() => setShowQuickPhrases(!showQuickPhrases)}
+          >
+            <Text style={styles.quickPhrasesButtonText}>
+              📋 Quick Phrases {showQuickPhrases ? '▲' : '▼'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Quick Phrases List */}
+          {showQuickPhrases && (
+            <View style={styles.quickPhrasesList}>
+              {quickPhrases.map((phrase, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.quickPhraseItem}
+                  onPress={() => handleQuickPhrase(phrase)}
+                >
+                  <Text style={styles.quickPhraseText}>{phrase}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+          
+          {/* Activity Input */}
+          <View style={styles.activityInputCard}>
             <TextInput
-              style={styles.taskInput}
-              placeholder="Add a note or task..."
+              style={styles.activityInput}
+              placeholder={`Enter ${selectedActivityType} details...`}
               placeholderTextColor="#999"
               value={taskNote}
               onChangeText={setTaskNote}
@@ -563,22 +686,34 @@ function LeadDetailView({
             />
             <TouchableOpacity
               style={[
-                styles.addTaskButton,
-                !taskNote.trim() && styles.addTaskButtonDisabled,
+                styles.logActivityButton,
+                !taskNote.trim() && styles.logActivityButtonDisabled,
               ]}
               onPress={handleAddTask}
               disabled={!taskNote.trim()}
             >
-              <Text style={styles.addTaskButtonText}>Add</Text>
+              <Text style={styles.logActivityButtonText}>
+                Log {getActivityIcon(selectedActivityType)} {getActivityLabel(selectedActivityType)}
+              </Text>
             </TouchableOpacity>
           </View>
+
+          {/* Activity History */}
+          <Text style={[styles.sectionTitle, { marginTop: 24 }]}>
+            Activity History
+          </Text>
 
           {tasks.length > 0 ? (
             <View style={styles.tasksList}>
               {tasks.map((task) => (
-                <View key={task.id} style={styles.taskItem}>
-                  <Text style={styles.taskNote}>{task.note}</Text>
-                  <Text style={styles.taskTimestamp}>{task.timestamp}</Text>
+                <View key={task.id} style={styles.activityHistoryItem}>
+                  <View style={styles.activityHistoryHeader}>
+                    <Text style={styles.activityHistoryType}>
+                      {getActivityIcon(task.type)} {getActivityLabel(task.type)}
+                    </Text>
+                    <Text style={styles.activityHistoryTimestamp}>{task.timestamp}</Text>
+                  </View>
+                  <Text style={styles.activityHistoryNote}>{task.note}</Text>
                 </View>
               ))}
             </View>
@@ -1255,13 +1390,76 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: '#fff',
   },
-  taskInputContainer: {
+  activityTypeRow: {
     flexDirection: 'row',
     marginTop: 12,
     gap: 8,
   },
-  taskInput: {
+  activityTypeButton: {
     flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: '#e8e8e8',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  activityTypeButtonActive: {
+    backgroundColor: '#007aff',
+    borderColor: '#007aff',
+  },
+  activityTypeText: {
+    fontSize: 13,
+    color: '#333',
+    fontWeight: '500',
+  },
+  activityTypeTextActive: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  quickPhrasesButton: {
+    marginTop: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: '#f5f5f5',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  quickPhrasesButtonText: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+  },
+  quickPhrasesList: {
+    marginTop: 8,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  quickPhraseItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  quickPhraseText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  activityInputCard: {
+    marginTop: 12,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  activityInput: {
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
@@ -1269,44 +1467,55 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 15,
     backgroundColor: '#fff',
-    minHeight: 44,
+    color: '#333',
+    minHeight: 80,
+    textAlignVertical: 'top',
   },
-  addTaskButton: {
+  logActivityButton: {
     backgroundColor: '#007aff',
     borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    justifyContent: 'center',
+    paddingVertical: 12,
+    marginTop: 12,
     alignItems: 'center',
-    minHeight: 44,
   },
-  addTaskButtonDisabled: {
+  logActivityButtonDisabled: {
     backgroundColor: '#ccc',
   },
-  addTaskButtonText: {
+  logActivityButtonText: {
     color: '#fff',
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   tasksList: {
     marginTop: 12,
   },
-  taskItem: {
-    backgroundColor: '#f8f9fa',
+  activityHistoryItem: {
+    backgroundColor: '#fff',
     padding: 12,
     borderRadius: 8,
     marginBottom: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: '#007aff',
+    borderWidth: 1,
+    borderColor: '#ddd',
   },
-  taskNote: {
-    fontSize: 15,
-    color: '#1a1a1a',
-    marginBottom: 4,
+  activityHistoryHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  taskTimestamp: {
+  activityHistoryType: {
+    fontSize: 14,
+    color: '#007aff',
+    fontWeight: '600',
+  },
+  activityHistoryTimestamp: {
     fontSize: 12,
     color: '#888',
+  },
+  activityHistoryNote: {
+    fontSize: 14,
+    color: '#333',
+    lineHeight: 20,
   },
   noTasksText: {
     fontSize: 14,
