@@ -564,20 +564,26 @@ function LeadDetailView({
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
-        <View style={styles.detailCard}>
-          <View style={styles.detailNameRow}>
-            <Text style={styles.detailName}>{fullName}</Text>
-          </View>
-          <Text style={styles.detailMeta}>
+      {/* Sticky Name Bar */}
+      <View style={styles.stickyNameBar}>
+        <View style={styles.stickyNameColumn}>
+          <Text style={styles.stickyName} numberOfLines={1}>{fullName}</Text>
+          <Text style={styles.stickyTimestamp}>
             📅 {new Date(record.created_at).toLocaleDateString('en-US', { 
-              month: 'long', 
+              month: 'short', 
               day: 'numeric',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
+              year: 'numeric'
+            })} • {new Date(record.created_at).toLocaleTimeString('en-US', { 
+              hour: 'numeric',
+              minute: '2-digit',
+              hour12: true
             })}
           </Text>
+        </View>
+      </View>
+
+      <ScrollView contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+        <View style={styles.detailCard}>
 
           {/* Divider */}
           <View style={styles.sectionDivider} />
@@ -1974,6 +1980,36 @@ const styles = StyleSheet.create({
   },
   navButtonTextDisabled: {
     color: 'rgba(255, 255, 255, 0.3)',
+  },
+  stickyNameBar: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 2,
+    borderBottomColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    minHeight: 70,
+  },
+  stickyNameColumn: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  stickyName: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: '#1E293B',
+    marginBottom: 6,
+    letterSpacing: 0.2,
+  },
+  stickyTimestamp: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+    letterSpacing: 0.1,
   },
   detailCard: {
     marginHorizontal: 16,
