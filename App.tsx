@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './src/lib/supabase';
+import { getUserRole, getUserTeamMemberId, canSeeAllLeads, type UserRole } from './src/lib/roles';
 
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
@@ -831,7 +832,7 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
 
   useEffect(() => {
     const init = async () => {
-      if (!session?.user?.id) {
+      if (!session?.user?.id || !session?.user?.email) {
         setErrorMessage('No user session found');
         setLoading(false);
         return;
@@ -840,34 +841,11 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
       try {
         setLoading(true);
 
-        // First, determine user's role and team member ID
-        // Check if user is a loan officer
-        const { data: loData } = await supabase
-          .from('loan_officers')
-          .select('id, first_name, last_name')
-          .eq('id', session.user.id)
-          .single();
+        // Get user's role using the role system
+        const userRole = await getUserRole(session.user.id, session.user.email);
+        console.log('User role:', userRole);
 
-        // Check if user is a realtor
-        const { data: realtorData } = await supabase
-          .from('realtors')
-          .select('id, first_name, last_name')
-          .eq('id', session.user.id)
-          .single();
-
-        // Determine role and filter column
-        let filterColumn: 'lo_id' | 'realtor_id' | null = null;
-        let teamMemberId: string | null = null;
-
-        if (loData) {
-          filterColumn = 'lo_id';
-          teamMemberId = loData.id;
-        } else if (realtorData) {
-          filterColumn = 'realtor_id';
-          teamMemberId = realtorData.id;
-        }
-
-        // If user is not a team member, show all leads (admin view)
+        // Build queries
         let leadsQuery = supabase
           .from('leads')
           .select(
@@ -884,11 +862,25 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
           .order('created_at', { ascending: false })
           .limit(50);
 
-        // Apply filter if user is a team member
-        if (filterColumn && teamMemberId) {
-          leadsQuery = leadsQuery.eq(filterColumn, teamMemberId);
-          metaQuery = metaQuery.eq(filterColumn, teamMemberId);
+        // Apply filters based on role
+        if (!canSeeAllLeads(userRole)) {
+          // LOs and Realtors only see their assigned leads
+          if (userRole === 'loan_officer') {
+            const teamMemberId = await getUserTeamMemberId(session.user.id, 'loan_officer');
+            if (teamMemberId) {
+              leadsQuery = leadsQuery.eq('lo_id', teamMemberId);
+              metaQuery = metaQuery.eq('lo_id', teamMemberId);
+            }
+          } else if (userRole === 'realtor') {
+            const teamMemberId = await getUserTeamMemberId(session.user.id, 'realtor');
+            if (teamMemberId) {
+              leadsQuery = leadsQuery.eq('realtor_id', teamMemberId);
+              metaQuery = metaQuery.eq('realtor_id', teamMemberId);
+            }
+          }
+          // Buyers see no leads (could show their own submitted leads in future)
         }
+        // Admins and Super Admins see all leads (no filter)
 
         const { data: leadsData, error: leadsError } = await leadsQuery;
         const { data: metaData, error: metaError } = await metaQuery;
