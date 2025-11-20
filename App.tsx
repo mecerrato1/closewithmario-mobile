@@ -300,6 +300,18 @@ type LeadDetailViewProps = {
     id: string,
     newStatus: string
   ) => Promise<void>;
+  session: Session | null;
+};
+
+type Activity = {
+  id: string;
+  lead_id?: string;
+  meta_ad_id?: string;
+  activity_type: 'call' | 'text' | 'email' | 'note';
+  notes: string;
+  created_at: string;
+  created_by?: string;
+  user_email?: string;
 };
 
 function LeadDetailView({
@@ -308,11 +320,14 @@ function LeadDetailView({
   metaLeads,
   onBack,
   onStatusChange,
+  session,
 }: LeadDetailViewProps) {
   const [taskNote, setTaskNote] = useState('');
-  const [tasks, setTasks] = useState<Array<{ id: string; type: 'call' | 'text' | 'email' | 'note'; note: string; timestamp: string }>>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [selectedActivityType, setSelectedActivityType] = useState<'call' | 'text' | 'email' | 'note'>('call');
   const [showQuickPhrases, setShowQuickPhrases] = useState(false);
+  const [loadingActivities, setLoadingActivities] = useState(true);
+  const [savingActivity, setSavingActivity] = useState(false);
   
   const quickPhrases = [
     'Left voicemail',
@@ -373,16 +388,76 @@ function LeadDetailView({
     Linking.openURL(`mailto:${email}?subject=${subject}&body=${body}`);
   };
 
-  const handleAddTask = () => {
-    if (!taskNote.trim()) return;
-    const newTask = {
-      id: Date.now().toString(),
-      type: selectedActivityType,
-      note: taskNote.trim(),
-      timestamp: new Date().toLocaleString(),
+  // Load activities from Supabase
+  useEffect(() => {
+    const loadActivities = async () => {
+      if (!record) return;
+      
+      try {
+        setLoadingActivities(true);
+        
+        // Use correct table based on lead source
+        const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
+        const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
+        
+        const { data, error } = await supabase
+          .from(tableName)
+          .select('*')
+          .eq(foreignKeyColumn, record.id)
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error('Error loading activities:', error);
+        } else {
+          setActivities(data || []);
+        }
+      } catch (e) {
+        console.error('Unexpected error loading activities:', e);
+      } finally {
+        setLoadingActivities(false);
+      }
     };
-    setTasks([newTask, ...tasks]);
-    setTaskNote('');
+
+    loadActivities();
+  }, [record?.id, isMeta]);
+
+  const handleAddTask = async () => {
+    if (!taskNote.trim() || !record) return;
+    
+    try {
+      setSavingActivity(true);
+      
+      // Use correct table based on lead source
+      const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
+      const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
+      
+      const activityData = {
+        [foreignKeyColumn]: record.id,
+        activity_type: selectedActivityType,
+        notes: taskNote.trim(),
+        created_by: session?.user?.id || null,
+        user_email: session?.user?.email || 'Mobile App User',
+      };
+
+      const { data, error } = await supabase
+        .from(tableName)
+        .insert([activityData])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error saving activity:', error);
+        alert('Failed to save activity. Please try again.');
+      } else {
+        setActivities([data, ...activities]);
+        setTaskNote('');
+      }
+    } catch (e) {
+      console.error('Unexpected error saving activity:', e);
+      alert('Failed to save activity. Please try again.');
+    } finally {
+      setSavingActivity(false);
+    }
   };
 
   const handleQuickPhrase = (phrase: string) => {
@@ -687,13 +762,16 @@ function LeadDetailView({
             <TouchableOpacity
               style={[
                 styles.logActivityButton,
-                !taskNote.trim() && styles.logActivityButtonDisabled,
+                (!taskNote.trim() || savingActivity) && styles.logActivityButtonDisabled,
               ]}
               onPress={handleAddTask}
-              disabled={!taskNote.trim()}
+              disabled={!taskNote.trim() || savingActivity}
             >
               <Text style={styles.logActivityButtonText}>
-                Log {getActivityIcon(selectedActivityType)} {getActivityLabel(selectedActivityType)}
+                {savingActivity 
+                  ? 'Saving...' 
+                  : `Log ${getActivityIcon(selectedActivityType)} ${getActivityLabel(selectedActivityType)}`
+                }
               </Text>
             </TouchableOpacity>
           </View>
@@ -703,17 +781,24 @@ function LeadDetailView({
             Activity History
           </Text>
 
-          {tasks.length > 0 ? (
+          {loadingActivities ? (
+            <ActivityIndicator size="small" color="#007aff" style={{ marginTop: 12 }} />
+          ) : activities.length > 0 ? (
             <View style={styles.tasksList}>
-              {tasks.map((task) => (
-                <View key={task.id} style={styles.activityHistoryItem}>
+              {activities.map((activity) => (
+                <View key={activity.id} style={styles.activityHistoryItem}>
                   <View style={styles.activityHistoryHeader}>
                     <Text style={styles.activityHistoryType}>
-                      {getActivityIcon(task.type)} {getActivityLabel(task.type)}
+                      {getActivityIcon(activity.activity_type)} {getActivityLabel(activity.activity_type)}
                     </Text>
-                    <Text style={styles.activityHistoryTimestamp}>{task.timestamp}</Text>
+                    <Text style={styles.activityHistoryTimestamp}>
+                      {new Date(activity.created_at).toLocaleString()}
+                    </Text>
                   </View>
-                  <Text style={styles.activityHistoryNote}>{task.note}</Text>
+                  <Text style={styles.activityHistoryNote}>{activity.notes}</Text>
+                  {activity.user_email && (
+                    <Text style={styles.activityUserEmail}>by {activity.user_email}</Text>
+                  )}
                 </View>
               ))}
             </View>
@@ -729,9 +814,10 @@ function LeadDetailView({
 // ------------ Leads Screen ------------
 type LeadsScreenProps = {
   onSignOut: () => void;
+  session: Session | null;
 };
 
-function LeadsScreen({ onSignOut }: LeadsScreenProps) {
+function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [metaLeads, setMetaLeads] = useState<MetaLead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -950,6 +1036,7 @@ function LeadsScreen({ onSignOut }: LeadsScreenProps) {
         metaLeads={metaLeads}
         onBack={() => setSelectedLead(null)}
         onStatusChange={handleStatusChange}
+        session={session}
       />
     );
   }
@@ -1099,6 +1186,7 @@ export default function App() {
           await supabase.auth.signOut();
           setSession(null);
         }}
+        session={session}
       />
       <StatusBar style="auto" />
     </>
@@ -1516,6 +1604,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     lineHeight: 20,
+  },
+  activityUserEmail: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   noTasksText: {
     fontSize: 14,
