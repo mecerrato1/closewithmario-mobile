@@ -47,6 +47,8 @@ type Lead = {
   phone: string | null;
   status: string | null;
   last_contact_date?: string | null;
+  lo_id?: string | null;
+  realtor_id?: string | null;
   loan_purpose?: string | null;
   price?: number | null;
   down_payment?: number | null;
@@ -63,6 +65,8 @@ type MetaLead = {
   phone: string | null;
   status: string | null;
   last_contact_date?: string | null;
+  lo_id?: string | null;
+  realtor_id?: string | null;
   platform: string | null;
   campaign_name: string | null;
   subject_address?: string | null;
@@ -431,6 +435,9 @@ type LeadDetailViewProps = {
     newStatus: string
   ) => Promise<void>;
   session: Session | null;
+  loanOfficers: Array<{ id: string; name: string }>;
+  userRole: UserRole;
+  onLeadUpdate: (updatedLead: Lead | MetaLead, source: 'lead' | 'meta') => void;
 };
 
 type Activity = {
@@ -452,6 +459,9 @@ function LeadDetailView({
   onNavigate,
   onStatusChange,
   session,
+  loanOfficers,
+  userRole: propUserRole,
+  onLeadUpdate,
 }: LeadDetailViewProps) {
   const [taskNote, setTaskNote] = useState('');
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -459,8 +469,9 @@ function LeadDetailView({
   const [showQuickPhrases, setShowQuickPhrases] = useState(false);
   const [loadingActivities, setLoadingActivities] = useState(true);
   const [savingActivity, setSavingActivity] = useState(false);
-  const [userRole, setUserRole] = useState<UserRole>('buyer');
   const [deletingActivityId, setDeletingActivityId] = useState<string | null>(null);
+  const [showLOPicker, setShowLOPicker] = useState(false);
+  const [updatingLO, setUpdatingLO] = useState(false);
   
   const quickPhrases = [
     'Left voicemail',
@@ -539,17 +550,13 @@ function LeadDetailView({
     Linking.openURL(`mailto:${email}?subject=${subject}&body=${body}`);
   };
 
-  // Load activities and user role from Supabase
+  // Load activities from Supabase
   useEffect(() => {
     const loadActivities = async () => {
-      if (!record || !session?.user?.id || !session?.user?.email) return;
+      if (!record) return;
       
       try {
         setLoadingActivities(true);
-        
-        // Get user role
-        const role = await getUserRole(session.user.id, session.user.email);
-        setUserRole(role);
         
         // Use correct table based on lead source
         const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
@@ -574,7 +581,7 @@ function LeadDetailView({
     };
 
     loadActivities();
-  }, [record?.id, isMeta, session?.user?.id, session?.user?.email]);
+  }, [record?.id, isMeta]);
 
   const handleAddTask = async () => {
     if (!taskNote.trim() || !record) return;
@@ -639,7 +646,7 @@ function LeadDetailView({
   };
 
   const handleDeleteActivity = async (activityId: string) => {
-    if (!userRole || userRole !== 'super_admin') {
+    if (!propUserRole || propUserRole !== 'super_admin') {
       alert('Only super admins can delete activities.');
       return;
     }
@@ -667,6 +674,41 @@ function LeadDetailView({
       alert('Failed to delete activity. Please try again.');
     } finally {
       setDeletingActivityId(null);
+    }
+  };
+
+  const handleUpdateLO = async (newLOId: string | null) => {
+    if (!propUserRole || propUserRole !== 'super_admin') {
+      alert('Only super admins can change LO assignments.');
+      return;
+    }
+
+    try {
+      setUpdatingLO(true);
+      
+      // Use correct table based on lead source
+      const tableName = isMeta ? 'meta_ads' : 'leads';
+      
+      const { data, error } = await supabase
+        .from(tableName)
+        .update({ lo_id: newLOId })
+        .eq('id', record.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating LO:', error);
+        alert('Failed to update LO assignment. Please try again.');
+      } else if (data) {
+        // Update parent state
+        onLeadUpdate(data, isMeta ? 'meta' : 'lead');
+        setShowLOPicker(false);
+      }
+    } catch (e) {
+      console.error('Unexpected error updating LO:', e);
+      alert('Failed to update LO assignment. Please try again.');
+    } finally {
+      setUpdatingLO(false);
     }
   };
 
@@ -817,6 +859,92 @@ function LeadDetailView({
 
           {/* Divider */}
           <View style={styles.sectionDivider} />
+
+          {/* LO Assignment (Super Admin Only) */}
+          {propUserRole === 'super_admin' && (
+            <>
+              <Text style={styles.sectionTitle}>👤 Assignment</Text>
+              <View style={styles.loAssignmentRow}>
+                <Text style={styles.loAssignmentLabel}>Loan Officer:</Text>
+                <TouchableOpacity
+                  style={styles.loAssignmentButton}
+                  onPress={() => setShowLOPicker(true)}
+                  disabled={updatingLO}
+                >
+                  <Text style={styles.loAssignmentValue}>
+                    {record.lo_id 
+                      ? loanOfficers.find(lo => lo.id === record.lo_id)?.name || 'Unknown'
+                      : 'Unassigned'
+                    }
+                  </Text>
+                  <Text style={styles.loAssignmentIcon}>▼</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* LO Picker Modal */}
+              <Modal
+                visible={showLOPicker}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setShowLOPicker(false)}
+              >
+                <TouchableOpacity 
+                  style={styles.modalOverlay}
+                  activeOpacity={1}
+                  onPress={() => setShowLOPicker(false)}
+                >
+                  <View style={styles.statusPickerContainer}>
+                    <View style={styles.statusPickerHeader}>
+                      <Text style={styles.statusPickerTitle}>Assign Loan Officer</Text>
+                      <TouchableOpacity onPress={() => setShowLOPicker(false)}>
+                        <Text style={styles.statusPickerClose}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <ScrollView style={styles.statusPickerScroll}>
+                      <TouchableOpacity
+                        style={[
+                          styles.statusPickerItem,
+                          !record.lo_id && styles.statusPickerItemActive,
+                        ]}
+                        onPress={() => handleUpdateLO(null)}
+                        disabled={updatingLO}
+                      >
+                        <Text style={[
+                          styles.statusPickerItemText,
+                          !record.lo_id && styles.statusPickerItemTextActive,
+                        ]}>Unassigned</Text>
+                        {!record.lo_id && (
+                          <Text style={styles.statusPickerCheck}>✓</Text>
+                        )}
+                      </TouchableOpacity>
+                      {loanOfficers.map((lo) => (
+                        <TouchableOpacity
+                          key={lo.id}
+                          style={[
+                            styles.statusPickerItem,
+                            record.lo_id === lo.id && styles.statusPickerItemActive,
+                          ]}
+                          onPress={() => handleUpdateLO(lo.id)}
+                          disabled={updatingLO}
+                        >
+                          <Text style={[
+                            styles.statusPickerItemText,
+                            record.lo_id === lo.id && styles.statusPickerItemTextActive,
+                          ]}>{lo.name}</Text>
+                          {record.lo_id === lo.id && (
+                            <Text style={styles.statusPickerCheck}>✓</Text>
+                          )}
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                </TouchableOpacity>
+              </Modal>
+
+              {/* Divider */}
+              <View style={styles.sectionDivider} />
+            </>
+          )}
 
           {/* Basic fields */}
           <Text style={styles.sectionTitle}>ℹ️ Basic Info</Text>
@@ -1045,7 +1173,7 @@ function LeadDetailView({
                         {new Date(activity.created_at).toLocaleString()}
                       </Text>
                     </View>
-                    {userRole === 'super_admin' && (
+                    {propUserRole === 'super_admin' && (
                       <TouchableOpacity
                         onPress={() => handleDeleteActivity(activity.id)}
                         disabled={deletingActivityId === activity.id}
@@ -1095,6 +1223,8 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
   const [hasManuallySelectedTab, setHasManuallySelectedTab] = useState(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
+  const [loanOfficers, setLoanOfficers] = useState<Array<{ id: string; name: string }>>([]);
+  const [userRole, setUserRole] = useState<UserRole>('buyer');
 
   useEffect(() => {
     const init = async () => {
@@ -1108,8 +1238,25 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
         setLoading(true);
 
         // Get user's role using the role system
-        const userRole = await getUserRole(session.user.id, session.user.email);
-        console.log('User role:', userRole);
+        const role = await getUserRole(session.user.id, session.user.email);
+        console.log('User role:', role);
+        setUserRole(role);
+
+        // Fetch loan officers for super admins
+        if (role === 'super_admin' || role === 'admin') {
+          const { data: losData } = await supabase
+            .from('loan_officers')
+            .select('id, first_name, last_name')
+            .eq('active', true)
+            .order('first_name');
+          
+          if (losData) {
+            setLoanOfficers(losData.map(lo => ({
+              id: lo.id,
+              name: `${lo.first_name} ${lo.last_name}`.trim()
+            })));
+          }
+        }
 
         // Build queries
         let leadsQuery = supabase
@@ -1127,15 +1274,15 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
           .order('created_at', { ascending: false });
 
         // Apply filters based on role
-        if (!canSeeAllLeads(userRole)) {
+        if (!canSeeAllLeads(role)) {
           // LOs and Realtors only see their assigned leads
-          if (userRole === 'loan_officer') {
+          if (role === 'loan_officer') {
             const teamMemberId = await getUserTeamMemberId(session.user.id, 'loan_officer');
             if (teamMemberId) {
               leadsQuery = leadsQuery.eq('lo_id', teamMemberId);
               metaQuery = metaQuery.eq('lo_id', teamMemberId);
             }
-          } else if (userRole === 'realtor') {
+          } else if (role === 'realtor') {
             const teamMemberId = await getUserTeamMemberId(session.user.id, 'realtor');
             if (teamMemberId) {
               leadsQuery = leadsQuery.eq('realtor_id', teamMemberId);
@@ -1284,6 +1431,14 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
           <Text style={styles.leadContactIcon}>📧</Text>
           <Text style={styles.leadContact} numberOfLines={1}>{emailOrPhone}</Text>
         </View>
+        {userRole === 'super_admin' && item.lo_id && (
+          <View style={styles.leadLORow}>
+            <Text style={styles.leadLOIcon}>👤</Text>
+            <Text style={styles.leadLOText} numberOfLines={1}>
+              {loanOfficers.find(lo => lo.id === item.lo_id)?.name || 'Unknown LO'}
+            </Text>
+          </View>
+        )}
         <Text style={styles.leadTimestamp}>
           {new Date(item.created_at).toLocaleDateString('en-US', { 
             month: 'short', 
@@ -1385,6 +1540,14 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
           <Text style={styles.leadContactIcon}>📧</Text>
           <Text style={styles.leadContact} numberOfLines={1}>{emailOrPhone}</Text>
         </View>
+        {userRole === 'super_admin' && item.lo_id && (
+          <View style={styles.leadLORow}>
+            <Text style={styles.leadLOIcon}>👤</Text>
+            <Text style={styles.leadLOText} numberOfLines={1}>
+              {loanOfficers.find(lo => lo.id === item.lo_id)?.name || 'Unknown LO'}
+            </Text>
+          </View>
+        )}
         <Text style={styles.leadTimestamp}>
           {new Date(item.created_at).toLocaleDateString('en-US', { 
             month: 'short', 
@@ -1407,6 +1570,15 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
         onNavigate={(leadRef) => setSelectedLead(leadRef)}
         onStatusChange={handleStatusChange}
         session={session}
+        loanOfficers={loanOfficers}
+        userRole={userRole}
+        onLeadUpdate={(updatedLead, source) => {
+          if (source === 'lead') {
+            setLeads(leads.map(l => l.id === updatedLead.id ? updatedLead as Lead : l));
+          } else {
+            setMetaLeads(metaLeads.map(l => l.id === updatedLead.id ? updatedLead as MetaLead : l));
+          }
+        }}
       />
     );
   }
@@ -2388,6 +2560,21 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     flex: 1,
   },
+  leadLORow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  leadLOIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  leadLOText: {
+    fontSize: 13,
+    color: '#7C3AED',
+    fontWeight: '600',
+    flex: 1,
+  },
   leadTimestamp: {
     fontSize: 11,
     color: '#94A3B8',
@@ -2735,6 +2922,39 @@ const styles = StyleSheet.create({
     color: '#1E293B',
     marginBottom: 12,
     letterSpacing: 0.2,
+  },
+  loAssignmentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  loAssignmentLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  loAssignmentButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    minWidth: 150,
+  },
+  loAssignmentValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+    flex: 1,
+  },
+  loAssignmentIcon: {
+    fontSize: 10,
+    color: '#64748B',
+    marginLeft: 8,
   },
   statusBadgeContainer: {
     flexDirection: 'row',
