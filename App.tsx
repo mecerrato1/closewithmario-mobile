@@ -459,6 +459,8 @@ function LeadDetailView({
   const [showQuickPhrases, setShowQuickPhrases] = useState(false);
   const [loadingActivities, setLoadingActivities] = useState(true);
   const [savingActivity, setSavingActivity] = useState(false);
+  const [userRole, setUserRole] = useState<UserRole>('buyer');
+  const [deletingActivityId, setDeletingActivityId] = useState<string | null>(null);
   
   const quickPhrases = [
     'Left voicemail',
@@ -537,13 +539,17 @@ function LeadDetailView({
     Linking.openURL(`mailto:${email}?subject=${subject}&body=${body}`);
   };
 
-  // Load activities from Supabase
+  // Load activities and user role from Supabase
   useEffect(() => {
     const loadActivities = async () => {
-      if (!record) return;
+      if (!record || !session?.user?.id || !session?.user?.email) return;
       
       try {
         setLoadingActivities(true);
+        
+        // Get user role
+        const role = await getUserRole(session.user.id, session.user.email);
+        setUserRole(role);
         
         // Use correct table based on lead source
         const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
@@ -568,7 +574,7 @@ function LeadDetailView({
     };
 
     loadActivities();
-  }, [record?.id, isMeta]);
+  }, [record?.id, isMeta, session?.user?.id, session?.user?.email]);
 
   const handleAddTask = async () => {
     if (!taskNote.trim() || !record) return;
@@ -629,6 +635,38 @@ function LeadDetailView({
       case 'text': return 'Text';
       case 'email': return 'Email';
       case 'note': return 'Note';
+    }
+  };
+
+  const handleDeleteActivity = async (activityId: string) => {
+    if (!userRole || userRole !== 'super_admin') {
+      alert('Only super admins can delete activities.');
+      return;
+    }
+
+    try {
+      setDeletingActivityId(activityId);
+      
+      // Use correct table based on lead source
+      const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
+      
+      const { error } = await supabase
+        .from(tableName)
+        .delete()
+        .eq('id', activityId);
+
+      if (error) {
+        console.error('Error deleting activity:', error);
+        alert('Failed to delete activity. Please try again.');
+      } else {
+        // Remove from local state
+        setActivities(activities.filter(a => a.id !== activityId));
+      }
+    } catch (e) {
+      console.error('Unexpected error deleting activity:', e);
+      alert('Failed to delete activity. Please try again.');
+    } finally {
+      setDeletingActivityId(null);
     }
   };
 
@@ -999,12 +1037,25 @@ function LeadDetailView({
               {activities.map((activity) => (
                 <View key={activity.id} style={styles.activityHistoryItem}>
                   <View style={styles.activityHistoryHeader}>
-                    <Text style={styles.activityHistoryType}>
-                      {getActivityIcon(activity.activity_type)} {getActivityLabel(activity.activity_type)}
-                    </Text>
-                    <Text style={styles.activityHistoryTimestamp}>
-                      {new Date(activity.created_at).toLocaleString()}
-                    </Text>
+                    <View style={styles.activityHistoryHeaderLeft}>
+                      <Text style={styles.activityHistoryType}>
+                        {getActivityIcon(activity.activity_type)} {getActivityLabel(activity.activity_type)}
+                      </Text>
+                      <Text style={styles.activityHistoryTimestamp}>
+                        {new Date(activity.created_at).toLocaleString()}
+                      </Text>
+                    </View>
+                    {userRole === 'super_admin' && (
+                      <TouchableOpacity
+                        onPress={() => handleDeleteActivity(activity.id)}
+                        disabled={deletingActivityId === activity.id}
+                        style={styles.deleteActivityButton}
+                      >
+                        <Text style={styles.deleteActivityButtonText}>
+                          {deletingActivityId === activity.id ? '⏳' : '🗑️'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                   <Text style={styles.activityHistoryNote}>{activity.notes}</Text>
                   {activity.user_email && (
@@ -3052,8 +3103,11 @@ const styles = StyleSheet.create({
   activityHistoryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 8,
+  },
+  activityHistoryHeaderLeft: {
+    flex: 1,
   },
   activityHistoryType: {
     fontSize: 14,
@@ -3063,6 +3117,14 @@ const styles = StyleSheet.create({
   activityHistoryTimestamp: {
     fontSize: 12,
     color: '#888',
+    marginTop: 2,
+  },
+  deleteActivityButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  deleteActivityButtonText: {
+    fontSize: 18,
   },
   activityHistoryNote: {
     fontSize: 14,
