@@ -1606,7 +1606,14 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
               <Text style={styles.headerSubtitle}>Lead Overview</Text>
               {session?.user?.email && (
                 <View style={styles.userInfoBadge}>
-                  <Text style={styles.userInfoIcon}>👤</Text>
+                  {session.user.user_metadata?.avatar_url ? (
+                    <Image 
+                      source={{ uri: session.user.user_metadata.avatar_url }}
+                      style={styles.userAvatar}
+                    />
+                  ) : (
+                    <Text style={styles.userInfoIcon}>👤</Text>
+                  )}
                   <Text style={styles.userInfoText} numberOfLines={1}>
                     {session.user.email}
                   </Text>
@@ -2319,6 +2326,13 @@ const styles = StyleSheet.create({
   userInfoIcon: {
     fontSize: 14,
     marginRight: 6,
+  },
+  userAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    marginRight: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
   },
   userInfoText: {
     fontSize: 12,
