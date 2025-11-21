@@ -27,11 +27,11 @@ import { makeRedirectUri } from 'expo-auth-session';
 WebBrowser.maybeCompleteAuthSession();
 
 // This must match:
-// - app.json: "scheme": "closewithmario"
-// - Supabase URL config: closewithmario://auth-callback
+// - app.json: "scheme": "com.closewithmario.mobile"
+// - Supabase URL config: com.closewithmario.mobile://auth/callback
 const redirectTo = makeRedirectUri({
-  scheme: 'closewithmario',
-  path: 'auth-callback',
+  scheme: 'com.closewithmario.mobile',
+  path: 'auth/callback',
 });
 
 // ------------ Types ------------
@@ -192,14 +192,18 @@ function AuthScreen({ onAuth }: AuthScreenProps) {
         provider: 'google',
         options: {
           redirectTo,
+          skipBrowserRedirect: false,
         },
       });
 
       if (error) {
+        console.log('Google sign-in error', error);
         setAuthError(error.message);
         setAuthLoading(false);
         return;
       }
+
+      console.log('Google sign-in started', data);
 
       const authUrl = data?.url;
       if (!authUrl) {
