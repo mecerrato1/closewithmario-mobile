@@ -361,7 +361,7 @@ function AuthScreen({ onAuth }: AuthScreenProps) {
 
         {/* Version Number */}
         <Text style={styles.versionText}>
-          v{Constants.expoConfig?.version || '1.0.1'} (Build {Constants.expoConfig?.ios?.buildNumber || '2'})
+          v{Constants.expoConfig?.version} (Build {Constants.expoConfig?.ios?.buildNumber})
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
