@@ -14,6 +14,7 @@ import {
   Linking,
   Image,
   RefreshControl,
+  Modal,
 } from 'react-native';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './src/lib/supabase';
@@ -190,30 +191,29 @@ function AuthScreen({ onAuth }: AuthScreenProps) {
     setAuthLoading(true);
 
     try {
-      // 1) Ask Supabase for the auth URL, but DON'T let it open the browser itself
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo,            // com.closewithmario.mobile://auth/callback in TestFlight
+          redirectTo,
           skipBrowserRedirect: true,
         },
       });
 
       if (error) {
-        console.log('Google sign-in error', error);
+        console.log('Supabase OAuth error:', error.message);
         setAuthError(error.message);
         return;
       }
 
       const authUrl = data?.url;
       if (!authUrl) {
-        setAuthError('No auth URL returned from Supabase.');
+        console.log('No auth URL returned from Supabase.');
+        setAuthError('Failed to start Google login.');
         return;
       }
 
       console.log('Opening Google auth session:', authUrl);
-      
-      // 2) Open the auth session with WebBrowser
+
       const result = await WebBrowser.openAuthSessionAsync(
         authUrl,
         redirectTo
@@ -221,37 +221,46 @@ function AuthScreen({ onAuth }: AuthScreenProps) {
 
       console.log('AuthSession result:', result);
 
-      if (result.type === 'success') {
-        // 3) Give Supabase a moment to process the redirect
-        await new Promise((resolve) => setTimeout(resolve, 500));
-
-        // 4) Explicitly check for a Supabase session
-        const { data: sessionData, error: sessionError } =
-          await supabase.auth.getSession();
-
-        if (sessionError) {
-          console.log('Error getting Supabase session after OAuth:', sessionError);
-          setAuthError('Signed in with Google, but failed to get a session.');
-          return;
-        }
-
-        if (sessionData.session) {
-          console.log('Google sign-in completed, session:', sessionData.session);
-          onAuth(sessionData.session); // same callback you use for email/password
-        } else {
-          console.log('No Supabase session after Google sign-in.');
-          setAuthError('Google sign-in did not complete. Please try again.');
-        }
-      } else if (result.type === 'dismiss') {
-        setAuthError('Google sign-in dismissed.');
-      } else if (result.type === 'cancel') {
-        setAuthError('Google sign-in cancelled.');
-      } else {
-        setAuthError('Google sign-in was not completed.');
+      if (result.type !== 'success' || !result.url) {
+        setAuthError('Google sign-in did not complete. Please try again.');
+        return;
       }
-    } catch (e: any) {
-      console.error('Google sign-in error:', e);
-      setAuthError(e?.message || 'Unexpected error during Google sign-in.');
+
+      // Parse tokens from URL fragment (implicit flow)
+      const url = result.url;
+      const params = new URLSearchParams(url.split('#')[1]);
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
+
+      if (!accessToken || !refreshToken) {
+        console.log('No tokens found in redirect URL');
+        setAuthError('Failed to get authentication tokens.');
+        return;
+      }
+
+      // Set the session using the tokens
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+
+      if (sessionError) {
+        console.log('Set session error:', sessionError);
+        setAuthError(sessionError.message);
+        return;
+      }
+
+      console.log('Supabase session set successfully:', sessionData);
+
+      if (sessionData.session) {
+        onAuth(sessionData.session);
+      } else {
+        setAuthError('Google sign-in did not complete.');
+      }
+    } catch (err: any) {
+      console.error('Google OAuth error:', err);
+      setAuthError(err?.message || 'Unexpected error.');
     } finally {
       setAuthLoading(false);
     }
@@ -981,8 +990,11 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
     null
   );
   const [statusUpdating, setStatusUpdating] = useState(false);
-  const [activeTab, setActiveTab] = useState<'leads' | 'meta'>('meta');
+  const [activeTab, setActiveTab] = useState<'leads' | 'meta' | 'all'>('all');
   const [showDashboard, setShowDashboard] = useState(true);
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
+  const [hasManuallySelectedTab, setHasManuallySelectedTab] = useState(false);
+  const [showStatusPicker, setShowStatusPicker] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -1005,16 +1017,14 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
           .select(
             'id, created_at, first_name, last_name, email, phone, status, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id'
           )
-          .order('created_at', { ascending: false })
-          .limit(50);
+          .order('created_at', { ascending: false });
 
         let metaQuery = supabase
           .from('meta_ads')
           .select(
             'id, created_at, first_name, last_name, email, phone, status, platform, campaign_name, subject_address, preferred_language, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id'
           )
-          .order('created_at', { ascending: false })
-          .limit(50);
+          .order('created_at', { ascending: false });
 
         // Apply filters based on role
         if (!canSeeAllLeads(userRole)) {
@@ -1073,12 +1083,19 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
     init();
   }, [session?.user?.id]);
 
-  // Auto-switch to leads tab if no meta leads
+  // Auto-switch tab based on available leads (only on initial load)
   useEffect(() => {
-    if (!loading && metaLeads.length === 0 && leads.length > 0) {
-      setActiveTab('leads');
+    if (!loading && !hasManuallySelectedTab) {
+      if (metaLeads.length === 0 && leads.length > 0) {
+        setActiveTab('leads');
+      } else if (metaLeads.length > 0 && leads.length === 0) {
+        setActiveTab('meta');
+      } else if (metaLeads.length > 0 || leads.length > 0) {
+        // Both have leads or only meta has leads, default to 'all'
+        setActiveTab('all');
+      }
     }
-  }, [loading, leads.length, metaLeads.length]);
+  }, [loading, leads.length, metaLeads.length, hasManuallySelectedTab]);
 
   const handleStatusChange = async (
     source: 'lead' | 'meta',
@@ -1300,9 +1317,17 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
         {/* Dashboard Header */}
         <View style={styles.headerContainer}>
           <View style={styles.headerContent}>
-            <View>
+            <View style={styles.headerLeft}>
               <Text style={styles.headerTitle}>Dashboard</Text>
               <Text style={styles.headerSubtitle}>Lead Overview</Text>
+              {session?.user?.email && (
+                <View style={styles.userInfoBadge}>
+                  <Text style={styles.userInfoIcon}>👤</Text>
+                  <Text style={styles.userInfoText} numberOfLines={1}>
+                    {session.user.email}
+                  </Text>
+                </View>
+              )}
             </View>
             <TouchableOpacity onPress={onSignOut} style={styles.signOutButton}>
               <Text style={styles.signOutText}>Sign Out</Text>
@@ -1316,22 +1341,50 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
         >
           {/* Stats Grid */}
           <View style={styles.dashboardStatsGrid}>
-            <View style={styles.dashboardStatCard}>
+            <TouchableOpacity 
+              style={styles.dashboardStatCard}
+              onPress={() => {
+                setShowDashboard(false);
+                setActiveTab('all');
+                setSelectedStatusFilter('all');
+              }}
+            >
               <Text style={styles.dashboardStatNumber}>{totalLeads}</Text>
               <Text style={styles.dashboardStatLabel}>Total Leads</Text>
-            </View>
-            <View style={styles.dashboardStatCard}>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.dashboardStatCard}
+              onPress={() => {
+                setShowDashboard(false);
+                setActiveTab('all');
+                setSelectedStatusFilter('new');
+              }}
+            >
               <Text style={styles.dashboardStatNumber}>{newLeads}</Text>
               <Text style={styles.dashboardStatLabel}>New</Text>
-            </View>
-            <View style={styles.dashboardStatCard}>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.dashboardStatCard}
+              onPress={() => {
+                setShowDashboard(false);
+                setActiveTab('all');
+                setSelectedStatusFilter('qualified');
+              }}
+            >
               <Text style={styles.dashboardStatNumber}>{qualifiedLeads}</Text>
               <Text style={styles.dashboardStatLabel}>Qualified</Text>
-            </View>
-            <View style={styles.dashboardStatCard}>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.dashboardStatCard}
+              onPress={() => {
+                setShowDashboard(false);
+                setActiveTab('all');
+                setSelectedStatusFilter('closed');
+              }}
+            >
               <Text style={styles.dashboardStatNumber}>{closedLeads}</Text>
               <Text style={styles.dashboardStatLabel}>Closed</Text>
-            </View>
+            </TouchableOpacity>
           </View>
 
           {/* View All Leads Button */}
@@ -1412,14 +1465,12 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
       let leadsQuery = supabase
         .from('leads')
         .select('id, created_at, first_name, last_name, email, phone, status, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id')
-        .order('created_at', { ascending: false })
-        .limit(50);
+        .order('created_at', { ascending: false });
 
       let metaQuery = supabase
         .from('meta_ads')
         .select('id, created_at, first_name, last_name, email, phone, status, platform, campaign_name, subject_address, preferred_language, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id')
-        .order('created_at', { ascending: false })
-        .limit(50);
+        .order('created_at', { ascending: false });
 
       if (!canSeeAllLeads(userRole)) {
         if (userRole === 'loan_officer') {
@@ -1469,18 +1520,78 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
       </View>
 
       <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{metaLeads.length}</Text>
-          <Text style={styles.statLabel}>Meta Ads</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{leads.length}</Text>
-          <Text style={styles.statLabel}>Organic</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statNumber}>{metaLeads.length + leads.length}</Text>
-          <Text style={styles.statLabel}>Total</Text>
-        </View>
+        <TouchableOpacity 
+          style={[
+            styles.statCard,
+            activeTab === 'meta' && styles.statCardActive,
+          ]}
+          onPress={() => {
+            setActiveTab('meta');
+            setHasManuallySelectedTab(true);
+          }}
+        >
+          <Text style={[
+            styles.statNumber,
+            activeTab === 'meta' && styles.statNumberActive,
+          ]}>
+            {selectedStatusFilter === 'all' 
+              ? metaLeads.length 
+              : metaLeads.filter(l => l.status === selectedStatusFilter).length
+            }
+          </Text>
+          <Text style={[
+            styles.statLabel,
+            activeTab === 'meta' && styles.statLabelActive,
+          ]}>Meta Ads</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[
+            styles.statCard,
+            activeTab === 'leads' && styles.statCardActive,
+          ]}
+          onPress={() => {
+            setActiveTab('leads');
+            setHasManuallySelectedTab(true);
+          }}
+        >
+          <Text style={[
+            styles.statNumber,
+            activeTab === 'leads' && styles.statNumberActive,
+          ]}>
+            {selectedStatusFilter === 'all' 
+              ? leads.length 
+              : leads.filter(l => l.status === selectedStatusFilter).length
+            }
+          </Text>
+          <Text style={[
+            styles.statLabel,
+            activeTab === 'leads' && styles.statLabelActive,
+          ]}>Organic</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[
+            styles.statCard,
+            activeTab === 'all' && styles.statCardActive,
+          ]}
+          onPress={() => {
+            setActiveTab('all');
+            setHasManuallySelectedTab(true);
+          }}
+        >
+          <Text style={[
+            styles.statNumber,
+            activeTab === 'all' && styles.statNumberActive,
+          ]}>
+            {selectedStatusFilter === 'all' 
+              ? metaLeads.length + leads.length 
+              : [...metaLeads, ...leads].filter(l => l.status === selectedStatusFilter).length
+            }
+          </Text>
+          <Text style={[
+            styles.statLabel,
+            activeTab === 'all' && styles.statLabelActive,
+          ]}>Total</Text>
+        </TouchableOpacity>
       </View>
 
       {loading && (
@@ -1506,50 +1617,108 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
 
       {!loading && !errorMessage && (hasLeads || hasMetaLeads) && (
         <>
-          {/* Tab Bar */}
-          <View style={styles.tabBar}>
-            {hasMetaLeads && (
-              <TouchableOpacity
-                style={[
-                  styles.tab,
-                  activeTab === 'meta' && styles.tabActive,
-                ]}
-                onPress={() => setActiveTab('meta')}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    activeTab === 'meta' && styles.tabTextActive,
-                  ]}
-                >
-                  Meta Ads ({metaLeads.length})
-                </Text>
-              </TouchableOpacity>
-            )}
-            {hasLeads && (
-              <TouchableOpacity
-                style={[
-                  styles.tab,
-                  activeTab === 'leads' && styles.tabActive,
-                ]}
-                onPress={() => setActiveTab('leads')}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    activeTab === 'leads' && styles.tabTextActive,
-                  ]}
-                >
-                  Organic ({leads.length})
-                </Text>
-              </TouchableOpacity>
-            )}
+          {/* Status Filter Button */}
+          <View style={styles.filterButtonContainer}>
+            <TouchableOpacity
+              style={styles.filterButton}
+              onPress={() => setShowStatusPicker(true)}
+            >
+              <Text style={styles.filterButtonLabel}>Status:</Text>
+              <Text style={styles.filterButtonValue}>
+                {selectedStatusFilter === 'all' 
+                  ? `All Statuses (${[...leads, ...metaLeads].length})` 
+                  : `${formatStatus(selectedStatusFilter)} (${[...leads, ...metaLeads].filter(l => l.status === selectedStatusFilter).length})`
+                }
+              </Text>
+              <Text style={styles.filterButtonIcon}>▼</Text>
+            </TouchableOpacity>
           </View>
 
-          {/* Tab Content */}
+          {/* Status Picker Modal */}
+          <Modal
+            visible={showStatusPicker}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={() => setShowStatusPicker(false)}
+          >
+            <TouchableOpacity 
+              style={styles.modalOverlay}
+              activeOpacity={1}
+              onPress={() => setShowStatusPicker(false)}
+            >
+              <View style={styles.statusPickerContainer}>
+                <View style={styles.statusPickerHeader}>
+                  <Text style={styles.statusPickerTitle}>Filter by Status</Text>
+                  <TouchableOpacity onPress={() => setShowStatusPicker(false)}>
+                    <Text style={styles.statusPickerClose}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <ScrollView style={styles.statusPickerScroll}>
+                  <TouchableOpacity
+                    style={[
+                      styles.statusPickerItem,
+                      selectedStatusFilter === 'all' && styles.statusPickerItemActive,
+                    ]}
+                    onPress={() => {
+                      setSelectedStatusFilter('all');
+                      setShowStatusPicker(false);
+                    }}
+                  >
+                    <View style={styles.statusPickerItemLeft}>
+                      <Text style={[
+                        styles.statusPickerItemText,
+                        selectedStatusFilter === 'all' && styles.statusPickerItemTextActive,
+                      ]}>All Statuses</Text>
+                      <Text style={[
+                        styles.statusPickerItemCount,
+                        selectedStatusFilter === 'all' && styles.statusPickerItemCountActive,
+                      ]}>({[...leads, ...metaLeads].length})</Text>
+                    </View>
+                    {selectedStatusFilter === 'all' && (
+                      <Text style={styles.statusPickerCheck}>✓</Text>
+                    )}
+                  </TouchableOpacity>
+                  {STATUSES.map((status) => {
+                    const count = [...leads, ...metaLeads].filter(l => l.status === status).length;
+                    return (
+                      <TouchableOpacity
+                        key={status}
+                        style={[
+                          styles.statusPickerItem,
+                          selectedStatusFilter === status && styles.statusPickerItemActive,
+                        ]}
+                        onPress={() => {
+                          setSelectedStatusFilter(status);
+                          setShowStatusPicker(false);
+                        }}
+                      >
+                        <View style={styles.statusPickerItemLeft}>
+                          <Text style={[
+                            styles.statusPickerItemText,
+                            selectedStatusFilter === status && styles.statusPickerItemTextActive,
+                          ]}>{formatStatus(status)}</Text>
+                          <Text style={[
+                            styles.statusPickerItemCount,
+                            selectedStatusFilter === status && styles.statusPickerItemCountActive,
+                          ]}>({count})</Text>
+                        </View>
+                        {selectedStatusFilter === status && (
+                          <Text style={styles.statusPickerCheck}>✓</Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            </TouchableOpacity>
+          </Modal>
+
+          {/* Lead Content */}
           {activeTab === 'leads' && hasLeads && (
             <FlatList
-              data={leads}
+              data={leads.filter(lead => 
+                selectedStatusFilter === 'all' || lead.status === selectedStatusFilter
+              )}
               keyExtractor={(item) => item.id}
               renderItem={renderLeadItem}
               contentContainerStyle={styles.listContent}
@@ -1562,9 +1731,33 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
 
           {activeTab === 'meta' && hasMetaLeads && (
             <FlatList
-              data={metaLeads}
+              data={metaLeads.filter(lead => 
+                selectedStatusFilter === 'all' || lead.status === selectedStatusFilter
+              )}
               keyExtractor={(item) => item.id}
               renderItem={renderMetaLeadItem}
+              contentContainerStyle={styles.listContent}
+              refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+              }
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+
+          {activeTab === 'all' && (hasLeads || hasMetaLeads) && (
+            <FlatList
+              data={[
+                ...metaLeads.filter(lead => 
+                  selectedStatusFilter === 'all' || lead.status === selectedStatusFilter
+                ).map(lead => ({ ...lead, source: 'meta' as const })),
+                ...leads.filter(lead => 
+                  selectedStatusFilter === 'all' || lead.status === selectedStatusFilter
+                ).map(lead => ({ ...lead, source: 'lead' as const })),
+              ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())}
+              keyExtractor={(item) => `${item.source}-${item.id}`}
+              renderItem={({ item }) => 
+                item.source === 'meta' ? renderMetaLeadItem({ item }) : renderLeadItem({ item })
+              }
               contentContainerStyle={styles.listContent}
               refreshControl={
                 <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -1822,6 +2015,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  headerLeft: {
+    flex: 1,
+  },
+  userInfoBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginTop: 8,
+    maxWidth: '90%',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  userInfoIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  userInfoText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#FFFFFF',
+    flex: 1,
+  },
   homeButton: {
     paddingVertical: 8,
     paddingHorizontal: 12,
@@ -1831,7 +2049,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   homeButtonText: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '600',
     color: '#FFFFFF',
   },
@@ -1885,16 +2103,29 @@ const styles = StyleSheet.create({
     borderTopWidth: 3,
     borderTopColor: '#10B981',
   },
+  statCardActive: {
+    backgroundColor: '#7C3AED',
+    borderTopColor: '#7C3AED',
+    shadowColor: '#7C3AED',
+    shadowOpacity: 0.3,
+    elevation: 6,
+  },
   statNumber: {
     fontSize: 28,
     fontWeight: '800',
     color: '#10B981',
+  },
+  statNumberActive: {
+    color: '#FFFFFF',
   },
   statLabel: {
     fontSize: 12,
     fontWeight: '600',
     color: '#64748B',
     marginTop: 4,
+  },
+  statLabelActive: {
+    color: '#E9D5FF',
   },
   headerRow: {
     flexDirection: 'row',
@@ -2492,6 +2723,120 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: '#FFFFFF',
+  },
+  filterButtonContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  filterButtonLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+    marginRight: 8,
+  },
+  filterButtonValue: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  filterButtonIcon: {
+    fontSize: 12,
+    color: '#64748B',
+    marginLeft: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  statusPickerContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    width: '100%',
+    maxHeight: '70%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  statusPickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  statusPickerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  statusPickerClose: {
+    fontSize: 24,
+    color: '#64748B',
+    fontWeight: '300',
+  },
+  statusPickerScroll: {
+    maxHeight: 400,
+  },
+  statusPickerItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  statusPickerItemActive: {
+    backgroundColor: '#F8F4FF',
+  },
+  statusPickerItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  statusPickerItemText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#1E293B',
+  },
+  statusPickerItemTextActive: {
+    color: '#7C3AED',
+    fontWeight: '700',
+  },
+  statusPickerItemCount: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  statusPickerItemCountActive: {
+    color: '#A78BFA',
+  },
+  statusPickerCheck: {
+    fontSize: 18,
+    color: '#7C3AED',
+    fontWeight: '700',
   },
   activityTypeRow: {
     flexDirection: 'row',
