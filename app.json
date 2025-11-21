@@ -7,19 +7,33 @@
     "icon": "./assets/CWMLogo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "scheme": "closewithmario",
+
+    "scheme": "com.closewithmario.mobile",
+
+    "plugins": [
+      [
+        "expo-auth-session",
+        {
+          "redirectScheme": "com.closewithmario.mobile"
+        }
+      ]
+    ],
+
     "splash": {
       "image": "./assets/CWMLogo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.closewithmario.mobile",
+      "associatedDomains": [],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
+
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/CWMLogo.png",
@@ -27,11 +41,27 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.closewithmario.mobile"
+      "package": "com.closewithmario.mobile",
+
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "data": [
+            {
+              "scheme": "com.closewithmario.mobile",
+              "host": "auth",
+              "pathPrefix": "/callback"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
+
     "web": {
       "favicon": "./assets/favicon.png"
     },
+
     "extra": {
       "eas": {
         "projectId": "3bda627c-9ee3-4942-ac21-3123e862b310"
