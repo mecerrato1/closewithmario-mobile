@@ -34,6 +34,7 @@ const redirectTo = makeRedirectUri({
   scheme: 'com.closewithmario.mobile',
   path: 'auth/callback',
 });
+console.log("REDIRECT URI:", redirectTo);
 
 // ------------ Types ------------
 type Lead = {
