@@ -46,6 +46,7 @@ type Lead = {
   email: string | null;
   phone: string | null;
   status: string | null;
+  last_contact_date?: string | null;
   loan_purpose?: string | null;
   price?: number | null;
   down_payment?: number | null;
@@ -61,6 +62,7 @@ type MetaLead = {
   email: string | null;
   phone: string | null;
   status: string | null;
+  last_contact_date?: string | null;
   platform: string | null;
   campaign_name: string | null;
   subject_address?: string | null;
@@ -103,6 +105,45 @@ const STATUS_DISPLAY_MAP: Record<string, string> = {
   'unqualified': 'Unqualified',
   'no_response': 'No Response',
 };
+
+// Attention badge logic (matches web implementation)
+type AttentionBadge = {
+  type: 'new' | 'stale' | 'no_activity';
+  label: string;
+  color: string;
+} | null;
+
+function getLeadAlert(lead: { status: string | null; created_at: string; last_contact_date?: string | null }): AttentionBadge {
+  const status = lead.status || 'new';
+  const createdAt = new Date(lead.created_at);
+  const now = new Date();
+  const hoursSinceCreated = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
+  
+  // New leads (>24h old, not contacted)
+  if (status === 'new' && hoursSinceCreated > 24) {
+    return { type: 'new', label: 'New >24h', color: '#EF4444' }; // Red
+  }
+  
+  // No activity for 2+ days (contacted/qualified/nurturing)
+  if (['contacted', 'qualified', 'nurturing'].includes(status)) {
+    const lastContact = lead.last_contact_date ? new Date(lead.last_contact_date) : createdAt;
+    const daysSinceContact = (now.getTime() - lastContact.getTime()) / (1000 * 60 * 60 * 24);
+    
+    if (daysSinceContact >= 2) {
+      return { type: 'no_activity', label: 'No Activity 2+ days', color: '#F59E0B' }; // Orange
+    }
+  }
+  
+  // Stale leads (>3 days old, gathering_docs/no_response)
+  if (['gathering_docs', 'no_response'].includes(status)) {
+    const daysSinceCreated = hoursSinceCreated / 24;
+    if (daysSinceCreated > 3) {
+      return { type: 'stale', label: 'Stale >3 days', color: '#F59E0B' }; // Orange
+    }
+  }
+  
+  return null;
+}
 
 // Map status to colors for visual distinction
 const STATUS_COLOR_MAP: Record<string, { bg: string; text: string; border: string }> = {
@@ -475,6 +516,7 @@ function LeadDetailView({
   const status = record.status || 'No status';
   const email = record.email || '';
   const phone = record.phone || '';
+  const attentionBadge = getLeadAlert(record);
 
   const handleCall = () => {
     if (!phone) return;
@@ -648,16 +690,23 @@ function LeadDetailView({
           {/* Status buttons */}
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitle}>🏷️ Status</Text>
-            <View style={[
-              styles.currentStatusBadge,
-              { backgroundColor: STATUS_COLOR_MAP[status || 'new']?.bg || '#F5F5F5' }
-            ]}>
-              <Text style={[
-                styles.currentStatusText,
-                { color: STATUS_COLOR_MAP[status || 'new']?.text || '#666' }
+            <View style={styles.statusBadgeContainer}>
+              {attentionBadge && (
+                <View style={[styles.detailAttentionBadge, { backgroundColor: attentionBadge.color }]}>
+                  <Text style={styles.detailAttentionBadgeText}>⚠️ {attentionBadge.label}</Text>
+                </View>
+              )}
+              <View style={[
+                styles.currentStatusBadge,
+                { backgroundColor: STATUS_COLOR_MAP[status || 'new']?.bg || '#F5F5F5' }
               ]}>
-                {status ? formatStatus(status) : 'N/A'}
-              </Text>
+                <Text style={[
+                  styles.currentStatusText,
+                  { color: STATUS_COLOR_MAP[status || 'new']?.text || '#666' }
+                ]}>
+                  {status ? formatStatus(status) : 'N/A'}
+                </Text>
+              </View>
             </View>
           </View>
           <View style={styles.statusRow}>
@@ -1015,14 +1064,14 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
         let leadsQuery = supabase
           .from('leads')
           .select(
-            'id, created_at, first_name, last_name, email, phone, status, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id'
+            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id'
           )
           .order('created_at', { ascending: false });
 
         let metaQuery = supabase
           .from('meta_ads')
           .select(
-            'id, created_at, first_name, last_name, email, phone, status, platform, campaign_name, subject_address, preferred_language, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id'
+            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, platform, campaign_name, subject_address, preferred_language, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id'
           )
           .order('created_at', { ascending: false });
 
@@ -1151,6 +1200,7 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
     const statusDisplay = formatStatus(status);
     const statusColors = STATUS_COLOR_MAP[status] || STATUS_COLOR_MAP['new'];
     const emailOrPhone = item.email || item.phone || 'No contact info';
+    const alert = getLeadAlert(item);
 
     return (
       <TouchableOpacity
@@ -1166,6 +1216,11 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
             <Text style={styles.leadSourceText}>🌐 Web</Text>
           </View>
         </View>
+        {alert && (
+          <View style={[styles.attentionBadge, { backgroundColor: alert.color }]}>
+            <Text style={styles.attentionBadgeText}>⚠️ {alert.label}</Text>
+          </View>
+        )}
         <View style={[
           styles.statusBadge,
           { backgroundColor: statusColors.bg, borderColor: statusColors.border }
@@ -1242,6 +1297,7 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
     };
 
     const statusColors = STATUS_COLOR_MAP[item.status || 'new'] || STATUS_COLOR_MAP['new'];
+    const alert = getLeadAlert(item);
 
     return (
       <TouchableOpacity
@@ -1255,6 +1311,11 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
           <Text style={styles.leadName}>{fullName}</Text>
           {getPlatformBadge(platform)}
         </View>
+        {alert && (
+          <View style={[styles.attentionBadge, { backgroundColor: alert.color }]}>
+            <Text style={styles.attentionBadgeText}>⚠️ {alert.label}</Text>
+          </View>
+        )}
         <View style={[
           styles.statusBadge,
           { backgroundColor: statusColors.bg, borderColor: statusColors.border }
@@ -1464,12 +1525,12 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
       
       let leadsQuery = supabase
         .from('leads')
-        .select('id, created_at, first_name, last_name, email, phone, status, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id')
+        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id')
         .order('created_at', { ascending: false });
 
       let metaQuery = supabase
         .from('meta_ads')
-        .select('id, created_at, first_name, last_name, email, phone, status, platform, campaign_name, subject_address, preferred_language, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id')
+        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, platform, campaign_name, subject_address, preferred_language, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id')
         .order('created_at', { ascending: false });
 
       if (!canSeeAllLeads(userRole)) {
@@ -1661,6 +1722,7 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
                     ]}
                     onPress={() => {
                       setSelectedStatusFilter('all');
+                      setActiveTab('all');
                       setShowStatusPicker(false);
                     }}
                   >
@@ -1689,6 +1751,7 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
                         ]}
                         onPress={() => {
                           setSelectedStatusFilter(status);
+                          setActiveTab('all');
                           setShowStatusPicker(false);
                         }}
                       >
@@ -2218,6 +2281,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.5,
   },
+  attentionBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  attentionBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
   statusBadge: {
     alignSelf: 'flex-start',
     paddingHorizontal: 12,
@@ -2608,6 +2684,23 @@ const styles = StyleSheet.create({
     color: '#1E293B',
     marginBottom: 12,
     letterSpacing: 0.2,
+  },
+  statusBadgeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  detailAttentionBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  detailAttentionBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
   },
   currentStatusBadge: {
     paddingHorizontal: 12,
