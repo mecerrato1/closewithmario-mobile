@@ -18,6 +18,7 @@ import {
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './src/lib/supabase';
 import { getUserRole, getUserTeamMemberId, canSeeAllLeads, type UserRole } from './src/lib/roles';
+import Constants from 'expo-constants';
 
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
@@ -188,38 +189,62 @@ function AuthScreen({ onAuth }: AuthScreenProps) {
     setAuthLoading(true);
 
     try {
+      // 1) Ask Supabase for the auth URL, but DON'T let it open the browser itself
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo,
-          skipBrowserRedirect: false,
+          redirectTo,            // com.closewithmario.mobile://auth/callback in TestFlight
+          skipBrowserRedirect: true,
         },
       });
 
       if (error) {
         console.log('Google sign-in error', error);
         setAuthError(error.message);
-        setAuthLoading(false);
         return;
       }
-
-      console.log('Google sign-in started', data);
 
       const authUrl = data?.url;
       if (!authUrl) {
         setAuthError('No auth URL returned from Supabase.');
-        setAuthLoading(false);
         return;
       }
 
-      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectTo);
+      console.log('Opening Google auth session:', authUrl);
+      
+      // 2) Open the auth session with WebBrowser
+      const result = await WebBrowser.openAuthSessionAsync(
+        authUrl,
+        redirectTo
+      );
+
+      console.log('AuthSession result:', result);
 
       if (result.type === 'success') {
-        console.log('Google sign-in completed.');
-      } else if (result.type === 'cancel') {
-        setAuthError('Google sign-in cancelled.');
+        // 3) Give Supabase a moment to process the redirect
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        // 4) Explicitly check for a Supabase session
+        const { data: sessionData, error: sessionError } =
+          await supabase.auth.getSession();
+
+        if (sessionError) {
+          console.log('Error getting Supabase session after OAuth:', sessionError);
+          setAuthError('Signed in with Google, but failed to get a session.');
+          return;
+        }
+
+        if (sessionData.session) {
+          console.log('Google sign-in completed, session:', sessionData.session);
+          onAuth(sessionData.session); // same callback you use for email/password
+        } else {
+          console.log('No Supabase session after Google sign-in.');
+          setAuthError('Google sign-in did not complete. Please try again.');
+        }
       } else if (result.type === 'dismiss') {
         setAuthError('Google sign-in dismissed.');
+      } else if (result.type === 'cancel') {
+        setAuthError('Google sign-in cancelled.');
       } else {
         setAuthError('Google sign-in was not completed.');
       }
@@ -332,6 +357,11 @@ function AuthScreen({ onAuth }: AuthScreenProps) {
             💡 Google login requires a development or standalone build
           </Text>
         </View>
+
+        {/* Version Number */}
+        <Text style={styles.versionText}>
+          v{Constants.expoConfig?.version || '1.0.1'} (Build {Constants.expoConfig?.ios?.buildNumber || '2'})
+        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -1763,6 +1793,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#64748B',
     lineHeight: 18,
+    fontWeight: '500',
+  },
+  versionText: {
+    fontSize: 11,
+    color: '#94A3B8',
+    textAlign: 'center',
+    marginTop: 24,
+    marginBottom: 16,
     fontWeight: '500',
   },
   headerContainer: {

@@ -2,31 +2,31 @@
   "expo": {
     "name": "closewithmario-mobile",
     "slug": "closewithmario-mobile",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
-    "icon": "./assets/CWMLogo.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-
     "scheme": "com.closewithmario.mobile",
-
     "splash": {
-      "image": "./assets/CWMLogo.png",
+      "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.closewithmario.mobile",
+      "buildNumber": "2",
+      "associatedDomains": [
+        "applinks:hxpvcaspgdgsehrehbhl.supabase.co"
+      ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
-
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/CWMLogo.png",
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
@@ -42,19 +42,23 @@
               "pathPrefix": "/callback"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
-
     "web": {
       "favicon": "./assets/favicon.png"
     },
-
     "extra": {
       "eas": {
         "projectId": "3bda627c-9ee3-4942-ac21-3123e862b310"
       }
-    }
+    },
+    "plugins": [
+      "expo-font"
+    ]
   }
 }
