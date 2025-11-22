@@ -1312,6 +1312,7 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
   const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [loanOfficers, setLoanOfficers] = useState<Array<{ id: string; name: string }>>([]);
   const [userRole, setUserRole] = useState<UserRole>('buyer');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const init = async () => {
@@ -1475,6 +1476,18 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
     } finally {
       setStatusUpdating(false);
     }
+  };
+
+  // Search filter function
+  const matchesSearch = (lead: Lead | MetaLead) => {
+    if (!searchQuery.trim()) return true;
+    
+    const query = searchQuery.toLowerCase();
+    const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(' ').toLowerCase();
+    const email = lead.email?.toLowerCase() || '';
+    const phone = lead.phone?.toLowerCase() || '';
+    
+    return fullName.includes(query) || email.includes(query) || phone.includes(query);
   };
 
   const renderLeadItem = ({ item }: { item: Lead }) => {
@@ -1995,6 +2008,28 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
 
       {!loading && !errorMessage && (hasLeads || hasMetaLeads) && (
         <>
+          {/* Search Bar */}
+          <View style={styles.searchContainer}>
+            <Text style={styles.searchIcon}>🔍</Text>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search by name, email, or phone..."
+              placeholderTextColor="#94A3B8"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity 
+                onPress={() => setSearchQuery('')}
+                style={styles.searchClearButton}
+              >
+                <Text style={styles.searchClearText}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
           {/* Status Filter Button */}
           <View style={styles.filterButtonContainer}>
             <TouchableOpacity
@@ -2097,7 +2132,8 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
           {activeTab === 'leads' && hasLeads && (
             <FlatList
               data={leads.filter(lead => 
-                selectedStatusFilter === 'all' || lead.status === selectedStatusFilter
+                (selectedStatusFilter === 'all' || lead.status === selectedStatusFilter) &&
+                matchesSearch(lead)
               )}
               keyExtractor={(item) => item.id}
               renderItem={renderLeadItem}
@@ -2112,7 +2148,8 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
           {activeTab === 'meta' && hasMetaLeads && (
             <FlatList
               data={metaLeads.filter(lead => 
-                selectedStatusFilter === 'all' || lead.status === selectedStatusFilter
+                (selectedStatusFilter === 'all' || lead.status === selectedStatusFilter) &&
+                matchesSearch(lead)
               )}
               keyExtractor={(item) => item.id}
               renderItem={renderMetaLeadItem}
@@ -2128,10 +2165,12 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
             <FlatList
               data={[
                 ...metaLeads.filter(lead => 
-                  selectedStatusFilter === 'all' || lead.status === selectedStatusFilter
+                  (selectedStatusFilter === 'all' || lead.status === selectedStatusFilter) &&
+                  matchesSearch(lead)
                 ).map(lead => ({ ...lead, source: 'meta' as const })),
                 ...leads.filter(lead => 
-                  selectedStatusFilter === 'all' || lead.status === selectedStatusFilter
+                  (selectedStatusFilter === 'all' || lead.status === selectedStatusFilter) &&
+                  matchesSearch(lead)
                 ).map(lead => ({ ...lead, source: 'lead' as const })),
               ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())}
               keyExtractor={(item) => `${item.source}-${item.id}`}
@@ -3512,5 +3551,40 @@ const styles = StyleSheet.create({
   adImageFull: {
     width: '100%',
     height: '100%',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  searchIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1E293B',
+    paddingVertical: 12,
+  },
+  searchClearButton: {
+    padding: 4,
+  },
+  searchClearText: {
+    fontSize: 18,
+    color: '#94A3B8',
+    fontWeight: '600',
   },
 });
