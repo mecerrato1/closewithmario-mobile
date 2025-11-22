@@ -69,8 +69,10 @@ type MetaLead = {
   realtor_id?: string | null;
   platform: string | null;
   campaign_name: string | null;
+  ad_name?: string | null;
   subject_address?: string | null;
   preferred_language?: string | null;
+  credit_range?: string | null;
   income_type?: string | null;
   purchase_timeline?: string | null;
   price_range?: string | null;
@@ -472,6 +474,7 @@ function LeadDetailView({
   const [deletingActivityId, setDeletingActivityId] = useState<string | null>(null);
   const [showLOPicker, setShowLOPicker] = useState(false);
   const [updatingLO, setUpdatingLO] = useState(false);
+  const [showAdImage, setShowAdImage] = useState(false);
   
   const quickPhrases = [
     'Left voicemail',
@@ -488,6 +491,27 @@ function LeadDetailView({
   const currentList = isMeta ? metaLeads : leads;
   const currentIndex = currentList.findIndex((item) => item.id === selected.id);
   const record = currentList[currentIndex];
+  
+  // Function to get ad image based on ad name or campaign name
+  const getAdImage = () => {
+    if (!isMeta || !record) return null;
+    
+    const adName = (record as MetaLead).ad_name?.toLowerCase() || '';
+    const campaignName = (record as MetaLead).campaign_name?.toLowerCase() || '';
+    const searchText = `${adName} ${campaignName}`.toLowerCase();
+    
+    if (searchText.includes('hpa')) {
+      return require('./assets/BrowardHPA _Ad.jpg');
+    } else if (searchText.includes('condo')) {
+      return require('./assets/Condo_Ad.jpg');
+    } else if (searchText.includes('green acres') || searchText.includes('greenacres')) {
+      return require('./assets/Greenacres_ Ad.png');
+    }
+    
+    return null;
+  };
+  
+  const adImage = getAdImage();
 
   const hasPrevious = currentIndex > 0;
   const hasNext = currentIndex < currentList.length - 1;
@@ -949,87 +973,121 @@ function LeadDetailView({
           {/* Basic fields */}
           <Text style={styles.sectionTitle}>ℹ️ Basic Info</Text>
           <View style={styles.infoGrid}>
-          <Text style={styles.detailField}>Email: {email || 'N/A'}</Text>
-          <Text style={styles.detailField}>Phone: {phone || 'N/A'}</Text>
+          {email && <Text style={styles.detailField}>Email: {email}</Text>}
+          {phone && <Text style={styles.detailField}>Phone: {phone}</Text>}
 
           {!isMeta && (
             <>
-              <Text style={styles.detailField}>
-                Loan Purpose:{' '}
-                {(record as Lead).loan_purpose || 'N/A'}
-              </Text>
-              <Text style={styles.detailField}>
-                Price: {(record as Lead).price ?? 'N/A'}
-              </Text>
-              <Text style={styles.detailField}>
-                Down Payment: {(record as Lead).down_payment ?? 'N/A'}
-              </Text>
-              <Text style={styles.detailField}>
-                Credit Score: {(record as Lead).credit_score ?? 'N/A'}
-              </Text>
-              <Text style={styles.detailField}>
-                Message:{' '}
-                {(record as Lead).message || 'N/A'}
-              </Text>
+              {(record as Lead).loan_purpose && (
+                <Text style={styles.detailField}>
+                  Loan Purpose: {(record as Lead).loan_purpose}
+                </Text>
+              )}
+              {(record as Lead).price != null && (
+                <Text style={styles.detailField}>
+                  Price: ${(record as Lead).price?.toLocaleString()}
+                </Text>
+              )}
+              {(record as Lead).down_payment != null && (
+                <Text style={styles.detailField}>
+                  Down Payment: ${(record as Lead).down_payment?.toLocaleString()}
+                </Text>
+              )}
+              {(record as Lead).credit_score != null && (
+                <Text style={styles.detailField}>
+                  Credit Score: {(record as Lead).credit_score}
+                </Text>
+              )}
+              {(record as Lead).message && (
+                <Text style={styles.detailField}>
+                  Message: {(record as Lead).message}
+                </Text>
+              )}
             </>
           )}
 
           {isMeta && (
             <>
-              <Text style={styles.detailField}>
-                Platform:{' '}
-                {(record as MetaLead).platform || 'Meta'}
-              </Text>
-              <Text style={styles.detailField}>
-                Campaign:{' '}
-                {(record as MetaLead).campaign_name || 'N/A'}
-              </Text>
-              <Text style={styles.detailField}>
-                Address:{' '}
-                {(record as MetaLead).subject_address || 'N/A'}
-              </Text>
-              <Text style={styles.detailField}>
-                Language:{' '}
-                {(record as MetaLead).preferred_language || 'N/A'}
-              </Text>
-              <Text style={styles.detailField}>
-                Income Type:{' '}
-                {(record as MetaLead).income_type || 'N/A'}
-              </Text>
-              <Text style={styles.detailField}>
-                Purchase Timeline:{' '}
-                {(record as MetaLead).purchase_timeline || 'N/A'}
-              </Text>
-              <Text style={styles.detailField}>
-                Price Range:{' '}
-                {(record as MetaLead).price_range || 'N/A'}
-              </Text>
-              <Text style={styles.detailField}>
-                Down Payment Saved:{' '}
-                {(record as MetaLead).down_payment_saved || 'N/A'}
-              </Text>
-              <Text style={styles.detailField}>
-                Has Realtor:{' '}
-                {(record as MetaLead).has_realtor === true
-                  ? 'Yes'
-                  : (record as MetaLead).has_realtor === false
-                  ? 'No'
-                  : 'N/A'}
-              </Text>
-              <Text style={styles.detailField}>
-                County Interest:{' '}
-                {(record as MetaLead).county_interest || 'N/A'}
-              </Text>
-              <Text style={styles.detailField}>
-                Monthly Income:{' '}
-                {(record as MetaLead).monthly_income || 'N/A'}
-              </Text>
-              <Text style={styles.detailField}>
-                Notes:{' '}
-                {(record as MetaLead).meta_ad_notes ||
-                  (record as MetaLead).additional_notes ||
-                  'N/A'}
-              </Text>
+              {(record as MetaLead).platform && (
+                <Text style={styles.detailField}>
+                  Platform: {(record as MetaLead).platform}
+                </Text>
+              )}
+              {(record as MetaLead).campaign_name && (
+                <Text style={styles.detailField}>
+                  Campaign: {(record as MetaLead).campaign_name}
+                </Text>
+              )}
+              {(record as MetaLead).ad_name && (
+                <>
+                  <Text style={styles.detailField}>
+                    Ad Name: {(record as MetaLead).ad_name}
+                  </Text>
+                  {adImage && (
+                    <TouchableOpacity 
+                      style={styles.viewAdButton}
+                      onPress={() => setShowAdImage(true)}
+                    >
+                      <Text style={styles.viewAdButtonText}>📸 View Ad</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
+              {(record as MetaLead).subject_address && (
+                <Text style={styles.detailField}>
+                  Address: {(record as MetaLead).subject_address}
+                </Text>
+              )}
+              {(record as MetaLead).preferred_language && (
+                <Text style={styles.detailField}>
+                  Language: {(record as MetaLead).preferred_language}
+                </Text>
+              )}
+              {(record as MetaLead).credit_range && (
+                <Text style={styles.detailField}>
+                  Credit Range: {(record as MetaLead).credit_range}
+                </Text>
+              )}
+              {(record as MetaLead).income_type && (
+                <Text style={styles.detailField}>
+                  Income Type: {(record as MetaLead).income_type}
+                </Text>
+              )}
+              {(record as MetaLead).purchase_timeline && (
+                <Text style={styles.detailField}>
+                  Purchase Timeline: {(record as MetaLead).purchase_timeline}
+                </Text>
+              )}
+              {(record as MetaLead).price_range && (
+                <Text style={styles.detailField}>
+                  Price Range: {(record as MetaLead).price_range}
+                </Text>
+              )}
+              {(record as MetaLead).down_payment_saved && (
+                <Text style={styles.detailField}>
+                  Down Payment Saved: {(record as MetaLead).down_payment_saved}
+                </Text>
+              )}
+              {(record as MetaLead).has_realtor != null && (
+                <Text style={styles.detailField}>
+                  Has Realtor: {(record as MetaLead).has_realtor ? 'Yes' : 'No'}
+                </Text>
+              )}
+              {(record as MetaLead).county_interest && (
+                <Text style={styles.detailField}>
+                  County Interest: {(record as MetaLead).county_interest}
+                </Text>
+              )}
+              {(record as MetaLead).monthly_income && (
+                <Text style={styles.detailField}>
+                  Monthly Income: {(record as MetaLead).monthly_income}
+                </Text>
+              )}
+              {((record as MetaLead).meta_ad_notes || (record as MetaLead).additional_notes) && (
+                <Text style={styles.detailField}>
+                  Notes: {(record as MetaLead).meta_ad_notes || (record as MetaLead).additional_notes}
+                </Text>
+              )}
             </>
           )}
           </View>
@@ -1197,6 +1255,35 @@ function LeadDetailView({
           )}
         </View>
       </ScrollView>
+
+      {/* Ad Image Modal */}
+      {adImage && (
+        <Modal
+          visible={showAdImage}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowAdImage(false)}
+        >
+          <View style={styles.adImageModalOverlay}>
+            <TouchableOpacity 
+              style={styles.adImageModalClose}
+              onPress={() => setShowAdImage(false)}
+              activeOpacity={0.9}
+            >
+              <View style={styles.adImageModalCloseButton}>
+                <Text style={styles.adImageModalCloseText}>✕</Text>
+              </View>
+            </TouchableOpacity>
+            <View style={styles.adImageModalContent}>
+              <Image 
+                source={adImage}
+                style={styles.adImageFull}
+                resizeMode="contain"
+              />
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -1269,7 +1356,7 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
         let metaQuery = supabase
           .from('meta_ads')
           .select(
-            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, platform, campaign_name, subject_address, preferred_language, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id'
+            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id'
           )
           .order('created_at', { ascending: false });
 
@@ -1760,7 +1847,7 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
 
       let metaQuery = supabase
         .from('meta_ads')
-        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, platform, campaign_name, subject_address, preferred_language, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id')
+        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id')
         .order('created_at', { ascending: false });
 
       if (!canSeeAllLeads(userRole)) {
@@ -3377,5 +3464,53 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 12,
     fontStyle: 'italic',
+  },
+  viewAdButton: {
+    backgroundColor: '#7C3AED',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 8,
+    alignSelf: 'flex-start',
+  },
+  viewAdButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  adImageModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  adImageModalClose: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+  },
+  adImageModalCloseButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  adImageModalCloseText: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '600',
+  },
+  adImageModalContent: {
+    width: '90%',
+    height: '80%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  adImageFull: {
+    width: '100%',
+    height: '100%',
   },
 });
