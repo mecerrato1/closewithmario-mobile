@@ -1808,6 +1808,8 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
   const [userRole, setUserRole] = useState<UserRole>('buyer');
   const [searchQuery, setSearchQuery] = useState('');
   const [showTeamManagement, setShowTeamManagement] = useState(false);
+  const [teamMemberId, setTeamMemberId] = useState<string | null>(null);
+  const [leadEligible, setLeadEligible] = useState<boolean>(true);
 
   useEffect(() => {
     const init = async () => {
@@ -1824,6 +1826,24 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
         const role = await getUserRole(session.user.id, session.user.email);
         console.log('User role:', role);
         setUserRole(role);
+
+        // Fetch team member ID and lead_eligible status for loan officers
+        if (role === 'loan_officer') {
+          const memberId = await getUserTeamMemberId(session.user.id, 'loan_officer');
+          setTeamMemberId(memberId);
+          
+          if (memberId) {
+            const { data: loData } = await supabase
+              .from('loan_officers')
+              .select('lead_eligible')
+              .eq('id', memberId)
+              .single();
+            
+            if (loData) {
+              setLeadEligible(loData.lead_eligible ?? true);
+            }
+          }
+        }
 
         // Fetch loan officers for super admins
         if (role === 'super_admin' || role === 'admin') {
@@ -2155,6 +2175,33 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
     );
   };
 
+  // Function to toggle lead_eligible status
+  const toggleLeadEligible = async () => {
+    if (!teamMemberId) {
+      alert('Unable to update: Team member ID not found');
+      return;
+    }
+
+    try {
+      const newStatus = !leadEligible;
+      const { error } = await supabase
+        .from('loan_officers')
+        .update({ lead_eligible: newStatus })
+        .eq('id', teamMemberId);
+
+      if (error) throw error;
+      
+      setLeadEligible(newStatus);
+      alert(newStatus 
+        ? 'You are now eligible to receive auto-assigned leads' 
+        : 'You will no longer receive auto-assigned leads'
+      );
+    } catch (error: any) {
+      console.error('Error toggling lead eligibility:', error);
+      alert('Error updating status: ' + error.message);
+    }
+  };
+
   // Show Team Management screen for super admins
   if (showTeamManagement) {
     return (
@@ -2300,6 +2347,39 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
           >
             <Text style={styles.dashboardViewAllText}>View All Leads</Text>
           </TouchableOpacity>
+
+          {/* Lead Assignment Settings (Loan Officers Only) */}
+          {userRole === 'loan_officer' && (
+            <View style={styles.dashboardCard}>
+              <Text style={styles.dashboardCardTitle}>⚙️ Lead Assignment Settings</Text>
+              <View style={styles.leadEligibleContainer}>
+                <View style={styles.leadEligibleInfo}>
+                  <Text style={styles.leadEligibleLabel}>
+                    Receive Auto-Assigned Leads
+                  </Text>
+                  <Text style={styles.leadEligibleDescription}>
+                    {leadEligible 
+                      ? 'You are currently receiving new leads via round-robin assignment' 
+                      : 'You are not receiving new auto-assigned leads'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.leadEligibleToggle}
+                  onPress={toggleLeadEligible}
+                >
+                  <View style={[
+                    styles.toggleSwitch,
+                    leadEligible && styles.toggleSwitchActive
+                  ]}>
+                    <View style={[
+                      styles.toggleThumb,
+                      leadEligible && styles.toggleThumbActive
+                    ]} />
+                  </View>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           {/* Quick Guide Card */}
           <View style={styles.dashboardCard}>
@@ -3419,6 +3499,29 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     fontSize: 14,
     paddingVertical: 20,
+  },
+  leadEligibleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  leadEligibleInfo: {
+    flex: 1,
+    marginRight: 16,
+  },
+  leadEligibleLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 6,
+  },
+  leadEligibleDescription: {
+    fontSize: 13,
+    color: '#64748B',
+    lineHeight: 18,
+  },
+  leadEligibleToggle: {
+    padding: 4,
   },
   dashboardViewAllButton: {
     backgroundColor: '#7C3AED',
