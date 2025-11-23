@@ -2238,6 +2238,8 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
   // Dashboard View
   if (showDashboard) {
     const totalLeads = leads.length + metaLeads.length;
+    const metaLeadsCount = metaLeads.length;
+    const organicLeadsCount = leads.length;
     const newLeads = [...leads, ...metaLeads].filter(l => l.status === 'new').length;
     const qualifiedLeads = [...leads, ...metaLeads].filter(l => l.status === 'qualified').length;
     const closedLeads = [...leads, ...metaLeads].filter(l => l.status === 'closed').length;
@@ -2248,120 +2250,168 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 5);
 
+    // Get user's first name for greeting
+    const userFirstName = session?.user?.user_metadata?.full_name?.split(' ')[0] || 
+                          session?.user?.user_metadata?.name?.split(' ')[0] || 
+                          'there';
+
     return (
       <View style={styles.container}>
-        {/* Dashboard Header */}
-        <View style={styles.headerContainer}>
-          <View style={styles.headerContent}>
-            <View style={styles.headerLeft}>
-              <Text style={styles.headerTitle}>Dashboard</Text>
-              <Text style={styles.headerSubtitle}>Lead Overview</Text>
-              {session?.user?.email && (
-                <View style={styles.userInfoBadge}>
-                  {session.user.user_metadata?.avatar_url ? (
-                    <Image 
-                      source={{ uri: session.user.user_metadata.avatar_url }}
-                      style={styles.userAvatar}
-                    />
-                  ) : (
-                    <Text style={styles.userInfoIcon}>👤</Text>
-                  )}
-                  <Text style={styles.userInfoText} numberOfLines={1}>
-                    {session.user.email}
+        {/* Purple Gradient Header */}
+        <View style={styles.newDashboardHeader}>
+          {/* User Info Row */}
+          <View style={styles.newHeaderTop}>
+            <View style={styles.newUserInfo}>
+              {session?.user?.user_metadata?.avatar_url ? (
+                <Image 
+                  source={{ uri: session.user.user_metadata.avatar_url }}
+                  style={styles.newAvatar}
+                />
+              ) : (
+                <View style={styles.newAvatarPlaceholder}>
+                  <Text style={styles.newAvatarText}>
+                    {session?.user?.email?.[0]?.toUpperCase() || 'U'}
                   </Text>
                 </View>
               )}
+              <View style={styles.newUserDetails}>
+                <Text style={styles.newUserTitle}>Dashboard</Text>
+                <Text style={styles.newUserEmail} numberOfLines={1}>
+                  {session?.user?.email || ''}
+                </Text>
+              </View>
             </View>
             <View style={styles.headerButtons}>
               {userRole === 'super_admin' && (
                 <TouchableOpacity 
                   onPress={() => setShowTeamManagement(true)} 
-                  style={styles.teamManagementButton}
+                  style={styles.newHeaderButton}
                 >
-                  <Text style={styles.teamManagementButtonText}>👥</Text>
+                  <Text style={styles.newHeaderButtonText}>👥</Text>
                 </TouchableOpacity>
               )}
-              <TouchableOpacity onPress={onSignOut} style={styles.signOutButton}>
-                <Text style={styles.signOutText}>Sign Out</Text>
+              <TouchableOpacity onPress={onSignOut} style={styles.newSignOutButton}>
+                <Text style={styles.newSignOutText}>Sign Out</Text>
               </TouchableOpacity>
             </View>
+          </View>
+
+          {/* Greeting */}
+          <Text style={styles.newGreeting}>Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {userFirstName}!</Text>
+          <Text style={styles.newSubGreeting}>Here's your lead overview</Text>
+
+          {/* Stats Grid in Header */}
+          <View style={styles.newHeaderStatsGrid}>
+            <View style={styles.newHeaderStatsRow}>
+              <TouchableOpacity 
+                style={styles.newHeaderStatCard}
+                onPress={() => {
+                  setActiveTab('meta');
+                  setSelectedStatusFilter('all');
+                  setShowDashboard(false);
+                }}
+              >
+                <Text style={styles.newHeaderStatNumber}>{metaLeadsCount}</Text>
+                <Text style={styles.newHeaderStatLabel}>Meta Ads</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.newHeaderStatCard}
+                onPress={() => {
+                  setActiveTab('leads');
+                  setSelectedStatusFilter('all');
+                  setShowDashboard(false);
+                }}
+              >
+                <Text style={styles.newHeaderStatNumber}>{organicLeadsCount}</Text>
+                <Text style={styles.newHeaderStatLabel}>Organic</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity 
+              style={styles.newHeaderStatCardLarge}
+              onPress={() => {
+                setActiveTab('all');
+                setSelectedStatusFilter('all');
+                setShowDashboard(false);
+              }}
+            >
+              <Text style={styles.newHeaderStatNumberLarge}>{totalLeads}</Text>
+              <Text style={styles.newHeaderStatLabelLarge}>Total Leads</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
         <ScrollView 
-          contentContainerStyle={styles.dashboardContent}
+          contentContainerStyle={styles.newDashboardContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* Stats Grid */}
-          <View style={styles.dashboardStatsGrid}>
-            <TouchableOpacity 
-              style={styles.dashboardStatCard}
-              onPress={() => {
-                setShowDashboard(false);
-                setActiveTab('all');
-                setSelectedStatusFilter('all');
-              }}
-            >
-              <Text style={styles.dashboardStatNumber}>{totalLeads}</Text>
-              <Text style={styles.dashboardStatLabel}>Total Leads</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.dashboardStatCard}
-              onPress={() => {
-                setShowDashboard(false);
-                setActiveTab('all');
-                setSelectedStatusFilter('new');
-              }}
-            >
-              <Text style={styles.dashboardStatNumber}>{newLeads}</Text>
-              <Text style={styles.dashboardStatLabel}>New</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.dashboardStatCard}
-              onPress={() => {
-                setShowDashboard(false);
-                setActiveTab('all');
-                setSelectedStatusFilter('qualified');
-              }}
-            >
-              <Text style={styles.dashboardStatNumber}>{qualifiedLeads}</Text>
-              <Text style={styles.dashboardStatLabel}>Qualified</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.dashboardStatCard}
-              onPress={() => {
-                setShowDashboard(false);
-                setActiveTab('all');
-                setSelectedStatusFilter('closed');
-              }}
-            >
-              <Text style={styles.dashboardStatNumber}>{closedLeads}</Text>
-              <Text style={styles.dashboardStatLabel}>Closed</Text>
-            </TouchableOpacity>
-          </View>
-
           {/* View All Leads Button */}
           <TouchableOpacity
-            style={styles.dashboardViewAllButton}
-            onPress={() => setShowDashboard(false)}
+            style={styles.newViewAllButton}
+            onPress={() => {
+              setActiveTab('all');
+              setSelectedStatusFilter('all');
+              setShowDashboard(false);
+            }}
           >
-            <Text style={styles.dashboardViewAllText}>View All Leads</Text>
+            <Text style={styles.newViewAllText}>📊 View All Leads</Text>
           </TouchableOpacity>
+
+          {/* Performance Section */}
+          <View style={styles.performanceSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>📈 Performance</Text>
+            </View>
+            <View style={styles.performanceGrid}>
+              <TouchableOpacity 
+                style={styles.performanceCard}
+                onPress={() => {
+                  setActiveTab('all');
+                  setSelectedStatusFilter('new');
+                  setShowDashboard(false);
+                }}
+              >
+                <Text style={styles.perfNumber}>{newLeads}</Text>
+                <Text style={styles.perfLabel}>New Leads</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.performanceCard}
+                onPress={() => {
+                  setActiveTab('all');
+                  setSelectedStatusFilter('qualified');
+                  setShowDashboard(false);
+                }}
+              >
+                <Text style={styles.perfNumber}>{qualifiedLeads}</Text>
+                <Text style={styles.perfLabel}>Qualified</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={styles.performanceCard}
+                onPress={() => {
+                  setActiveTab('all');
+                  setSelectedStatusFilter('closed');
+                  setShowDashboard(false);
+                }}
+              >
+                <Text style={styles.perfNumber}>{closedLeads}</Text>
+                <Text style={styles.perfLabel}>Closed</Text>
+              </TouchableOpacity>
+              <View style={styles.performanceCard}>
+                <Text style={styles.perfNumber}>
+                  {totalLeads > 0 ? Math.round((closedLeads / totalLeads) * 100) : 0}%
+                </Text>
+                <Text style={styles.perfLabel}>Conversion</Text>
+              </View>
+            </View>
+          </View>
 
           {/* Lead Assignment Settings (Loan Officers Only) */}
           {userRole === 'loan_officer' && (
-            <View style={styles.dashboardCard}>
-              <Text style={styles.dashboardCardTitle}>⚙️ Lead Assignment Settings</Text>
+            <View style={styles.quickStatsCard}>
+              <Text style={styles.quickStatsTitle}>⚙️ Lead Assignment</Text>
               <View style={styles.leadEligibleContainer}>
                 <View style={styles.leadEligibleInfo}>
-                  <Text style={styles.leadEligibleLabel}>
-                    Receive Auto-Assigned Leads
-                  </Text>
-                  <Text style={styles.leadEligibleDescription}>
-                    {leadEligible 
-                      ? 'You are currently receiving new leads via round-robin assignment' 
-                      : 'You are not receiving new auto-assigned leads'}
-                  </Text>
+                  <Text style={styles.statsLabel}>Receive Auto-Assigned Leads</Text>
+                  <Text style={styles.statsValue}>{leadEligible ? 'Enabled' : 'Disabled'}</Text>
                 </View>
                 <TouchableOpacity
                   style={styles.leadEligibleToggle}
@@ -2381,48 +2431,58 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
             </View>
           )}
 
-          {/* Quick Guide Card */}
-          <View style={styles.dashboardCard}>
-            <Text style={styles.dashboardCardTitle}>📋 How to Disposition Leads</Text>
-            <View style={styles.dashboardGuideStep}>
-              <Text style={styles.dashboardGuideNumber}>1</Text>
-              <Text style={styles.dashboardGuideText}>Tap on any lead to view details</Text>
+          {/* Recent Leads Section */}
+          <View style={styles.recentLeadsSection}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>🕒 Recent Leads</Text>
             </View>
-            <View style={styles.dashboardGuideStep}>
-              <Text style={styles.dashboardGuideNumber}>2</Text>
-              <Text style={styles.dashboardGuideText}>Review contact info and lead source</Text>
-            </View>
-            <View style={styles.dashboardGuideStep}>
-              <Text style={styles.dashboardGuideNumber}>3</Text>
-              <Text style={styles.dashboardGuideText}>Select a status: New → Contacted → Qualified → Closed</Text>
-            </View>
-            <View style={styles.dashboardGuideStep}>
-              <Text style={styles.dashboardGuideNumber}>4</Text>
-              <Text style={styles.dashboardGuideText}>Log activities (calls, texts, emails, notes)</Text>
-            </View>
-          </View>
-
-          {/* Recent Activity */}
-          <View style={styles.dashboardCard}>
-            <Text style={styles.dashboardCardTitle}>🕒 Recent Leads</Text>
             {recentLeads.length > 0 ? (
               recentLeads.map((lead) => {
                 const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || '(No name)';
                 const timeAgo = getTimeAgo(new Date(lead.created_at));
+                const isNew = lead.status === 'new';
+                const isQualified = lead.status === 'qualified';
+                const source = lead.source === 'meta' 
+                  ? `📱 Facebook${(lead as MetaLead).campaign_name ? ' • ' + (lead as MetaLead).campaign_name : ''}`
+                  : '🌐 Website Contact';
+                
                 return (
                   <TouchableOpacity
                     key={`${lead.source}-${lead.id}`}
-                    style={styles.dashboardRecentItem}
+                    style={[
+                      styles.newLeadCard,
+                      isNew && styles.newLeadCardNew,
+                      isQualified && styles.newLeadCardQualified
+                    ]}
                     onPress={() => {
                       setShowDashboard(false);
                       setSelectedLead({ source: lead.source, id: lead.id });
                     }}
                   >
-                    <View style={styles.dashboardRecentInfo}>
-                      <Text style={styles.dashboardRecentName}>{fullName}</Text>
-                      <Text style={styles.dashboardRecentTime}>{timeAgo}</Text>
+                    <View style={styles.newLeadHeader}>
+                      <View style={styles.newLeadLeft}>
+                        <Text style={styles.newLeadName}>{fullName}</Text>
+                        <Text style={styles.newLeadSource} numberOfLines={1}>{source}</Text>
+                        <Text style={styles.newLeadTime}>{timeAgo}</Text>
+                      </View>
+                      <View style={styles.newLeadBadges}>
+                        {isNew && (
+                          <View style={styles.statusBadgeNew}>
+                            <Text style={styles.statusBadgeNewText}>New</Text>
+                          </View>
+                        )}
+                        {isQualified && (
+                          <View style={styles.statusBadgeQualified}>
+                            <Text style={styles.statusBadgeQualifiedText}>Qualified</Text>
+                          </View>
+                        )}
+                      </View>
                     </View>
-                    <Text style={styles.dashboardRecentArrow}>›</Text>
+                    <View style={styles.newLeadDetails}>
+                      <Text style={styles.newLeadDetail} numberOfLines={1}>
+                        {lead.email || lead.phone || 'No contact'}
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                 );
               })
@@ -4541,5 +4601,305 @@ const styles = StyleSheet.create({
   },
   teamManagementButtonText: {
     fontSize: 18,
+  },
+  // New Dashboard Styles
+  newDashboardHeader: {
+    backgroundColor: '#7C3AED',
+    paddingTop: 50,
+    paddingHorizontal: 20,
+    paddingBottom: 24,
+  },
+  newHeaderTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  newUserInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  newAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  newAvatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  newAvatarText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  newUserDetails: {
+    flex: 1,
+  },
+  newUserTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  newUserEmail: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  newHeaderButton: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  newHeaderButtonText: {
+    fontSize: 18,
+  },
+  newSignOutButton: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  newSignOutText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  newGreeting: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  newSubGreeting: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
+    marginBottom: 20,
+  },
+  newHeaderStatsGrid: {
+    gap: 12,
+  },
+  newHeaderStatsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  newHeaderStatCard: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  newHeaderStatNumber: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  newHeaderStatLabel: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '500',
+  },
+  newHeaderStatCardLarge: {
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+  },
+  newHeaderStatNumberLarge: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#7C3AED',
+    marginBottom: 4,
+  },
+  newHeaderStatLabelLarge: {
+    fontSize: 12,
+    color: '#7C3AED',
+    fontWeight: '500',
+    opacity: 0.8,
+  },
+  newDashboardContent: {
+    paddingBottom: 24,
+    backgroundColor: '#F8FAFC',
+  },
+  newViewAllButton: {
+    backgroundColor: '#7C3AED',
+    marginHorizontal: 20,
+    marginTop: 20,
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  newViewAllText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  performanceSection: {
+    paddingHorizontal: 20,
+    marginTop: 20,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  performanceGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  performanceCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    width: '48%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  perfNumber: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  perfLabel: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  quickStatsCard: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 20,
+    marginTop: 20,
+    padding: 16,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  quickStatsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 12,
+  },
+  statsLabel: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  statsValue: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  recentLeadsSection: {
+    paddingHorizontal: 20,
+    marginTop: 24,
+  },
+  newLeadCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+    borderLeftWidth: 4,
+    borderLeftColor: '#E5E7EB',
+  },
+  newLeadCardNew: {
+    borderLeftColor: '#3B82F6',
+  },
+  newLeadCardQualified: {
+    borderLeftColor: '#10B981',
+  },
+  newLeadHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  newLeadLeft: {
+    flex: 1,
+  },
+  newLeadName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 2,
+  },
+  newLeadSource: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginBottom: 4,
+  },
+  newLeadTime: {
+    fontSize: 11,
+    color: '#9CA3AF',
+  },
+  newLeadBadges: {
+    gap: 6,
+    alignItems: 'flex-end',
+  },
+  statusBadgeNew: {
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusBadgeNewText: {
+    color: '#1D4ED8',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  statusBadgeQualified: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusBadgeQualifiedText: {
+    color: '#059669',
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  newLeadDetails: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  newLeadDetail: {
+    fontSize: 12,
+    color: '#6B7280',
   },
 });
