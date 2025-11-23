@@ -7,6 +7,7 @@ export type UserRole = 'super_admin' | 'admin' | 'loan_officer' | 'realtor' | 'b
 // Super Admins have full access to everything
 const SUPER_ADMIN_EMAILS = [
   'mario@closewithmario.com',
+  'mario@regallending.com',
   'dhruv@loandock.com',
   'arnav@loandock.com',
 ];
