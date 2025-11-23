@@ -3744,13 +3744,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 12,
   },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 12,
-    letterSpacing: 0.2,
-  },
   loAssignmentRow: {
     flexDirection: 'row',
     alignItems: 'center',
