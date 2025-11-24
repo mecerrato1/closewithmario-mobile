@@ -992,35 +992,36 @@ function LeadDetailView({
           )}
 
           {/* Basic fields */}
-          <Text style={styles.sectionTitle}>ℹ️ Basic Info</Text>
-          <View style={styles.infoGrid}>
-          {email && <Text style={styles.detailField}>Email: {email}</Text>}
-          {phone && <Text style={styles.detailField}>Phone: {phone}</Text>}
+          <Text style={styles.sectionTitle}>ℹ️ Details</Text>
+          <Text style={styles.detailFieldBlock} selectable={true}>
+            Email: {email || 'N/A'}{'\n'}
+            Phone: {phone || 'N/A'}
+          </Text>
 
           {!isMeta && (
             <>
               {(record as Lead).loan_purpose && (
-                <Text style={styles.detailField}>
+                <Text style={styles.detailField} selectable={true}>
                   Loan Purpose: {(record as Lead).loan_purpose}
                 </Text>
               )}
               {(record as Lead).price != null && (
-                <Text style={styles.detailField}>
+                <Text style={styles.detailField} selectable={true}>
                   Price: ${(record as Lead).price?.toLocaleString()}
                 </Text>
               )}
               {(record as Lead).down_payment != null && (
-                <Text style={styles.detailField}>
+                <Text style={styles.detailField} selectable={true}>
                   Down Payment: ${(record as Lead).down_payment?.toLocaleString()}
                 </Text>
               )}
               {(record as Lead).credit_score != null && (
-                <Text style={styles.detailField}>
+                <Text style={styles.detailField} selectable={true}>
                   Credit Score: {(record as Lead).credit_score}
                 </Text>
               )}
               {(record as Lead).message && (
-                <Text style={styles.detailField}>
+                <Text style={styles.detailField} selectable={true}>
                   Message: {(record as Lead).message}
                 </Text>
               )}
@@ -1030,18 +1031,18 @@ function LeadDetailView({
           {isMeta && (
             <>
               {(record as MetaLead).platform && (
-                <Text style={styles.detailField}>
+                <Text style={styles.detailField} selectable={true}>
                   Platform: {(record as MetaLead).platform}
                 </Text>
               )}
               {(record as MetaLead).campaign_name && (
-                <Text style={styles.detailField}>
+                <Text style={styles.detailField} selectable={true}>
                   Campaign: {(record as MetaLead).campaign_name}
                 </Text>
               )}
               {(record as MetaLead).ad_name && (
                 <>
-                  <Text style={styles.detailField}>
+                  <Text style={styles.detailField} selectable={true}>
                     Ad Name: {(record as MetaLead).ad_name}
                   </Text>
                   {adImage && (
@@ -1055,63 +1056,62 @@ function LeadDetailView({
                 </>
               )}
               {(record as MetaLead).subject_address && (
-                <Text style={styles.detailField}>
+                <Text style={styles.detailField} selectable={true}>
                   Address: {(record as MetaLead).subject_address}
                 </Text>
               )}
               {(record as MetaLead).preferred_language && (
-                <Text style={styles.detailField}>
+                <Text style={styles.detailField} selectable={true}>
                   Language: {(record as MetaLead).preferred_language}
                 </Text>
               )}
               {(record as MetaLead).credit_range && (
-                <Text style={styles.detailField}>
+                <Text style={styles.detailField} selectable={true}>
                   Credit Range: {(record as MetaLead).credit_range}
                 </Text>
               )}
               {(record as MetaLead).income_type && (
-                <Text style={styles.detailField}>
+                <Text style={styles.detailField} selectable={true}>
                   Income Type: {(record as MetaLead).income_type}
                 </Text>
               )}
               {(record as MetaLead).purchase_timeline && (
-                <Text style={styles.detailField}>
+                <Text style={styles.detailField} selectable={true}>
                   Purchase Timeline: {(record as MetaLead).purchase_timeline}
                 </Text>
               )}
               {(record as MetaLead).price_range && (
-                <Text style={styles.detailField}>
+                <Text style={styles.detailField} selectable={true}>
                   Price Range: {(record as MetaLead).price_range}
                 </Text>
               )}
               {(record as MetaLead).down_payment_saved && (
-                <Text style={styles.detailField}>
+                <Text style={styles.detailField} selectable={true}>
                   Down Payment Saved: {(record as MetaLead).down_payment_saved}
                 </Text>
               )}
               {(record as MetaLead).has_realtor != null && (
-                <Text style={styles.detailField}>
+                <Text style={styles.detailField} selectable={true}>
                   Has Realtor: {(record as MetaLead).has_realtor ? 'Yes' : 'No'}
                 </Text>
               )}
               {(record as MetaLead).county_interest && (
-                <Text style={styles.detailField}>
+                <Text style={styles.detailField} selectable={true}>
                   County Interest: {(record as MetaLead).county_interest}
                 </Text>
               )}
               {(record as MetaLead).monthly_income && (
-                <Text style={styles.detailField}>
+                <Text style={styles.detailField} selectable={true}>
                   Monthly Income: {(record as MetaLead).monthly_income}
                 </Text>
               )}
               {((record as MetaLead).meta_ad_notes || (record as MetaLead).additional_notes) && (
-                <Text style={styles.detailField}>
+                <Text style={styles.detailField} selectable={true}>
                   Notes: {(record as MetaLead).meta_ad_notes || (record as MetaLead).additional_notes}
                 </Text>
               )}
             </>
           )}
-          </View>
 
           {/* Divider */}
           <View style={styles.sectionDivider} />
@@ -3840,6 +3840,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   detailField: {
+    fontSize: 14,
+    marginTop: 8,
+    color: '#475569',
+    lineHeight: 20,
+  },
+  detailFieldBlock: {
     fontSize: 14,
     marginTop: 8,
     color: '#475569',
