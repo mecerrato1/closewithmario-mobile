@@ -19,6 +19,7 @@ import {
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './src/lib/supabase';
 import { getUserRole, getUserTeamMemberId, canSeeAllLeads, type UserRole } from './src/lib/roles';
+import { TEXT_TEMPLATES, fillTemplate, type TemplateVariables } from './src/lib/textTemplates';
 import Constants from 'expo-constants';
 
 import * as WebBrowser from 'expo-web-browser';
@@ -496,6 +497,8 @@ function LeadDetailView({
   const [showLOPicker, setShowLOPicker] = useState(false);
   const [updatingLO, setUpdatingLO] = useState(false);
   const [showAdImage, setShowAdImage] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [currentLOInfo, setCurrentLOInfo] = useState<{ firstName: string; lastName: string } | null>(null);
   
   const quickPhrases = [
     'Left voicemail',
@@ -583,7 +586,26 @@ function LeadDetailView({
 
   const handleText = () => {
     if (!phone) return;
-    Linking.openURL(`sms:${phone}`);
+    setShowTemplateModal(true);
+  };
+
+  const handleTemplateSelect = (templateId: string) => {
+    const template = TEXT_TEMPLATES.find(t => t.id === templateId);
+    if (!template) return;
+
+    const variables: TemplateVariables = {
+      fname: record.first_name || 'there',
+      loFullname: currentLOInfo 
+        ? `${currentLOInfo.firstName} ${currentLOInfo.lastName}`.trim() 
+        : 'Mario',
+      platform: isMeta ? (record as MetaLead).platform || 'Facebook' : 'our website',
+    };
+
+    const messageBody = fillTemplate(template.template, variables);
+    const encodedBody = encodeURIComponent(messageBody);
+    
+    setShowTemplateModal(false);
+    Linking.openURL(`sms:${phone}?body=${encodedBody}`);
   };
 
   const handleEmail = () => {
@@ -594,6 +616,32 @@ function LeadDetailView({
     );
     Linking.openURL(`mailto:${email}?subject=${subject}&body=${body}`);
   };
+
+  // Load current loan officer info
+  useEffect(() => {
+    const loadLOInfo = async () => {
+      if (!session?.user?.id) return;
+      
+      try {
+        const memberId = await getUserTeamMemberId(session.user.id, 'loan_officer');
+        if (memberId) {
+          const { data, error } = await supabase
+            .from('loan_officers')
+            .select('first_name, last_name')
+            .eq('id', memberId)
+            .single();
+          
+          if (data && !error) {
+            setCurrentLOInfo({ firstName: data.first_name, lastName: data.last_name });
+          }
+        }
+      } catch (e) {
+        console.error('Error loading LO info:', e);
+      }
+    };
+
+    loadLOInfo();
+  }, [session?.user?.id]);
 
   // Load activities from Supabase
   useEffect(() => {
@@ -1305,6 +1353,54 @@ function LeadDetailView({
           </View>
         </Modal>
       )}
+
+      {/* Text Template Modal */}
+      <Modal
+        visible={showTemplateModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowTemplateModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.templateModalContent}>
+            <View style={styles.templateModalHeader}>
+              <Text style={styles.templateModalTitle}>Choose a Text Template</Text>
+              <TouchableOpacity 
+                onPress={() => setShowTemplateModal(false)}
+                style={styles.templateModalClose}
+              >
+                <Text style={styles.templateModalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.templateList} showsVerticalScrollIndicator={false}>
+              {TEXT_TEMPLATES.map((template) => {
+                const variables: TemplateVariables = {
+                  fname: record.first_name || 'there',
+                  loFullname: currentLOInfo 
+                    ? `${currentLOInfo.firstName} ${currentLOInfo.lastName}`.trim() 
+                    : 'Mario',
+                  platform: isMeta ? (record as MetaLead).platform || 'Facebook' : 'our website',
+                };
+                const preview = fillTemplate(template.template, variables);
+
+                return (
+                  <TouchableOpacity
+                    key={template.id}
+                    style={styles.templateItem}
+                    onPress={() => handleTemplateSelect(template.id)}
+                  >
+                    <Text style={styles.templateName}>{template.name}</Text>
+                    <Text style={styles.templatePreview} numberOfLines={8}>
+                      {preview}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -4958,5 +5054,59 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#FFFFFF',
     padding: 0,
+  },
+  // Template Modal Styles
+  templateModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 24,
+    width: '90%',
+    maxHeight: '80%',
+  },
+  templateModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  templateModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  templateModalClose: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  templateModalCloseText: {
+    fontSize: 20,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  templateList: {
+    maxHeight: 500,
+  },
+  templateItem: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  templateName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#7C3AED',
+    marginBottom: 8,
+  },
+  templatePreview: {
+    fontSize: 14,
+    color: '#475569',
+    lineHeight: 20,
   },
 });
