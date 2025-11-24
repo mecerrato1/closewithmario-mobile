@@ -1993,6 +1993,23 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
     }
   };
 
+  // Format phone number to (555) 123-4567
+  const formatPhoneNumber = (phone: string): string => {
+    // Remove all non-digit characters
+    const cleaned = phone.replace(/\D/g, '');
+    
+    // Remove leading 1 if present (US country code)
+    const number = cleaned.startsWith('1') ? cleaned.slice(1) : cleaned;
+    
+    // Format as (XXX) XXX-XXXX
+    if (number.length === 10) {
+      return `(${number.slice(0, 3)}) ${number.slice(3, 6)}-${number.slice(6)}`;
+    }
+    
+    // Return original if not 10 digits
+    return phone;
+  };
+
   // Search filter function
   const matchesSearch = (lead: Lead | MetaLead) => {
     if (!searchQuery.trim()) return true;
@@ -2014,10 +2031,11 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
     const statusColors = STATUS_COLOR_MAP[status] || STATUS_COLOR_MAP['new'];
     const emailOrPhone = item.email || item.phone || 'No contact info';
     const alert = getLeadAlert(item);
+    const borderColor = alert ? alert.color : '#7C3AED';
 
     return (
       <TouchableOpacity
-        style={styles.leadCard}
+        style={[styles.leadCard, { borderLeftColor: borderColor }]}
         onPress={() =>
           setSelectedLead({ source: 'lead', id: item.id })
         }
@@ -2042,10 +2060,18 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
             {statusDisplay}
           </Text>
         </View>
-        <View style={styles.leadContactRow}>
-          <Text style={styles.leadContactIcon}>📧</Text>
-          <Text style={styles.leadContact} numberOfLines={1}>{emailOrPhone}</Text>
-        </View>
+        {item.email && (
+          <View style={styles.leadContactRow}>
+            <Text style={styles.leadContactIcon}>📧</Text>
+            <Text style={styles.leadContact} numberOfLines={1}>{item.email}</Text>
+          </View>
+        )}
+        {item.phone && (
+          <View style={styles.leadContactRow}>
+            <Text style={styles.leadContactIcon}>📞</Text>
+            <Text style={styles.leadContact} numberOfLines={1}>{formatPhoneNumber(item.phone)}</Text>
+          </View>
+        )}
         {userRole === 'super_admin' && item.lo_id && (
           <View style={styles.leadLORow}>
             <Text style={styles.leadLOIcon}>👤</Text>
@@ -2074,6 +2100,8 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
     const emailOrPhone = item.email || item.phone || 'No contact info';
     const platform = item.platform || 'Facebook';
     const campaign = item.campaign_name || '';
+    const alert = getLeadAlert(item);
+    const borderColor = alert ? alert.color : '#7C3AED';
 
     // Get platform badge component
     const getPlatformBadge = (platform: string) => {
@@ -2118,11 +2146,10 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
     };
 
     const statusColors = STATUS_COLOR_MAP[item.status || 'new'] || STATUS_COLOR_MAP['new'];
-    const alert = getLeadAlert(item);
 
     return (
       <TouchableOpacity
-        style={styles.leadCard}
+        style={[styles.leadCard, { borderLeftColor: borderColor }]}
         onPress={() =>
           setSelectedLead({ source: 'meta', id: item.id })
         }
@@ -2151,10 +2178,18 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
             <Text style={styles.leadCampaign} numberOfLines={1}>{campaign}</Text>
           </View>
         ) : null}
-        <View style={styles.leadContactRow}>
-          <Text style={styles.leadContactIcon}>📧</Text>
-          <Text style={styles.leadContact} numberOfLines={1}>{emailOrPhone}</Text>
-        </View>
+        {item.email && (
+          <View style={styles.leadContactRow}>
+            <Text style={styles.leadContactIcon}>📧</Text>
+            <Text style={styles.leadContact} numberOfLines={1}>{item.email}</Text>
+          </View>
+        )}
+        {item.phone && (
+          <View style={styles.leadContactRow}>
+            <Text style={styles.leadContactIcon}>📞</Text>
+            <Text style={styles.leadContact} numberOfLines={1}>{formatPhoneNumber(item.phone)}</Text>
+          </View>
+        )}
         {userRole === 'super_admin' && item.lo_id && (
           <View style={styles.leadLORow}>
             <Text style={styles.leadLOIcon}>👤</Text>
@@ -2549,8 +2584,8 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
 
   return (
     <View style={styles.container}>
-      {/* Modern Header */}
-      <View style={styles.headerContainer}>
+      {/* Modern Purple Header with Stats and Search */}
+      <View style={styles.leadsHeaderContainer}>
         <View style={styles.headerContent}>
           <TouchableOpacity onPress={() => setShowDashboard(true)} style={styles.homeButton}>
             <Text style={styles.homeButtonText}>← Home</Text>
@@ -2559,23 +2594,13 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
             <Text style={styles.headerTitle}>Close With Mario</Text>
             <Text style={styles.headerSubtitle}>Lead Management</Text>
           </View>
-          <View style={styles.headerButtons}>
-            {userRole === 'super_admin' && (
-              <TouchableOpacity 
-                onPress={() => setShowTeamManagement(true)} 
-                style={styles.teamManagementButton}
-              >
-                <Text style={styles.teamManagementButtonText}>👥</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity onPress={onSignOut} style={styles.signOutButton}>
-              <Text style={styles.signOutText}>Sign Out</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity onPress={onSignOut} style={styles.signOutButton}>
+            <Text style={styles.signOutText}>Sign Out</Text>
+          </TouchableOpacity>
         </View>
-      </View>
 
-      <View style={styles.statsRow}>
+        {/* Stats Row inside Purple Header */}
+        <View style={styles.statsRow}>
         <TouchableOpacity 
           style={[
             styles.statCard,
@@ -2650,6 +2675,37 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
         </TouchableOpacity>
       </View>
 
+        {/* Search Bar inside Purple Header */}
+        <View style={styles.leadsSearchContainer}>
+          <Text style={styles.leadsSearchIcon}>🔍</Text>
+          <TextInput
+            style={styles.leadsSearchInput}
+            placeholder="Search leads..."
+            placeholderTextColor="rgba(255,255,255,0.7)"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="done"
+            onSubmitEditing={() => {
+              // Dismiss keyboard when done button is pressed
+              if (Platform.OS === 'ios' || Platform.OS === 'android') {
+                // Keyboard will dismiss automatically on submit
+              }
+            }}
+            blurOnSubmit={true}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity 
+              onPress={() => setSearchQuery('')}
+              style={styles.searchClearButton}
+            >
+              <Text style={styles.searchClearText}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
       {loading && (
         <View style={styles.centerContent}>
           <ActivityIndicator />
@@ -2673,28 +2729,6 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
 
       {!loading && !errorMessage && (hasLeads || hasMetaLeads) && (
         <>
-          {/* Search Bar */}
-          <View style={styles.searchContainer}>
-            <Text style={styles.searchIcon}>🔍</Text>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search by name, email, or phone..."
-              placeholderTextColor="#94A3B8"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity 
-                onPress={() => setSearchQuery('')}
-                style={styles.searchClearButton}
-              >
-                <Text style={styles.searchClearText}>✕</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
           {/* Status Filter Button */}
           <View style={styles.filterButtonContainer}>
             <TouchableOpacity
@@ -3182,41 +3216,38 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 16,
     padding: 16,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
-    borderTopWidth: 3,
-    borderTopColor: '#10B981',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   statCardActive: {
-    backgroundColor: '#7C3AED',
-    borderTopColor: '#7C3AED',
-    shadowColor: '#7C3AED',
-    shadowOpacity: 0.3,
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
     elevation: 6,
   },
   statNumber: {
     fontSize: 28,
     fontWeight: '800',
-    color: '#10B981',
+    color: '#FFFFFF',
   },
   statNumberActive: {
-    color: '#FFFFFF',
+    color: '#7C3AED',
   },
   statLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#64748B',
+    color: 'rgba(255,255,255,0.9)',
     marginTop: 4,
   },
   statLabelActive: {
-    color: '#E9D5FF',
+    color: '#7C3AED',
   },
   headerRow: {
     flexDirection: 'row',
@@ -4894,5 +4925,32 @@ const styles = StyleSheet.create({
   newLeadDetail: {
     fontSize: 12,
     color: '#6B7280',
+  },
+  // Leads Header Styles
+  leadsHeaderContainer: {
+    backgroundColor: '#7C3AED',
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+  },
+  leadsSearchContainer: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    marginTop: 16,
+    borderRadius: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  leadsSearchIcon: {
+    fontSize: 18,
+    marginRight: 8,
+    color: '#FFFFFF',
+  },
+  leadsSearchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#FFFFFF',
+    padding: 0,
   },
 });
