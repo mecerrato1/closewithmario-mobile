@@ -1,6 +1,6 @@
 # CloseWithMario Mobile - Codebase Summary
 
-**Last Updated:** November 21, 2025  
+**Last Updated:** November 24, 2025  
 **EAS Account:** mecerrato1  
 **Latest Build:** iOS Production Build 3 (Nov 20, 2025)
 
@@ -40,7 +40,7 @@
 
 ```
 closewithmario-mobile/
-├── App.tsx                          # Main application entry point (~2600 lines)
+├── App.tsx                          # Main application entry point (~5100 lines)
 ├── index.ts                         # Expo entry file
 ├── app.json                         # Expo configuration
 ├── package.json                     # Dependencies and scripts
@@ -49,6 +49,7 @@ closewithmario-mobile/
 │   └── lib/
 │       ├── supabase.ts             # Supabase client configuration
 │       ├── roles.ts                # RBAC role management utilities
+│       ├── textTemplates.ts        # SMS text message templates with variables
 │       └── types/
 │           └── leads.ts            # TypeScript type definitions
 ├── docs/                            # Documentation folder
@@ -186,7 +187,7 @@ App (Root)
         ├── Sticky header (purple) with back/next navigation
         ├── Sticky name bar (always visible when scrolling)
         ├── Status selection chips
-        ├── Contact buttons (Call, Text, Email)
+        ├── Contact buttons (Call, Text with templates, Email)
         ├── Lead information grid
         ├── Activity logging section
         │   ├── Activity type buttons (Call, Text, Email, Note)
@@ -383,6 +384,8 @@ if (!canSeeAll) {
 - **Sticky name bar** (always visible when scrolling) with name and date/time
 - **Status selection chips** (green when active)
 - **Modern contact buttons** (Call, Text, Email) with white icons on purple/green
+  - **Text button** opens template selector with 4 pre-written SMS templates
+  - Templates auto-fill with lead name, LO name, and platform (Facebook/Instagram)
 - **Info grid** with dividers and section headers
 - **Activity logging section**:
   - Activity type buttons (Call, Text, Email, Note) - green when active
@@ -593,19 +596,20 @@ npm start
 
 ## 📚 Key Files Reference
 
-### `App.tsx` (~2600 lines)
+### `App.tsx` (~5100 lines)
 Main application file containing:
 - All component definitions:
   - `AuthScreen` - Modernized login with Google OAuth
   - `Dashboard` - New dashboard view with stats and guide
   - `LeadsScreen` - Leads list with tabs and pull-to-refresh
-  - `LeadDetailView` - Full lead detail with activity logging
+  - `LeadDetailView` - Full lead detail with activity logging and text templates
   - `App` - Root component with session management
 - All TypeScript types (Lead, MetaLead, ActivityLog, etc.)
 - Authentication logic (email/password + Google OAuth)
 - Data fetching logic with RBAC filtering
 - Activity logging functionality
-- All styles (~150+ style definitions)
+- Text template modal with preview
+- All styles (~330+ style definitions)
 - Helper functions (formatStatus, getTimeAgo, etc.)
 
 ### `src/lib/supabase.ts` (13 lines)
@@ -617,6 +621,14 @@ RBAC utilities:
 - `getUserTeamMemberId()` - Get team member ID for filtering
 - `canSeeAllLeads()` - Check if user is admin
 - Type definitions for UserRole
+
+### `src/lib/textTemplates.ts` (~91 lines)
+SMS text message templates:
+- 4 pre-written templates (Initial Contact, Document Follow-up, Pre-approval Check-in, Stop Paying Rent)
+- Variable replacement system: `{fname}`, `{LO fullname}`, `{platform}`
+- `formatPlatformName()` - Converts FB/IG to Facebook/Instagram (case-insensitive)
+- `fillTemplate()` - Replaces template variables with actual values
+- Templates include friendly emojis and proper formatting
 
 ### `src/lib/types/leads.ts` (11 lines)
 Type definitions for Lead model (currently duplicated in App.tsx).
@@ -679,7 +691,7 @@ Environment variables for Supabase connection.
 - **Well-commented sections** and helper functions
 
 ### Areas for Improvement
-- **Large single file:** App.tsx is ~2600 lines (should be split into components)
+- **Large single file:** App.tsx is ~5100 lines (should be split into components)
 - **Types are duplicated** (in App.tsx and types/leads.ts)
 - **No unit tests** or integration tests
 - **No component library** (could use React Native Paper, NativeBase, etc.)
@@ -689,6 +701,7 @@ Environment variables for Supabase connection.
 - **Duplicate dependencies** in node_modules need cleanup
 - **Limited pagination** (only 50 leads per table)
 - **No search/filter** functionality yet
+- **Text templates are hardcoded** (could be stored in database for customization)
 
 ---
 
@@ -705,6 +718,7 @@ Environment variables for Supabase connection.
 8. **Sticky UI Elements** - Sticky header and name bar in detail view
 9. **Contact Actions** - Deep links for phone, SMS, and email
 10. **Modern UI Redesign** - Purple/green brand colors throughout
+11. **SMS Text Templates** (Nov 24) - Template selector with 4 pre-written messages, auto-fill variables
 
 ### UI/UX Improvements
 - Modernized login screen with card design and purple branding
@@ -715,6 +729,9 @@ Environment variables for Supabase connection.
 - Improved typography with letter spacing
 - Enhanced shadows and elevation
 - Better spacing and visual hierarchy
+- Text template modal with live preview (shows 8 lines of message)
+- Friendly platform names (FB→Facebook, IG→Instagram) in templates
+- Professional SMS templates with emojis (👋, 🏡, 📄, 🏠, ✅, 💰)
 
 ### Technical Improvements
 - Updated deep linking scheme to `com.closewithmario.mobile`
@@ -722,8 +739,11 @@ Environment variables for Supabase connection.
 - Implemented RBAC filtering for team members
 - Added activity log table integration
 - Improved error handling and loading states
-- Added helper functions (formatStatus, getTimeAgo)
+- Added helper functions (formatStatus, getTimeAgo, formatPlatformName, fillTemplate)
 - Better TypeScript type definitions
+- Text template system with variable replacement
+- Case-insensitive platform name matching
+- Fetches current loan officer info from database for templates
 
 ### Bug Fixes
 - Fixed duplicate style definitions
@@ -791,14 +811,14 @@ npm start
 ### Key Technologies
 - **Frontend:** React Native 0.81.5 + Expo SDK 54 + TypeScript
 - **Backend:** Supabase (PostgreSQL + Auth)
-- **Main File:** `App.tsx` (~2600 lines)
+- **Main File:** `App.tsx` (~5100 lines)
 - **Color Scheme:** Purple (#7C3AED) + Green (#10B981)
 
 ### Main Components
 1. `AuthScreen` - Login with email/password and Google OAuth
 2. `Dashboard` - Stats, guide, and recent leads (initial view)
 3. `LeadsScreen` - Tabbed list view with pull-to-refresh
-4. `LeadDetailView` - Full lead details with activity logging
+4. `LeadDetailView` - Full lead details with activity logging and SMS templates
 
 ### Database Tables
 - `leads` - Website leads with realtor_id for RBAC
@@ -812,6 +832,7 @@ npm start
 - ✅ Modern UI with brand colors
 - ✅ Google OAuth working
 - ✅ iOS Production Build 3 deployed
+- ✅ SMS text templates with auto-fill (Nov 24, 2025)
 - ⚠️ Need to fix: Square logo for Android, duplicate dependencies
 - 🔜 Next: Search/filter, pagination, lead creation
 
@@ -821,6 +842,8 @@ npm start
 - Supabase URL must have this redirect URL configured
 - RBAC filters leads by `realtor_id` for non-admin users
 - Activity logging writes to `activity_log` table
+- Text templates in `src/lib/textTemplates.ts` with 4 pre-written messages
+- Templates auto-fill: lead first name, LO full name, platform (FB→Facebook, IG→Instagram)
 
 ---
 
