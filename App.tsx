@@ -1652,6 +1652,12 @@ function LeadDetailView({
               </View>
             )}
 
+            {isMeta && 'platform' in record && 'ad_name' in record && record.platform && record.ad_name && (
+              <Text style={styles.callbackMetaInfo}>
+                ({record.platform}) {record.ad_name}
+              </Text>
+            )}
+
             <TextInput
               style={styles.callbackNoteInput}
               placeholder="Notes (optional)"
@@ -5732,5 +5738,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlignVertical: 'top',
     color: '#111827',
+  },
+  callbackMetaInfo: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 8,
+    marginBottom: 4,
+    fontStyle: 'italic',
   },
 });
