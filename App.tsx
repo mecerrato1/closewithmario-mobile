@@ -1905,6 +1905,8 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showTeamManagement, setShowTeamManagement] = useState(false);
   const [teamMemberId, setTeamMemberId] = useState<string | null>(null);
+  const [selectedLOFilter, setSelectedLOFilter] = useState<string | null>(null); // null = all LOs
+  const [showLOPicker, setShowLOPicker] = useState(false);
   const [leadEligible, setLeadEligible] = useState<boolean>(true);
 
   useEffect(() => {
@@ -2116,6 +2118,23 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
     const phone = lead.phone?.toLowerCase() || '';
     
     return fullName.includes(query) || email.includes(query) || phone.includes(query);
+  };
+
+  // LO filter function (for super admins only)
+  const matchesLOFilter = (lead: Lead | MetaLead) => {
+    // Only apply filter for super admins
+    if (userRole !== 'super_admin') return true;
+    
+    // If no LO filter selected (null), show all leads
+    if (selectedLOFilter === null) return true;
+    
+    // If "unassigned" filter, show leads without LO
+    if (selectedLOFilter === 'unassigned') {
+      return !lead.lo_id;
+    }
+    
+    // Otherwise, filter by specific LO ID
+    return lead.lo_id === selectedLOFilter;
   };
 
   const renderLeadItem = ({ item }: { item: Lead }) => {
@@ -2368,15 +2387,19 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
 
   // Dashboard View
   if (showDashboard) {
-    const totalLeads = leads.length + metaLeads.length;
-    const metaLeadsCount = metaLeads.length;
-    const organicLeadsCount = leads.length;
-    const newLeads = [...leads, ...metaLeads].filter(l => l.status === 'new').length;
-    const qualifiedLeads = [...leads, ...metaLeads].filter(l => l.status === 'qualified').length;
-    const closedLeads = [...leads, ...metaLeads].filter(l => l.status === 'closed').length;
+    // Apply LO filter to dashboard stats
+    const filteredLeads = leads.filter(matchesLOFilter);
+    const filteredMetaLeads = metaLeads.filter(matchesLOFilter);
+    
+    const totalLeads = filteredLeads.length + filteredMetaLeads.length;
+    const metaLeadsCount = filteredMetaLeads.length;
+    const organicLeadsCount = filteredLeads.length;
+    const newLeads = [...filteredLeads, ...filteredMetaLeads].filter(l => l.status === 'new').length;
+    const qualifiedLeads = [...filteredLeads, ...filteredMetaLeads].filter(l => l.status === 'qualified').length;
+    const closedLeads = [...filteredLeads, ...filteredMetaLeads].filter(l => l.status === 'closed').length;
     
     // Get recent leads (last 5)
-    const allLeads = [...metaLeads.map(l => ({ ...l, source: 'meta' as const })), ...leads.map(l => ({ ...l, source: 'lead' as const }))];
+    const allLeads = [...filteredMetaLeads.map(l => ({ ...l, source: 'meta' as const })), ...filteredLeads.map(l => ({ ...l, source: 'lead' as const }))];
     const recentLeads = allLeads
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 5);
@@ -2712,8 +2735,8 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
             activeTab === 'meta' && styles.statNumberActive,
           ]}>
             {selectedStatusFilter === 'all' 
-              ? metaLeads.length 
-              : metaLeads.filter(l => l.status === selectedStatusFilter).length
+              ? metaLeads.filter(matchesLOFilter).length 
+              : metaLeads.filter(l => l.status === selectedStatusFilter && matchesLOFilter(l)).length
             }
           </Text>
           <Text style={[
@@ -2736,8 +2759,8 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
             activeTab === 'leads' && styles.statNumberActive,
           ]}>
             {selectedStatusFilter === 'all' 
-              ? leads.length 
-              : leads.filter(l => l.status === selectedStatusFilter).length
+              ? leads.filter(matchesLOFilter).length 
+              : leads.filter(l => l.status === selectedStatusFilter && matchesLOFilter(l)).length
             }
           </Text>
           <Text style={[
@@ -2760,8 +2783,8 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
             activeTab === 'all' && styles.statNumberActive,
           ]}>
             {selectedStatusFilter === 'all' 
-              ? metaLeads.length + leads.length 
-              : [...metaLeads, ...leads].filter(l => l.status === selectedStatusFilter).length
+              ? metaLeads.filter(matchesLOFilter).length + leads.filter(matchesLOFilter).length 
+              : [...metaLeads, ...leads].filter(l => l.status === selectedStatusFilter && matchesLOFilter(l)).length
             }
           </Text>
           <Text style={[
@@ -2825,21 +2848,41 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
 
       {!loading && !errorMessage && (hasLeads || hasMetaLeads) && (
         <>
-          {/* Status Filter Button */}
+          {/* Filter Buttons Row */}
           <View style={styles.filterButtonContainer}>
+            {/* Status Filter */}
             <TouchableOpacity
-              style={styles.filterButton}
+              style={[styles.filterButton, userRole === 'super_admin' && styles.filterButtonHalf]}
               onPress={() => setShowStatusPicker(true)}
             >
               <Text style={styles.filterButtonLabel}>Status:</Text>
               <Text style={styles.filterButtonValue}>
                 {selectedStatusFilter === 'all' 
-                  ? `All Statuses (${[...leads, ...metaLeads].length})` 
-                  : `${formatStatus(selectedStatusFilter)} (${[...leads, ...metaLeads].filter(l => l.status === selectedStatusFilter).length})`
+                  ? `All (${[...leads, ...metaLeads].filter(matchesLOFilter).length})` 
+                  : `${formatStatus(selectedStatusFilter)} (${[...leads, ...metaLeads].filter(l => l.status === selectedStatusFilter && matchesLOFilter(l)).length})`
                 }
               </Text>
               <Text style={styles.filterButtonIcon}>▼</Text>
             </TouchableOpacity>
+
+            {/* LO Filter (Super Admin Only) */}
+            {userRole === 'super_admin' && (
+              <TouchableOpacity
+                style={[styles.filterButton, styles.filterButtonHalf]}
+                onPress={() => setShowLOPicker(true)}
+              >
+                <Text style={styles.filterButtonLabel}>LO:</Text>
+                <Text style={styles.filterButtonValue}>
+                  {selectedLOFilter === null 
+                    ? 'All LOs' 
+                    : selectedLOFilter === 'unassigned'
+                    ? 'Unassigned'
+                    : loanOfficers.find(lo => lo.id === selectedLOFilter)?.name || 'Unknown'
+                  }
+                </Text>
+                <Text style={styles.filterButtonIcon}>▼</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Status Picker Modal */}
@@ -2881,14 +2924,14 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
                       <Text style={[
                         styles.statusPickerItemCount,
                         selectedStatusFilter === 'all' && styles.statusPickerItemCountActive,
-                      ]}>({[...leads, ...metaLeads].length})</Text>
+                      ]}>({[...leads, ...metaLeads].filter(matchesLOFilter).length})</Text>
                     </View>
                     {selectedStatusFilter === 'all' && (
                       <Text style={styles.statusPickerCheck}>✓</Text>
                     )}
                   </TouchableOpacity>
                   {STATUSES.map((status) => {
-                    const count = [...leads, ...metaLeads].filter(l => l.status === status).length;
+                    const count = [...leads, ...metaLeads].filter(l => l.status === status && matchesLOFilter(l)).length;
                     return (
                       <TouchableOpacity
                         key={status}
@@ -2923,12 +2966,103 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
             </TouchableOpacity>
           </Modal>
 
+          {/* LO Picker Modal (Super Admin Only) */}
+          {userRole === 'super_admin' && (
+            <Modal
+              visible={showLOPicker}
+              transparent={true}
+              animationType="fade"
+              onRequestClose={() => setShowLOPicker(false)}
+            >
+              <TouchableOpacity 
+                style={styles.modalOverlay}
+                activeOpacity={1}
+                onPress={() => setShowLOPicker(false)}
+              >
+                <View style={styles.statusPickerContainer}>
+                  <Text style={styles.statusPickerTitle}>Filter by Loan Officer</Text>
+                  <ScrollView style={styles.statusPickerScroll}>
+                    {/* All LOs Option */}
+                    <TouchableOpacity
+                      style={[
+                        styles.statusPickerItem,
+                        selectedLOFilter === null && styles.statusPickerItemActive,
+                      ]}
+                      onPress={() => {
+                        setSelectedLOFilter(null);
+                        setShowLOPicker(false);
+                      }}
+                    >
+                      <View style={styles.statusPickerItemLeft}>
+                        <Text style={[
+                          styles.statusPickerItemText,
+                          selectedLOFilter === null && styles.statusPickerItemTextActive,
+                        ]}>All Loan Officers</Text>
+                      </View>
+                      {selectedLOFilter === null && (
+                        <Text style={styles.statusPickerCheck}>✓</Text>
+                      )}
+                    </TouchableOpacity>
+
+                    {/* Unassigned Option */}
+                    <TouchableOpacity
+                      style={[
+                        styles.statusPickerItem,
+                        selectedLOFilter === 'unassigned' && styles.statusPickerItemActive,
+                      ]}
+                      onPress={() => {
+                        setSelectedLOFilter('unassigned');
+                        setShowLOPicker(false);
+                      }}
+                    >
+                      <View style={styles.statusPickerItemLeft}>
+                        <Text style={[
+                          styles.statusPickerItemText,
+                          selectedLOFilter === 'unassigned' && styles.statusPickerItemTextActive,
+                        ]}>Unassigned</Text>
+                      </View>
+                      {selectedLOFilter === 'unassigned' && (
+                        <Text style={styles.statusPickerCheck}>✓</Text>
+                      )}
+                    </TouchableOpacity>
+
+                    {/* Individual LOs */}
+                    {loanOfficers.map((lo) => (
+                      <TouchableOpacity
+                        key={lo.id}
+                        style={[
+                          styles.statusPickerItem,
+                          selectedLOFilter === lo.id && styles.statusPickerItemActive,
+                        ]}
+                        onPress={() => {
+                          setSelectedLOFilter(lo.id);
+                          setShowLOPicker(false);
+                        }}
+                      >
+                        <View style={styles.statusPickerItemLeft}>
+                          <Text style={[
+                            styles.statusPickerItemText,
+                            selectedLOFilter === lo.id && styles.statusPickerItemTextActive,
+                          ]}>{lo.name}</Text>
+                        </View>
+                        {selectedLOFilter === lo.id && (
+                          <Text style={styles.statusPickerCheck}>✓</Text>
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              </TouchableOpacity>
+            </Modal>
+          )}
+
           {/* Lead Content */}
           {activeTab === 'leads' && hasLeads && (
             <FlatList
               data={leads.filter(lead => 
                 (selectedStatusFilter === 'all' || lead.status === selectedStatusFilter) &&
-                matchesSearch(lead)
+                matchesSearch(lead) &&
+                matchesLOFilter(lead)
               )}
               keyExtractor={(item) => item.id}
               renderItem={renderLeadItem}
@@ -2944,7 +3078,8 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
             <FlatList
               data={metaLeads.filter(lead => 
                 (selectedStatusFilter === 'all' || lead.status === selectedStatusFilter) &&
-                matchesSearch(lead)
+                matchesSearch(lead) &&
+                matchesLOFilter(lead)
               )}
               keyExtractor={(item) => item.id}
               renderItem={renderMetaLeadItem}
@@ -2961,11 +3096,13 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
               data={[
                 ...metaLeads.filter(lead => 
                   (selectedStatusFilter === 'all' || lead.status === selectedStatusFilter) &&
-                  matchesSearch(lead)
+                  matchesSearch(lead) &&
+                  matchesLOFilter(lead)
                 ).map(lead => ({ ...lead, source: 'meta' as const })),
                 ...leads.filter(lead => 
                   (selectedStatusFilter === 'all' || lead.status === selectedStatusFilter) &&
-                  matchesSearch(lead)
+                  matchesSearch(lead) &&
+                  matchesLOFilter(lead)
                 ).map(lead => ({ ...lead, source: 'lead' as const })),
               ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())}
               keyExtractor={(item) => `${item.source}-${item.id}`}
@@ -4043,8 +4180,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   filterButtonContainer: {
+    flexDirection: 'row',
     paddingHorizontal: 16,
     paddingVertical: 12,
+    gap: 8,
   },
   filterButton: {
     flexDirection: 'row',
@@ -4060,6 +4199,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
+  },
+  filterButtonHalf: {
+    flex: 1,
   },
   filterButtonLabel: {
     fontSize: 14,
