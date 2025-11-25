@@ -499,6 +499,7 @@ function LeadDetailView({
   const [showAdImage, setShowAdImage] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [currentLOInfo, setCurrentLOInfo] = useState<{ firstName: string; lastName: string; phone: string; email: string } | null>(null);
+  const [showStatusPicker, setShowStatusPicker] = useState(false);
   
   const quickPhrases = [
     'Left voicemail',
@@ -708,7 +709,7 @@ function LeadDetailView({
       try {
         // Hardcoded contact info for super admins
         const superAdminContacts: Record<string, { firstName: string; lastName: string; phone: string; email: string }> = {
-          'mario@closewithmario.com': { firstName: 'Mario', lastName: 'Cerrato', phone: '3052192788', email: 'mario@closewithmario.com' },
+          'mario@closewithmario.com': { firstName: 'Mario', lastName: 'Cerrato', phone: '3052192788', email: 'mcerrato@loandepot.com' },
           'mario@regallending.com': { firstName: 'Mario', lastName: 'Cerrato', phone: '3052192788', email: 'mario@regallending.com' },
         };
         
@@ -965,7 +966,20 @@ function LeadDetailView({
       {/* Sticky Name Bar */}
       <View style={styles.stickyNameBar}>
         <View style={styles.stickyNameColumn}>
-          <Text style={styles.stickyName} numberOfLines={1}>{fullName}</Text>
+          <View style={styles.stickyNameRow}>
+            <Text style={styles.stickyName} numberOfLines={1}>{fullName}</Text>
+            <View style={[
+              styles.stickyStatusBadge,
+              { backgroundColor: STATUS_COLOR_MAP[status || 'new']?.bg || '#F5F5F5' }
+            ]}>
+              <Text style={[
+                styles.stickyStatusText,
+                { color: STATUS_COLOR_MAP[status || 'new']?.text || '#666' }
+              ]}>
+                {status ? formatStatus(status) : 'N/A'}
+              </Text>
+            </View>
+          </View>
           <Text style={styles.stickyTimestamp}>
             📅 {new Date(record.created_at).toLocaleDateString('en-US', { 
               month: 'short', 
@@ -986,54 +1000,80 @@ function LeadDetailView({
           {/* Divider */}
           <View style={styles.sectionDivider} />
 
-          {/* Status buttons */}
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>🏷️ Status</Text>
-            <View style={styles.statusBadgeContainer}>
-              {attentionBadge && (
-                <View style={[styles.detailAttentionBadge, { backgroundColor: attentionBadge.color }]}>
-                  <Text style={styles.detailAttentionBadgeText}>⚠️ {attentionBadge.label}</Text>
-                </View>
-              )}
-              <View style={[
-                styles.currentStatusBadge,
-                { backgroundColor: STATUS_COLOR_MAP[status || 'new']?.bg || '#F5F5F5' }
-              ]}>
-                <Text style={[
-                  styles.currentStatusText,
-                  { color: STATUS_COLOR_MAP[status || 'new']?.text || '#666' }
-                ]}>
-                  {status ? formatStatus(status) : 'N/A'}
-                </Text>
+          {/* Status Dropdown */}
+          {attentionBadge && (
+            <View style={styles.attentionBadgeContainer}>
+              <View style={[styles.detailAttentionBadge, { backgroundColor: attentionBadge.color }]}>
+                <Text style={styles.detailAttentionBadgeText}>⚠️ {attentionBadge.label}</Text>
               </View>
             </View>
-          </View>
-          <View style={styles.statusRow}>
-            {STATUSES.map((s) => {
-              const active = s === status;
-              return (
-                <TouchableOpacity
-                  key={s}
-                  style={[
-                    styles.statusChip,
-                    active && styles.statusChipActive,
-                  ]}
-                  onPress={() =>
-                    onStatusChange(selected.source, record.id, s)
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.statusChipText,
-                      active && styles.statusChipTextActive,
-                    ]}
-                  >
-                    {formatStatus(s)}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          )}
+          <TouchableOpacity
+            style={styles.statusDropdownButton}
+            onPress={() => setShowStatusPicker(true)}
+          >
+            <View style={[
+              styles.statusDropdownBadge,
+              { backgroundColor: STATUS_COLOR_MAP[status || 'new']?.bg || '#F5F5F5' }
+            ]}>
+              <Text style={[
+                styles.statusDropdownBadgeText,
+                { color: STATUS_COLOR_MAP[status || 'new']?.text || '#666' }
+              ]}>
+                {status ? formatStatus(status) : 'N/A'}
+              </Text>
+            </View>
+            <Text style={styles.statusDropdownArrow}>▼</Text>
+          </TouchableOpacity>
+
+          {/* Status Picker Modal */}
+          <Modal
+            visible={showStatusPicker}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={() => setShowStatusPicker(false)}
+          >
+            <TouchableOpacity 
+              style={styles.modalOverlay}
+              activeOpacity={1}
+              onPress={() => setShowStatusPicker(false)}
+            >
+              <View style={styles.statusPickerContainer}>
+                <View style={styles.statusPickerHeader}>
+                  <Text style={styles.statusPickerTitle}>Change Status</Text>
+                  <TouchableOpacity onPress={() => setShowStatusPicker(false)}>
+                    <Text style={styles.statusPickerClose}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                <ScrollView style={styles.statusPickerScroll}>
+                  {STATUSES.map((s) => {
+                    const active = s === status;
+                    const colors = STATUS_COLOR_MAP[s] || STATUS_COLOR_MAP['new'];
+                    return (
+                      <TouchableOpacity
+                        key={s}
+                        style={[
+                          styles.statusPickerOption,
+                          active && styles.statusPickerOptionActive,
+                        ]}
+                        onPress={async () => {
+                          setShowStatusPicker(false);
+                          await onStatusChange(selected.source, record.id, s);
+                        }}
+                      >
+                        <View style={[styles.statusPickerBadge, { backgroundColor: colors.bg }]}>
+                          <Text style={[styles.statusPickerBadgeText, { color: colors.text }]}>
+                            {formatStatus(s)}
+                          </Text>
+                        </View>
+                        {active && <Text style={styles.statusPickerCheck}>✓</Text>}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            </TouchableOpacity>
+          </Modal>
 
           {/* Divider */}
           <View style={styles.sectionDivider} />
@@ -4086,12 +4126,27 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
   },
+  stickyNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
   stickyName: {
     fontSize: 19,
     fontWeight: '800',
     color: '#1E293B',
-    marginBottom: 6,
     letterSpacing: 0.2,
+    flex: 1,
+  },
+  stickyStatusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  stickyStatusText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   stickyTimestamp: {
     fontSize: 14,
@@ -4175,6 +4230,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     flexWrap: 'wrap',
+  },
+  attentionBadgeContainer: {
+    marginBottom: 12,
   },
   detailAttentionBadge: {
     paddingHorizontal: 10,
@@ -4426,6 +4484,52 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#7C3AED',
     fontWeight: '700',
+  },
+  statusDropdownButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  statusDropdownBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  statusDropdownBadgeText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  statusDropdownArrow: {
+    fontSize: 12,
+    color: '#64748B',
+    marginLeft: 8,
+  },
+  statusPickerOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  statusPickerOptionActive: {
+    backgroundColor: '#F8F4FF',
+  },
+  statusPickerBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  statusPickerBadgeText: {
+    fontSize: 15,
+    fontWeight: '600',
   },
   activityTypeRow: {
     flexDirection: 'row',
