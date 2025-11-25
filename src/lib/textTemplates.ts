@@ -14,8 +14,8 @@ This is {LO fullname} with loanDepot (2nd largest mortgage lender in the US).
 
 I'm reaching out about the ad you clicked on {platform}. Tried calling you earlier - are you available for a quick chat to see how we can help you become a homeowner? 🏡
 
-My mobile is {LO phone} ☎️
-My email is {LO email} 📧`,
+☎️ Mobile {LO phone}
+📧 Email {LO email}`,
   },
   {
     id: 'document_followup',
@@ -65,8 +65,8 @@ This is {LO fullname}, good speaking to you.
 
 I understand that you're not ready right now, but feel free to contact me when you are.
 
-My mobile is {LO phone} ☎️
-My email is {LO email} 📧
+☎️ Mobile {LO phone}
+📧 Email {LO email}
 
 Good luck! 🍀`,
   },
@@ -79,10 +79,38 @@ This is {LO fullname}, good speaking to you.
 
 I understand that you're going to be working on your credit. Feel free to contact me when you're ready.
 
-My mobile is {LO phone} ☎️
-My email is {LO email} 📧
+☎️ Mobile {LO phone}
+📧 Email {LO email}
 
 Good luck! 🍀`,
+  },
+  {
+    id: 'callback_confirmation',
+    name: 'Callback Confirmation',
+    template: `Hi {fname} 👋
+
+This is {LO fullname}, good speaking to you.
+
+Look forward to our callback
+
+☎️ Mobile {LO phone}
+📧 Email {LO email}`,
+  },
+  {
+    id: 'hung_up',
+    name: 'Hung Up on Me',
+    template: `Hi {fname} 👋
+
+This is {LO fullname} with loanDepot. I believe you just hung up the call thinking I was a spam call.
+
+I am not, I am simply responding to the ad you clicked on {platform}.
+
+If you changed your mind, I can mark you as not interested and will not call you again.
+
+This call is to see how we can help you become a homeowner? 🏡
+
+☎️ Mobile {LO phone}
+📧 Email {LO email}`,
   },
 ];
 

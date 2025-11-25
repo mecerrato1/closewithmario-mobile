@@ -710,13 +710,57 @@ function LeadDetailView({
     Linking.openURL(`sms:${phone}?body=${encodedBody}`);
   };
 
-  const handleEmail = () => {
+  const handleEmail = async () => {
     if (!email) return;
-    const subject = encodeURIComponent('Mortgage follow-up');
+    const firstName = record.first_name || 'there';
+    const subject = encodeURIComponent('Preapproval follow up');
     const body = encodeURIComponent(
-      `Hi ${fullName || ''},\n\nI wanted to follow up regarding your home financing options.\n\nBest regards,\nMario`
+      `Hi ${firstName},\n\nI wanted to follow up regarding your home financing options.`
     );
-    Linking.openURL(`mailto:${email}?subject=${subject}&body=${body}`);
+    
+    // Log email activity
+    try {
+      const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
+      const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
+
+      const newActivity = {
+        [foreignKeyColumn]: record.id,
+        activity_type: 'email',
+        notes: `Emailed ${email}`,
+        created_by: session?.user?.id || null,
+        user_email: session?.user?.email || 'Mobile App User',
+      };
+
+      const { data } = await supabase
+        .from(tableName)
+        .insert([newActivity])
+        .select()
+        .single();
+
+      if (data) {
+        setActivities([data, ...activities]);
+      }
+    } catch (e) {
+      console.error('Error logging email activity:', e);
+    }
+    
+    // Try to open Outlook first, fallback to default mail client
+    const outlookUrl = `ms-outlook://compose?to=${email}&subject=${subject}&body=${body}`;
+    const mailtoUrl = `mailto:${email}?subject=${subject}&body=${body}`;
+    
+    try {
+      const canOpenOutlook = await Linking.canOpenURL(outlookUrl);
+      if (canOpenOutlook) {
+        await Linking.openURL(outlookUrl);
+      } else {
+        // Fallback to default mail client if Outlook not installed
+        await Linking.openURL(mailtoUrl);
+      }
+    } catch (error) {
+      console.error('Error opening email client:', error);
+      // Final fallback
+      Linking.openURL(mailtoUrl);
+    }
   };
 
   // Load current loan officer info
@@ -4353,8 +4397,8 @@ const styles = StyleSheet.create({
   },
   detailCard: {
     marginHorizontal: 16,
-    marginTop: 16,
-    padding: 20,
+    marginTop: 8,
+    padding: 16,
     borderRadius: 16,
     backgroundColor: '#FFFFFF',
     shadowColor: '#7C3AED',
@@ -4381,7 +4425,7 @@ const styles = StyleSheet.create({
   sectionDivider: {
     height: 1,
     backgroundColor: '#E2E8F0',
-    marginVertical: 20,
+    marginVertical: 8,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -4429,7 +4473,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   attentionBadgeContainer: {
-    marginBottom: 12,
+    marginBottom: 8,
   },
   detailAttentionBadge: {
     paddingHorizontal: 10,

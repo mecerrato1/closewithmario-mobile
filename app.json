@@ -2,7 +2,7 @@
   "expo": {
     "name": "closewithmario-mobile",
     "slug": "closewithmario-mobile",
-    "version": "1.1.8",
+    "version": "1.1.9",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,13 +16,16 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.closewithmario.mobile",
-      "buildNumber": "22",
+      "buildNumber": "23",
       "associatedDomains": [
         "applinks:hxpvcaspgdgsehrehbhl.supabase.co"
       ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSUserNotificationUsageDescription": "We use notifications to remind you to follow up with your leads."
+        "NSUserNotificationUsageDescription": "We use notifications to remind you to follow up with your leads.",
+        "LSApplicationQueriesSchemes": [
+          "ms-outlook"
+        ]
       }
     },
     "android": {
