@@ -21,6 +21,9 @@ import { supabase } from './src/lib/supabase';
 import { getUserRole, getUserTeamMemberId, canSeeAllLeads, type UserRole } from './src/lib/roles';
 import { TEXT_TEMPLATES, fillTemplate, type TemplateVariables } from './src/lib/textTemplates';
 import Constants from 'expo-constants';
+import * as Notifications from 'expo-notifications';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { scheduleLeadCallback } from './src/lib/callbacks';
 
 import * as WebBrowser from 'expo-web-browser';
 import * as AuthSession from 'expo-auth-session';
@@ -28,6 +31,17 @@ import { makeRedirectUri } from 'expo-auth-session';
 
 // Required for AuthSession to complete on iOS
 WebBrowser.maybeCompleteAuthSession();
+
+// Configure notification handler
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,     // show banner/alert
+    shouldPlaySound: true,     // play a sound
+    shouldSetBadge: false,     // no badge for now
+    shouldShowBanner: true,    // show banner on iOS
+    shouldShowList: true,      // show in notification list
+  }),
+});
 
 // This must match:
 // - app.json: "scheme": "com.closewithmario.mobile"
@@ -500,6 +514,10 @@ function LeadDetailView({
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [currentLOInfo, setCurrentLOInfo] = useState<{ firstName: string; lastName: string; phone: string; email: string } | null>(null);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
+  const [showCallbackModal, setShowCallbackModal] = useState(false);
+  const [callbackDate, setCallbackDate] = useState<Date | null>(null);
+  const [callbackNote, setCallbackNote] = useState('');
+  const [savingCallback, setSavingCallback] = useState(false);
   
   const quickPhrases = [
     'Left voicemail',
@@ -802,6 +820,17 @@ function LeadDetailView({
 
     loadActivities();
   }, [record?.id, isMeta]);
+
+  // Set default callback date when record changes
+  useEffect(() => {
+    if (record) {
+      // Default: 2 hours from now
+      const now = new Date();
+      const later = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+      setCallbackDate(later);
+      setCallbackNote(`Call ${fullName}`);
+    }
+  }, [record?.id, fullName]);
 
   const handleAddTask = async () => {
     if (!taskNote.trim() || !record) return;
@@ -1113,6 +1142,22 @@ function LeadDetailView({
             >
               <Text style={styles.contactButtonIcon}>✉</Text>
               <Text style={styles.contactButtonText}>Email</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Schedule Callback */}
+          <View style={{ marginTop: 12 }}>
+            <TouchableOpacity
+              style={styles.scheduleCallbackButton}
+              onPress={() => setShowCallbackModal(true)}
+            >
+              <Text style={styles.scheduleCallbackIcon}>⏰</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.scheduleCallbackTitle}>Schedule Callback</Text>
+                <Text style={styles.scheduleCallbackSubtitle}>
+                  Set a reminder to call {fullName}
+                </Text>
+              </View>
             </TouchableOpacity>
           </View>
 
@@ -1567,6 +1612,124 @@ function LeadDetailView({
                 );
               })}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Callback Reminder Modal */}
+      <Modal
+        visible={showCallbackModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCallbackModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.callbackModalContent}>
+            <View style={styles.templateModalHeader}>
+              <Text style={styles.templateModalTitle}>Schedule Callback</Text>
+              <TouchableOpacity
+                onPress={() => setShowCallbackModal(false)}
+                style={styles.templateModalClose}
+              >
+                <Text style={styles.templateModalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.callbackLeadName}>
+              Lead: {fullName}
+            </Text>
+
+            {callbackDate && (
+              <View style={styles.callbackPickerWrapper}>
+                <DateTimePicker
+                  value={callbackDate}
+                  mode="datetime"
+                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                  onChange={(_event, date) => {
+                    if (date) setCallbackDate(date);
+                  }}
+                />
+              </View>
+            )}
+
+            <TextInput
+              style={styles.callbackNoteInput}
+              placeholder="Notes (optional)"
+              placeholderTextColor="#999"
+              value={callbackNote}
+              onChangeText={setCallbackNote}
+              multiline
+            />
+
+            <TouchableOpacity
+              style={[
+                styles.logActivityButton,
+                (!callbackDate || savingCallback) && styles.logActivityButtonDisabled,
+              ]}
+              disabled={!callbackDate || savingCallback}
+              onPress={async () => {
+                if (!callbackDate) return;
+                try {
+                  setSavingCallback(true);
+                  await scheduleLeadCallback({
+                    leadId: record.id,
+                    leadName: fullName,
+                    scheduledFor: callbackDate,
+                    createdByUserId: session?.user?.id,
+                    note: callbackNote,
+                    leadSource: isMeta ? 'meta' : 'lead',
+                  });
+
+                  // Log callback as a note activity in Activity History
+                  try {
+                    const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
+                    const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
+
+                    // Format date as MM/DD/YYYY HH:MMam/pm
+                    const formattedDate = callbackDate.toLocaleString('en-US', {
+                      month: '2-digit',
+                      day: '2-digit',
+                      year: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                      hour12: true,
+                    });
+
+                    const callbackMessage = `Callback scheduled for ${formattedDate}${callbackNote ? ` - ${callbackNote}` : ''}`;
+
+                    const { data: newActivity } = await supabase.from(tableName).insert([
+                      {
+                        [foreignKeyColumn]: record.id,
+                        activity_type: 'note',
+                        notes: callbackMessage,
+                        created_by: session?.user?.id || null,
+                        user_email: session?.user?.email || 'Mobile App User',
+                      },
+                    ])
+                    .select()
+                    .single();
+
+                    // Add the new activity to the list immediately
+                    if (newActivity) {
+                      setActivities([newActivity, ...activities]);
+                    }
+                  } catch (e) {
+                    console.log('Callback activity log failed (non-fatal):', e);
+                  }
+
+                  setShowCallbackModal(false);
+                } catch (err: any) {
+                  console.error('Error scheduling callback:', err);
+                  alert(err.message || 'Failed to schedule callback.');
+                } finally {
+                  setSavingCallback(false);
+                }
+              }}
+            >
+              <Text style={styles.logActivityButtonText}>
+                {savingCallback ? 'Saving…' : 'Save & Schedule Reminder'}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -2051,9 +2214,11 @@ function TeamManagementScreen({ onBack, session }: TeamManagementScreenProps) {
 type LeadsScreenProps = {
   onSignOut: () => void;
   session: Session | null;
+  notificationLead?: { id: string; source: 'lead' | 'meta' } | null;
+  onNotificationHandled?: () => void;
 };
 
-function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
+function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandled }: LeadsScreenProps) {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [metaLeads, setMetaLeads] = useState<MetaLead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2199,6 +2364,16 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
 
     init();
   }, [session?.user?.id]);
+
+  // Handle notification tap to navigate to lead
+  useEffect(() => {
+    if (notificationLead && !loading) {
+      // Navigate directly to the lead using the source from notification
+      setSelectedLead({ source: notificationLead.source, id: notificationLead.id });
+      setShowDashboard(false);
+      onNotificationHandled?.();
+    }
+  }, [notificationLead, loading, onNotificationHandled]);
 
   // Auto-switch tab based on available leads (only on initial load)
   useEffect(() => {
@@ -3295,6 +3470,7 @@ function LeadsScreen({ onSignOut, session }: LeadsScreenProps) {
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [notificationLead, setNotificationLead] = useState<{ id: string; source: 'lead' | 'meta' } | null>(null);
 
   useEffect(() => {
     const initAuth = async () => {
@@ -3310,6 +3486,19 @@ export default function App() {
     };
 
     initAuth();
+  }, []);
+
+  // Listen for notification taps
+  useEffect(() => {
+    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
+      const leadId = response.notification.request.content.data?.lead_id;
+      const leadSource = response.notification.request.content.data?.lead_source;
+      if (leadId && typeof leadId === 'string' && leadSource && (leadSource === 'lead' || leadSource === 'meta')) {
+        setNotificationLead({ id: leadId, source: leadSource });
+      }
+    });
+
+    return () => subscription.remove();
   }, []);
 
   if (checkingSession) {
@@ -3333,6 +3522,8 @@ export default function App() {
           setSession(null);
         }}
         session={session}
+        notificationLead={notificationLead}
+        onNotificationHandled={() => setNotificationLead(null)}
       />
       <StatusBar style="auto" />
     </>
@@ -5483,5 +5674,63 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#475569',
     lineHeight: 20,
+  },
+  scheduleCallbackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#EEF2FF',
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+  },
+  scheduleCallbackIcon: {
+    fontSize: 20,
+    marginRight: 10,
+  },
+  scheduleCallbackTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  scheduleCallbackSubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  callbackModalContent: {
+    backgroundColor: '#FFF',
+    marginHorizontal: 16,
+    borderRadius: 12,
+    padding: 16,
+    maxHeight: '80%',
+  },
+  callbackLeadName: {
+    fontSize: 14,
+    color: '#4B5563',
+    marginBottom: 8,
+  },
+  callbackPickerWrapper: {
+    marginVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingVertical: Platform.OS === 'ios' ? 8 : 0,
+    paddingHorizontal: Platform.OS === 'ios' ? 8 : 0,
+    backgroundColor: '#F9FAFB',
+  },
+  callbackNoteInput: {
+    minHeight: 60,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 10,
+    marginBottom: 14,
+    fontSize: 14,
+    textAlignVertical: 'top',
+    color: '#111827',
   },
 });
