@@ -498,7 +498,7 @@ function LeadDetailView({
   const [updatingLO, setUpdatingLO] = useState(false);
   const [showAdImage, setShowAdImage] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [currentLOInfo, setCurrentLOInfo] = useState<{ firstName: string; lastName: string } | null>(null);
+  const [currentLOInfo, setCurrentLOInfo] = useState<{ firstName: string; lastName: string; phone: string; email: string } | null>(null);
   
   const quickPhrases = [
     'Left voicemail',
@@ -630,15 +630,24 @@ function LeadDetailView({
     const template = TEXT_TEMPLATES.find(t => t.id === templateId);
     if (!template) return;
 
+    console.log('Current LO Info when creating template:', currentLOInfo);
+
     const variables: TemplateVariables = {
       fname: record.first_name || 'there',
       loFullname: currentLOInfo 
         ? `${currentLOInfo.firstName} ${currentLOInfo.lastName}`.trim() 
         : 'Mario',
+      loFname: currentLOInfo?.firstName || 'Mario',
+      loPhone: currentLOInfo?.phone || '[Phone]',
+      loEmail: currentLOInfo?.email || '[Email]',
       platform: isMeta ? (record as MetaLead).platform || 'Facebook' : 'our website',
     };
 
+    console.log('Template variables:', variables);
+
     const messageBody = fillTemplate(template.template, variables);
+    console.log('Final message body:', messageBody);
+    
     const encodedBody = encodeURIComponent(messageBody);
     
     setShowTemplateModal(false);
@@ -694,20 +703,63 @@ function LeadDetailView({
   // Load current loan officer info
   useEffect(() => {
     const loadLOInfo = async () => {
-      if (!session?.user?.id) return;
+      if (!session?.user?.id || !session?.user?.email) return;
       
       try {
-        const memberId = await getUserTeamMemberId(session.user.id, 'loan_officer');
+        // Hardcoded contact info for super admins
+        const superAdminContacts: Record<string, { firstName: string; lastName: string; phone: string; email: string }> = {
+          'mario@closewithmario.com': { firstName: 'Mario', lastName: 'Cerrato', phone: '3052192788', email: 'mario@closewithmario.com' },
+          'mario@regallending.com': { firstName: 'Mario', lastName: 'Cerrato', phone: '3052192788', email: 'mario@regallending.com' },
+        };
+        
+        const emailLower = session.user.email.toLowerCase();
+        
+        // Check if this is a super admin with hardcoded contact info
+        if (superAdminContacts[emailLower]) {
+          console.log('Using hardcoded super admin contact info');
+          setCurrentLOInfo(superAdminContacts[emailLower]);
+          return;
+        }
+        
+        // First try to get by user_id (for regular loan officers)
+        let memberId = await getUserTeamMemberId(session.user.id, 'loan_officer');
+        console.log('LO Member ID by user_id:', memberId);
+        
+        // If no member ID found, try to find by email (for super admins who might be LOs)
+        if (!memberId) {
+          const { data: loByEmail } = await supabase
+            .from('loan_officers')
+            .select('id')
+            .eq('email', emailLower)
+            .eq('active', true)
+            .maybeSingle();
+          
+          memberId = loByEmail?.id || null;
+          console.log('LO Member ID by email:', memberId);
+        }
+        
         if (memberId) {
           const { data, error } = await supabase
             .from('loan_officers')
-            .select('first_name, last_name')
+            .select('first_name, last_name, phone, email')
             .eq('id', memberId)
             .single();
           
+          console.log('LO Data fetched:', data);
+          console.log('LO Fetch error:', error);
+          
           if (data && !error) {
-            setCurrentLOInfo({ firstName: data.first_name, lastName: data.last_name });
+            const loInfo = { 
+              firstName: data.first_name, 
+              lastName: data.last_name,
+              phone: data.phone || '',
+              email: data.email || ''
+            };
+            console.log('Setting LO Info:', loInfo);
+            setCurrentLOInfo(loInfo);
           }
+        } else {
+          console.log('No LO record found for this user');
         }
       } catch (e) {
         console.error('Error loading LO info:', e);
@@ -715,7 +767,7 @@ function LeadDetailView({
     };
 
     loadLOInfo();
-  }, [session?.user?.id]);
+  }, [session?.user?.id, session?.user?.email]);
 
   // Load activities from Supabase
   useEffect(() => {
@@ -1454,6 +1506,9 @@ function LeadDetailView({
                   loFullname: currentLOInfo 
                     ? `${currentLOInfo.firstName} ${currentLOInfo.lastName}`.trim() 
                     : 'Mario',
+                  loFname: currentLOInfo?.firstName || 'Mario',
+                  loPhone: currentLOInfo?.phone || '[Phone]',
+                  loEmail: currentLOInfo?.email || '[Email]',
                   platform: isMeta ? (record as MetaLead).platform || 'Facebook' : 'our website',
                 };
                 const preview = fillTemplate(template.template, variables);
