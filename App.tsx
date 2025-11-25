@@ -579,8 +579,45 @@ function LeadDetailView({
   const phone = record.phone || '';
   const attentionBadge = getLeadAlert(record);
 
-  const handleCall = () => {
+  const handleCall = async () => {
     if (!phone) return;
+    
+    // Log the call activity automatically
+    try {
+      const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
+      const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
+      
+      const activityData = {
+        [foreignKeyColumn]: record.id,
+        activity_type: 'call',
+        notes: `Called ${phone}`,
+        created_by: session?.user?.id || null,
+        user_email: session?.user?.email || 'Mobile App User',
+      };
+
+      const { error } = await supabase
+        .from(tableName)
+        .insert([activityData]);
+
+      if (error) {
+        console.error('Error logging call activity:', error);
+      } else {
+        // Refresh activities to show the new log
+        const { data } = await supabase
+          .from(tableName)
+          .select('*')
+          .eq(foreignKeyColumn, record.id)
+          .order('created_at', { ascending: false });
+        
+        if (data) {
+          setActivities(data);
+        }
+      }
+    } catch (e) {
+      console.error('Error logging call activity:', e);
+    }
+    
+    // Open phone dialer
     Linking.openURL(`tel:${phone}`);
   };
 
@@ -589,7 +626,7 @@ function LeadDetailView({
     setShowTemplateModal(true);
   };
 
-  const handleTemplateSelect = (templateId: string) => {
+  const handleTemplateSelect = async (templateId: string) => {
     const template = TEXT_TEMPLATES.find(t => t.id === templateId);
     if (!template) return;
 
@@ -605,6 +642,43 @@ function LeadDetailView({
     const encodedBody = encodeURIComponent(messageBody);
     
     setShowTemplateModal(false);
+    
+    // Log the text activity automatically
+    try {
+      const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
+      const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
+      
+      const activityData = {
+        [foreignKeyColumn]: record.id,
+        activity_type: 'text',
+        notes: `Sent: "${template.name}"\n\n${messageBody}`,
+        created_by: session?.user?.id || null,
+        user_email: session?.user?.email || 'Mobile App User',
+      };
+
+      const { error } = await supabase
+        .from(tableName)
+        .insert([activityData]);
+
+      if (error) {
+        console.error('Error logging text activity:', error);
+      } else {
+        // Refresh activities to show the new log
+        const { data } = await supabase
+          .from(tableName)
+          .select('*')
+          .eq(foreignKeyColumn, record.id)
+          .order('created_at', { ascending: false });
+        
+        if (data) {
+          setActivities(data);
+        }
+      }
+    } catch (e) {
+      console.error('Error logging text activity:', e);
+    }
+    
+    // Open SMS app with pre-filled message
     Linking.openURL(`sms:${phone}?body=${encodedBody}`);
   };
 
