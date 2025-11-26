@@ -19,7 +19,7 @@ import {
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './src/lib/supabase';
 import { getUserRole, getUserTeamMemberId, canSeeAllLeads, type UserRole } from './src/lib/roles';
-import { TEXT_TEMPLATES, fillTemplate, type TemplateVariables } from './src/lib/textTemplates';
+import { TEXT_TEMPLATES, fillTemplate, getTemplateText, getTemplateName, type TemplateVariables } from './src/lib/textTemplates';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -518,6 +518,7 @@ function LeadDetailView({
   const [callbackDate, setCallbackDate] = useState<Date | null>(null);
   const [callbackNote, setCallbackNote] = useState('');
   const [savingCallback, setSavingCallback] = useState(false);
+  const [useSpanishTemplates, setUseSpanishTemplates] = useState(false);
   
   const quickPhrases = [
     'Left voicemail',
@@ -543,7 +544,9 @@ function LeadDetailView({
     const campaignName = (record as MetaLead).campaign_name?.toLowerCase() || '';
     const searchText = `${adName} ${campaignName}`.toLowerCase();
     
-    if (searchText.includes('hpa')) {
+    if (searchText.includes('florida renter')) {
+      return require('./assets/Fl_Renter_Ad.png');
+    } else if (searchText.includes('hpa')) {
       return require('./assets/BrowardHPA _Ad.jpg');
     } else if (searchText.includes('condo')) {
       return require('./assets/Condo_Ad.jpg');
@@ -664,7 +667,9 @@ function LeadDetailView({
 
     console.log('Template variables:', variables);
 
-    const messageBody = fillTemplate(template.template, variables);
+    // Use the correct language template
+    const templateText = getTemplateText(template, useSpanishTemplates);
+    const messageBody = fillTemplate(templateText, variables);
     console.log('Final message body:', messageBody);
     
     const encodedBody = encodeURIComponent(messageBody);
@@ -875,6 +880,17 @@ function LeadDetailView({
       setCallbackNote(`Call ${fullName}`);
     }
   }, [record?.id, fullName]);
+
+  // Set language preference based on lead's preferred_language
+  useEffect(() => {
+    if (record && isMeta) {
+      const preferredLanguage = (record as MetaLead).preferred_language?.toLowerCase();
+      setUseSpanishTemplates(preferredLanguage === 'spanish');
+    } else {
+      // Default to English for non-meta leads
+      setUseSpanishTemplates(false);
+    }
+  }, [record?.id, isMeta]);
 
   const handleAddTask = async () => {
     if (!taskNote.trim() || !record) return;
@@ -1621,12 +1637,42 @@ function LeadDetailView({
         <View style={styles.modalOverlay}>
           <View style={styles.templateModalContent}>
             <View style={styles.templateModalHeader}>
-              <Text style={styles.templateModalTitle}>Choose a Text Template</Text>
+              <Text style={styles.templateModalTitle}>
+                {useSpanishTemplates ? 'Elegir Plantilla de Texto' : 'Choose a Text Template'}
+              </Text>
               <TouchableOpacity 
                 onPress={() => setShowTemplateModal(false)}
                 style={styles.templateModalClose}
               >
                 <Text style={styles.templateModalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Language Toggle */}
+            <View style={styles.languageToggleContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.languageToggleButton,
+                  !useSpanishTemplates && styles.languageToggleButtonActive
+                ]}
+                onPress={() => setUseSpanishTemplates(false)}
+              >
+                <Text style={[
+                  styles.languageToggleText,
+                  !useSpanishTemplates && styles.languageToggleTextActive
+                ]}>🇺🇸 English</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.languageToggleButton,
+                  useSpanishTemplates && styles.languageToggleButtonActive
+                ]}
+                onPress={() => setUseSpanishTemplates(true)}
+              >
+                <Text style={[
+                  styles.languageToggleText,
+                  useSpanishTemplates && styles.languageToggleTextActive
+                ]}>🇪🇸 Español</Text>
               </TouchableOpacity>
             </View>
             
@@ -1642,7 +1688,8 @@ function LeadDetailView({
                   loEmail: currentLOInfo?.email || '[Email]',
                   platform: isMeta ? (record as MetaLead).platform || 'Facebook' : 'our website',
                 };
-                const preview = fillTemplate(template.template, variables);
+                const templateText = getTemplateText(template, useSpanishTemplates);
+                const preview = fillTemplate(templateText, variables);
 
                 return (
                   <TouchableOpacity
@@ -1650,7 +1697,7 @@ function LeadDetailView({
                     style={styles.templateItem}
                     onPress={() => handleTemplateSelect(template.id)}
                   >
-                    <Text style={styles.templateName}>{template.name}</Text>
+                    <Text style={styles.templateName}>{getTemplateName(template, useSpanishTemplates)}</Text>
                     <Text style={styles.templatePreview} numberOfLines={8}>
                       {preview}
                     </Text>
@@ -5769,6 +5816,37 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#64748B',
     fontWeight: '600',
+  },
+  languageToggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
+    gap: 4,
+  },
+  languageToggleButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  languageToggleButtonActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  languageToggleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  languageToggleTextActive: {
+    color: '#7C3AED',
   },
   templateList: {
     maxHeight: 500,

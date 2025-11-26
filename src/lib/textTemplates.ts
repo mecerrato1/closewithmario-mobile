@@ -1,13 +1,16 @@
 export type TextTemplate = {
   id: string;
   name: string;
+  nameEs: string;
   template: string;
+  templateEs: string;
 };
 
 export const TEXT_TEMPLATES: TextTemplate[] = [
   {
     id: 'initial_contact',
     name: 'Initial Contact',
+    nameEs: 'Contacto Inicial',
     template: `Hi {fname} 👋
 
 This is {LO fullname} with loanDepot (2nd largest mortgage lender in the US).
@@ -16,10 +19,19 @@ I'm reaching out about the ad you clicked on {platform}. Tried calling you earli
 
 ☎️ Mobile {LO phone}
 📧 Email {LO email}`,
+    templateEs: `Hola {fname} 👋
+
+Soy {LO fullname} de loanDepot (el segundo prestamista hipotecario más grande de EE. UU.).
+
+Me comunico sobre el anuncio en el que hizo clic en {platform}. Intenté llamarlo antes, ¿está disponible para una charla rápida para ver cómo podemos ayudarlo a convertirse en propietario de vivienda? 🏡
+
+☎️ Móvil {LO phone}
+📧 Email {LO email}`,
   },
   {
     id: 'document_followup',
     name: 'Document Follow-up',
+    nameEs: 'Seguimiento de Documentos',
     template: `Hi {fname} 👋
 
 This is {LO fullname} with loanDepot.
@@ -29,10 +41,20 @@ Just following up on the documents we need to get you preapproved. Let me know i
 You can reach me at:
 ☎️ {LO phone}
 📧 {LO email}`,
+    templateEs: `Hola {fname} 👋
+
+Soy {LO fullname} de loanDepot.
+
+Solo hago seguimiento de los documentos que necesitamos para pre-aprobarlo. ¡Avíseme si tiene alguna pregunta! 📄
+
+Puede comunicarse conmigo en:
+☎️ {LO phone}
+📧 {LO email}`,
   },
   {
     id: 'preapproval_checkin',
     name: 'Pre-approval Check-in',
+    nameEs: 'Verificación de Pre-aprobación',
     template: `Hi {fname} 👋
 
 This is {LO fullname} with loanDepot.
@@ -42,10 +64,20 @@ Just checking in to see if you're ready to move forward with getting preapproved
 Feel free to call or text me:
 ☎️ {LO phone}
 📧 {LO email}`,
+    templateEs: `Hola {fname} 👋
+
+Soy {LO fullname} de loanDepot.
+
+Solo verifico para ver si está listo para avanzar con la pre-aprobación de su hipoteca. ¡Estoy aquí para ayudar! 🏠✅
+
+No dude en llamarme o enviarme un mensaje:
+☎️ {LO phone}
+📧 {LO email}`,
   },
   {
     id: 'stop_paying_rent',
     name: 'Stop Paying Rent',
+    nameEs: 'Deje de Pagar Alquiler',
     template: `Hi {fname} 👋
 
 This is {LO fullname} with loanDepot.
@@ -55,10 +87,20 @@ I don't mean to bug you, but I really think I can help you get into your own hom
 Reach me at:
 ☎️ {LO phone}
 📧 {LO email}`,
+    templateEs: `Hola {fname} 👋
+
+Soy {LO fullname} de loanDepot.
+
+No quiero molestarlo, pero realmente creo que puedo ayudarlo a tener su propia casa y dejar de pagar alquiler. ¡Hablemos cuando tenga un momento! 🏡💰
+
+Contácteme en:
+☎️ {LO phone}
+📧 {LO email}`,
   },
   {
     id: 'not_ready_general',
     name: 'Not Ready - General',
+    nameEs: 'No Está Listo - General',
     template: `Hi {fname} 👋
 
 This is {LO fullname}, good speaking to you.
@@ -69,10 +111,21 @@ I understand that you're not ready right now, but feel free to contact me when y
 📧 Email {LO email}
 
 Good luck! 🍀`,
+    templateEs: `Hola {fname} 👋
+
+Soy {LO fullname}, fue un placer hablar con usted.
+
+Entiendo que no está listo en este momento, pero no dude en contactarme cuando lo esté.
+
+☎️ Móvil {LO phone}
+📧 Email {LO email}
+
+¡Buena suerte! 🍀`,
   },
   {
     id: 'not_ready_credit',
     name: 'Not Ready - Working on Credit',
+    nameEs: 'No Está Listo - Trabajando en Crédito',
     template: `Hi {fname} 👋
 
 This is {LO fullname}, good speaking to you.
@@ -83,10 +136,21 @@ I understand that you're going to be working on your credit. Feel free to contac
 📧 Email {LO email}
 
 Good luck! 🍀`,
+    templateEs: `Hola {fname} 👋
+
+Soy {LO fullname}, fue un placer hablar con usted.
+
+Entiendo que va a trabajar en su crédito. No dude en contactarme cuando esté listo.
+
+☎️ Móvil {LO phone}
+📧 Email {LO email}
+
+¡Buena suerte! 🍀`,
   },
   {
     id: 'callback_confirmation',
     name: 'Callback Confirmation',
+    nameEs: 'Confirmación de Llamada',
     template: `Hi {fname} 👋
 
 This is {LO fullname}, good speaking to you.
@@ -95,10 +159,19 @@ Look forward to our callback
 
 ☎️ Mobile {LO phone}
 📧 Email {LO email}`,
+    templateEs: `Hola {fname} 👋
+
+Soy {LO fullname}, fue un placer hablar con usted.
+
+Espero con ansias nuestra llamada
+
+☎️ Móvil {LO phone}
+📧 Email {LO email}`,
   },
   {
     id: 'hung_up',
     name: 'Hung Up on Me',
+    nameEs: 'Colgó la Llamada',
     template: `Hi {fname} 👋
 
 This is {LO fullname} with loanDepot. I believe you just hung up the call thinking I was a spam call.
@@ -110,6 +183,18 @@ If you changed your mind, I can mark you as not interested and will not call you
 This call is to see how we can help you become a homeowner? 🏡
 
 ☎️ Mobile {LO phone}
+📧 Email {LO email}`,
+    templateEs: `Hola {fname} 👋
+
+Soy {LO fullname} de loanDepot. Creo que acaba de colgar la llamada pensando que era una llamada de spam.
+
+No lo soy, simplemente estoy respondiendo al anuncio en el que hizo clic en {platform}.
+
+Si cambió de opinión, puedo marcarlo como no interesado y no lo volveré a llamar.
+
+Esta llamada es para ver cómo podemos ayudarlo a convertirse en propietario de vivienda? 🏡
+
+☎️ Móvil {LO phone}
 📧 Email {LO email}`,
   },
 ];
@@ -160,6 +245,26 @@ export function formatPlatformName(platform: string): string {
   };
   
   return platformMap[upperPlatform] || platform;
+}
+
+/**
+ * Gets the appropriate template text based on language preference
+ * @param template - The template object
+ * @param useSpanish - Whether to use Spanish version
+ * @returns The template text in the appropriate language
+ */
+export function getTemplateText(template: TextTemplate, useSpanish: boolean): string {
+  return useSpanish ? template.templateEs : template.template;
+}
+
+/**
+ * Gets the appropriate template name based on language preference
+ * @param template - The template object
+ * @param useSpanish - Whether to use Spanish version
+ * @returns The template name in the appropriate language
+ */
+export function getTemplateName(template: TextTemplate, useSpanish: boolean): string {
+  return useSpanish ? template.nameEs : template.name;
 }
 
 /**
