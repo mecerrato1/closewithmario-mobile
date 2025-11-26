@@ -533,8 +533,11 @@ function LeadDetailView({
   
   const isMeta = selected.source === 'meta';
   const currentList = isMeta ? metaLeads : leads;
-  const currentIndex = currentList.findIndex((item) => item.id === selected.id);
-  const record = currentList[currentIndex];
+  
+  // Filter out unqualified leads from navigation (unless explicitly viewing unqualified)
+  const navigableList = currentList.filter(lead => lead.status !== 'unqualified');
+  const currentIndex = navigableList.findIndex((item) => item.id === selected.id);
+  const record = currentList.find((item) => item.id === selected.id);
   
   // Function to get ad image based on ad name or campaign name
   const getAdImage = () => {
@@ -560,18 +563,18 @@ function LeadDetailView({
   const adImage = getAdImage();
 
   const hasPrevious = currentIndex > 0;
-  const hasNext = currentIndex < currentList.length - 1;
+  const hasNext = currentIndex < navigableList.length - 1;
 
   const handlePrevious = () => {
     if (hasPrevious) {
-      const prevLead = currentList[currentIndex - 1];
+      const prevLead = navigableList[currentIndex - 1];
       onNavigate({ source: selected.source, id: prevLead.id });
     }
   };
 
   const handleNext = () => {
     if (hasNext) {
-      const nextLead = currentList[currentIndex + 1];
+      const nextLead = navigableList[currentIndex + 1];
       onNavigate({ source: selected.source, id: nextLead.id });
     }
   };
