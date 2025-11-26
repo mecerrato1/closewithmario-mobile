@@ -358,27 +358,37 @@ function AuthScreen({ onAuth }: AuthScreenProps) {
         contentContainerStyle={styles.authScrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Logo Section */}
-        <View style={styles.authHeader}>
-          <View style={styles.logoContainer}>
+        {/* Logo at Top */}
+        <View style={styles.authTopLogoContainer}>
+          <View style={styles.authTopLogoCircle}>
             <Image
               source={require('./assets/CWMLogo.png')}
-              style={styles.logo}
+              style={styles.authTopLogoImage}
               resizeMode="contain"
             />
           </View>
-          <Text style={styles.authTitle}>Close With Mario</Text>
-          <Text style={styles.authSubtitle}>
-            {mode === 'signIn' ? 'Welcome back! Sign in to continue' : 'Create your account'}
+        </View>
+
+        {/* Title with Mascot Sitting On It */}
+        <View style={styles.authTitleWithMascot}>
+          <Text style={styles.authMainTitleWithMascot}>Close With Mario</Text>
+          <Image
+            source={require('./assets/LO.png')}
+            style={styles.authMascotSitting}
+            resizeMode="contain"
+          />
+          <Text style={styles.authSubtitleWithMascot}>Your mortgage workflow simplified.</Text>
+          <Text style={styles.authWelcomeText}>
+            {mode === 'signIn' ? 'Welcome back! Sign in to continue' : 'Create your account to get started'}
           </Text>
         </View>
 
-        {/* Form Card */}
-        <View style={styles.authCard}>
+        {/* Form Container */}
+        <View style={styles.authFormCompact}>
           <TextInput
-            style={styles.authInput}
+            style={styles.authInputCompact}
             placeholder="Email address"
-            placeholderTextColor="#94A3B8"
+            placeholderTextColor="#9CA3AF"
             autoCapitalize="none"
             keyboardType="email-address"
             value={email}
@@ -386,9 +396,9 @@ function AuthScreen({ onAuth }: AuthScreenProps) {
           />
 
           <TextInput
-            style={styles.authInput}
+            style={styles.authInputCompact}
             placeholder="Password"
-            placeholderTextColor="#94A3B8"
+            placeholderTextColor="#9CA3AF"
             secureTextEntry
             autoCapitalize="none"
             value={password}
@@ -402,57 +412,43 @@ function AuthScreen({ onAuth }: AuthScreenProps) {
           )}
 
           <TouchableOpacity
-            style={[styles.authPrimaryButton, authLoading && styles.authButtonDisabled]}
+            style={[styles.authSignInButtonCompact, authLoading && styles.authButtonDisabled]}
             onPress={handleEmailPasswordAuth}
             disabled={authLoading}
             activeOpacity={0.8}
           >
-            <Text style={styles.authPrimaryButtonText}>
-              {authLoading
-                ? 'Please wait...'
-                : mode === 'signIn'
-                ? 'Sign In'
-                : 'Create Account'}
+            <Text style={styles.authSignInButtonText}>
+              {authLoading ? 'Please wait...' : mode === 'signIn' ? 'Sign In' : 'Create Account'}
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             onPress={() => setMode(mode === 'signIn' ? 'signUp' : 'signIn')}
-            style={styles.authSwitchButton}
+            style={styles.authSignUpLinkCompact}
           >
-            <Text style={styles.authSwitchText}>
-              {mode === 'signIn'
-                ? "Don't have an account? "
-                : 'Already have an account? '}
-              <Text style={styles.authSwitchTextBold}>
+            <Text style={styles.authSignUpText}>
+              {mode === 'signIn' ? "Don't have an account? " : 'Already have an account? '}
+              <Text style={styles.authSignUpTextBold}>
                 {mode === 'signIn' ? 'Sign up' : 'Sign in'}
               </Text>
             </Text>
           </TouchableOpacity>
 
-          <View style={styles.authDivider}>
-            <View style={styles.authDividerLine} />
-            <Text style={styles.authDividerText}>OR</Text>
-            <View style={styles.authDividerLine} />
-          </View>
+          <Text style={styles.authOrTextCompact}>OR</Text>
 
           <TouchableOpacity
-            style={[styles.authGoogleButton, authLoading && styles.authButtonDisabled]}
+            style={[styles.authGoogleButtonCompact, authLoading && styles.authButtonDisabled]}
             onPress={handleGoogleSignIn}
             disabled={authLoading}
             activeOpacity={0.8}
           >
-            <Text style={styles.authGoogleIcon}>G</Text>
-            <Text style={styles.authGoogleButtonText}>Continue with Google</Text>
+            <Text style={styles.authGoogleIconNew}>G</Text>
+            <Text style={styles.authGoogleButtonTextNew}>Continue with Google</Text>
           </TouchableOpacity>
-
-          <Text style={styles.authHint}>
-            💡 Google login requires a development or standalone build
-          </Text>
         </View>
 
-        {/* Version Number */}
-        <Text style={styles.versionText}>
+        {/* Version Info */}
+        <Text style={styles.authVersionText}>
           v{Constants.expoConfig?.version} (Build {Constants.expoConfig?.ios?.buildNumber})
         </Text>
       </ScrollView>
@@ -476,6 +472,10 @@ type LeadDetailViewProps = {
   loanOfficers: Array<{ id: string; name: string }>;
   userRole: UserRole;
   onLeadUpdate: (updatedLead: Lead | MetaLead, source: 'lead' | 'meta') => void;
+  selectedStatusFilter: string;
+  searchQuery: string;
+  selectedLOFilter: string | null;
+  activeTab: 'leads' | 'meta' | 'all';
 };
 
 type Activity = {
@@ -500,6 +500,10 @@ function LeadDetailView({
   loanOfficers,
   userRole: propUserRole,
   onLeadUpdate,
+  selectedStatusFilter,
+  searchQuery,
+  selectedLOFilter,
+  activeTab,
 }: LeadDetailViewProps) {
   const [taskNote, setTaskNote] = useState('');
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -532,11 +536,86 @@ function LeadDetailView({
   ];
   
   const isMeta = selected.source === 'meta';
-  const currentList = isMeta ? metaLeads : leads;
   
-  // Filter out unqualified leads from navigation (unless explicitly viewing unqualified)
-  const navigableList = currentList.filter(lead => lead.status !== 'unqualified');
-  const currentIndex = navigableList.findIndex((item) => item.id === selected.id);
+  // Helper functions to match the same filters as the list view
+  const matchesSearch = (lead: Lead | MetaLead) => {
+    if (!searchQuery.trim()) return true;
+    
+    const query = searchQuery.toLowerCase();
+    const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(' ').toLowerCase();
+    const email = lead.email?.toLowerCase() || '';
+    const phone = lead.phone?.toLowerCase() || '';
+    
+    return fullName.includes(query) || email.includes(query) || phone.includes(query);
+  };
+
+  const matchesLOFilter = (lead: Lead | MetaLead) => {
+    // Only apply filter for super admins
+    if (propUserRole !== 'super_admin') return true;
+    
+    // If no LO filter selected (null), show all leads
+    if (selectedLOFilter === null) return true;
+    
+    // If "unassigned" filter, show leads without LO
+    if (selectedLOFilter === 'unassigned') {
+      return !lead.lo_id;
+    }
+    
+    // Otherwise, filter by specific LO ID
+    return lead.lo_id === selectedLOFilter;
+  };
+  
+  // Build the navigable list based on active tab
+  let navigableList: Array<(Lead | MetaLead) & { source: 'lead' | 'meta' }>;
+  
+  if (activeTab === 'all') {
+    // Combine both lists when on "all" tab
+    const filteredMeta = metaLeads
+      .filter(lead => {
+        const matchesStatus = selectedStatusFilter === 'all' 
+          ? lead.status !== 'unqualified' 
+          : lead.status === selectedStatusFilter;
+        return matchesStatus && matchesSearch(lead) && matchesLOFilter(lead);
+      })
+      .map(lead => ({ ...lead, source: 'meta' as const }));
+    
+    const filteredLeads = leads
+      .filter(lead => {
+        const matchesStatus = selectedStatusFilter === 'all' 
+          ? lead.status !== 'unqualified' 
+          : lead.status === selectedStatusFilter;
+        return matchesStatus && matchesSearch(lead) && matchesLOFilter(lead);
+      })
+      .map(lead => ({ ...lead, source: 'lead' as const }));
+    
+    // Combine and sort by created_at (newest first)
+    navigableList = [...filteredMeta, ...filteredLeads].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  } else if (activeTab === 'meta') {
+    // Only meta leads
+    navigableList = metaLeads
+      .filter(lead => {
+        const matchesStatus = selectedStatusFilter === 'all' 
+          ? lead.status !== 'unqualified' 
+          : lead.status === selectedStatusFilter;
+        return matchesStatus && matchesSearch(lead) && matchesLOFilter(lead);
+      })
+      .map(lead => ({ ...lead, source: 'meta' as const }));
+  } else {
+    // Only regular leads
+    navigableList = leads
+      .filter(lead => {
+        const matchesStatus = selectedStatusFilter === 'all' 
+          ? lead.status !== 'unqualified' 
+          : lead.status === selectedStatusFilter;
+        return matchesStatus && matchesSearch(lead) && matchesLOFilter(lead);
+      })
+      .map(lead => ({ ...lead, source: 'lead' as const }));
+  }
+  
+  const currentIndex = navigableList.findIndex((item) => item.id === selected.id && item.source === selected.source);
+  const currentList = isMeta ? metaLeads : leads;
   const record = currentList.find((item) => item.id === selected.id);
   
   // Function to get ad image based on ad name or campaign name
@@ -568,14 +647,14 @@ function LeadDetailView({
   const handlePrevious = () => {
     if (hasPrevious) {
       const prevLead = navigableList[currentIndex - 1];
-      onNavigate({ source: selected.source, id: prevLead.id });
+      onNavigate({ source: prevLead.source, id: prevLead.id });
     }
   };
 
   const handleNext = () => {
     if (hasNext) {
       const nextLead = navigableList[currentIndex + 1];
-      onNavigate({ source: selected.source, id: nextLead.id });
+      onNavigate({ source: nextLead.source, id: nextLead.id });
     }
   };
 
@@ -1034,7 +1113,7 @@ function LeadDetailView({
         <View style={styles.detailHeaderCenter}>
           <Text style={styles.detailHeaderTitle}>Lead Details</Text>
           <Text style={styles.detailHeaderSubtitle}>
-            {currentIndex + 1} of {currentList.length}
+            {currentIndex + 1} of {navigableList.length}
           </Text>
         </View>
         <View style={styles.navButtons}>
@@ -2820,6 +2899,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         session={session}
         loanOfficers={loanOfficers}
         userRole={userRole}
+        selectedStatusFilter={selectedStatusFilter}
+        searchQuery={searchQuery}
+        selectedLOFilter={selectedLOFilter}
+        activeTab={activeTab}
         onLeadUpdate={(updatedLead, source) => {
           if (source === 'lead') {
             setLeads(leads.map(l => l.id === updatedLead.id ? updatedLead as Lead : l));
@@ -3658,13 +3741,201 @@ const styles = StyleSheet.create({
   },
   authContainer: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#E8DFF5',
   },
   authScrollContent: {
     flexGrow: 1,
     paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
-    paddingBottom: 40,
+    paddingTop: Platform.OS === 'ios' ? 80 : 60,
+    paddingBottom: 20,
+  },
+  authTopLogoContainer: {
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  authTopLogoCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  authTopLogoImage: {
+    width: 70,
+    height: 70,
+  },
+  authTitleWithMascot: {
+    alignItems: 'center',
+    marginBottom: 24,
+    position: 'relative',
+  },
+  authMainTitleWithMascot: {
+    fontSize: 40,
+    fontWeight: '800',
+    color: '#1F2937',
+    textAlign: 'center',
+    marginBottom: -30,
+    zIndex: 1,
+  },
+  authMascotSitting: {
+    width: 180,
+    height: 180,
+    zIndex: 2,
+    marginBottom: -20,
+  },
+  authSubtitleWithMascot: {
+    fontSize: 15,
+    color: '#6B7280',
+    textAlign: 'center',
+    zIndex: 1,
+  },
+  authWelcomeText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 8,
+    fontWeight: '500',
+  },
+  authFormCompact: {
+    width: '100%',
+  },
+  authInputCompact: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    marginBottom: 12,
+    fontSize: 15,
+    color: '#1F2937',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  authSignInButtonCompact: {
+    backgroundColor: '#7C3AED',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 4,
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  authSignUpLinkCompact: {
+    marginTop: 14,
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  authOrTextCompact: {
+    textAlign: 'center',
+    fontSize: 13,
+    color: '#9CA3AF',
+    fontWeight: '600',
+    marginVertical: 14,
+  },
+  authGoogleButtonCompact: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+    marginBottom: 8,
+  },
+  authVersionText: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 20,
+    marginBottom: 10,
+    fontWeight: '500',
+  },
+  authIllustrationContainer: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 24,
+    position: 'relative',
+  },
+  authLogoCircle: {
+    position: 'absolute',
+    top: 20,
+    left: '10%',
+    zIndex: 2,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  authLogoImage: {
+    width: 80,
+    height: 80,
+  },
+  auth3DCharacter: {
+    width: 280,
+    height: 280,
+    marginTop: 20,
+  },
+  authTitleSection: {
+    width: '100%',
+    marginBottom: 32,
+  },
+  authMainTitle: {
+    fontSize: 48,
+    fontWeight: '800',
+    color: '#1F2937',
+    lineHeight: 56,
+    marginBottom: 8,
+  },
+  authSubtitleText: {
+    fontSize: 18,
+    color: '#6B7280',
+    lineHeight: 26,
+  },
+  authInputsContainer: {
+    width: '100%',
+    maxWidth: 500,
+  },
+  authInputField: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    marginBottom: 16,
+    fontSize: 16,
+    color: '#1F2937',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   authHeader: {
     alignItems: 'center',
@@ -3755,6 +4026,85 @@ const styles = StyleSheet.create({
   },
   authButtonDisabled: {
     opacity: 0.6,
+  },
+  authSignInButton: {
+    backgroundColor: '#7C3AED',
+    borderRadius: 16,
+    paddingVertical: 18,
+    alignItems: 'center',
+    marginTop: 8,
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  authSignInButtonText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  authSignUpLink: {
+    marginTop: 20,
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  authSignUpText: {
+    fontSize: 15,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  authSignUpTextBold: {
+    color: '#7C3AED',
+    fontWeight: '700',
+  },
+  authOrText: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: '#9CA3AF',
+    fontWeight: '600',
+    marginVertical: 20,
+  },
+  authGoogleButtonNew: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    paddingVertical: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  authGoogleIconNew: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#4285F4',
+    marginRight: 12,
+  },
+  authGoogleButtonTextNew: {
+    color: '#1F2937',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  authSupportLink: {
+    marginTop: 24,
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  authSupportText: {
+    fontSize: 15,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  authSupportTextBold: {
+    color: '#7C3AED',
+    fontWeight: '700',
   },
   authSwitchButton: {
     marginTop: 16,
