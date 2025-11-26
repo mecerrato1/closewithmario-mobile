@@ -208,6 +208,68 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     init();
   }, [session?.user?.id]);
 
+  // Subscribe to loan_officers table changes to update lead_eligible status in real-time
+  useEffect(() => {
+    if (!session?.user?.id || !teamMemberId || userRole !== 'loan_officer') {
+      return;
+    }
+
+    console.log('📡 Setting up real-time subscription for loan officer:', teamMemberId);
+
+    // Set up real-time subscription
+    const subscription = supabase
+      .channel('loan_officer_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'loan_officers',
+          filter: `id=eq.${teamMemberId}`,
+        },
+        (payload) => {
+          console.log('🔔 Loan officer updated:', payload);
+          if (payload.new && 'lead_eligible' in payload.new) {
+            const newStatus = payload.new.lead_eligible;
+            console.log('✅ Updating lead_eligible status to:', newStatus);
+            setLeadEligible(newStatus);
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Subscription status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Successfully subscribed to loan officer changes');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Error subscribing to loan officer changes');
+        }
+      });
+
+    // Also poll every 30 seconds as a fallback (in case Realtime isn't enabled)
+    const pollInterval = setInterval(async () => {
+      try {
+        const { data } = await supabase
+          .from('loan_officers')
+          .select('lead_eligible')
+          .eq('id', teamMemberId)
+          .single();
+        
+        if (data && data.lead_eligible !== leadEligible) {
+          console.log('🔄 Polling detected change in lead_eligible:', data.lead_eligible);
+          setLeadEligible(data.lead_eligible);
+        }
+      } catch (error) {
+        console.error('Error polling lead_eligible status:', error);
+      }
+    }, 30000); // Poll every 30 seconds
+
+    return () => {
+      console.log('🔌 Unsubscribing from loan officer changes');
+      subscription.unsubscribe();
+      clearInterval(pollInterval);
+    };
+  }, [session?.user?.id, teamMemberId, userRole, leadEligible]);
+
   // Handle notification tap to navigate to lead
   useEffect(() => {
     if (notificationLead && !loading) {
@@ -231,6 +293,70 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       }
     }
   }, [loading, leads.length, metaLeads.length, hasManuallySelectedTab]);
+
+  // Pull-to-refresh handler
+  const onRefresh = async () => {
+    setRefreshing(true);
+    if (!session?.user?.id || !session?.user?.email) {
+      setRefreshing(false);
+      return;
+    }
+
+    try {
+      const userRole = await getUserRole(session.user.id, session.user.email);
+      
+      // Refresh lead_eligible status for loan officers
+      if (userRole === 'loan_officer' && teamMemberId) {
+        const { data: loData } = await supabase
+          .from('loan_officers')
+          .select('lead_eligible')
+          .eq('id', teamMemberId)
+          .single();
+        
+        if (loData) {
+          console.log('🔄 Pull-to-refresh: Updated lead_eligible to:', loData.lead_eligible);
+          setLeadEligible(loData.lead_eligible ?? true);
+        }
+      }
+      
+      let leadsQuery = supabase
+        .from('leads')
+        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id')
+        .order('created_at', { ascending: false });
+
+      let metaQuery = supabase
+        .from('meta_ads')
+        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id')
+        .order('created_at', { ascending: false});
+
+      if (!canSeeAllLeads(userRole)) {
+        if (userRole === 'loan_officer') {
+          const teamMemberId = await getUserTeamMemberId(session.user.id, 'loan_officer');
+          if (teamMemberId) {
+            leadsQuery = leadsQuery.eq('lo_id', teamMemberId);
+            metaQuery = metaQuery.eq('lo_id', teamMemberId);
+          }
+        } else if (userRole === 'realtor') {
+          const teamMemberId = await getUserTeamMemberId(session.user.id, 'realtor');
+          if (teamMemberId) {
+            leadsQuery = leadsQuery.eq('realtor_id', teamMemberId);
+            metaQuery = metaQuery.eq('realtor_id', teamMemberId);
+          }
+        }
+      }
+
+      const { data: leadsData } = await leadsQuery;
+      const { data: metaData } = await metaQuery;
+
+      setLeads((leadsData || []) as Lead[]);
+      setMetaLeads((metaData || []) as MetaLead[]);
+      setDebugInfo(`leads rows: ${(leadsData || []).length} · meta_ads rows: ${(metaData || []).length}`);
+    } catch (e) {
+      console.error('Refresh error:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const handleStatusChange = async (
     source: 'lead' | 'meta',
@@ -720,6 +846,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         <ScrollView 
           contentContainerStyle={styles.newDashboardContent}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
         >
           {/* View All Leads Button */}
           <TouchableOpacity
@@ -885,55 +1014,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   const hasLeads = leads.length > 0;
   const hasMetaLeads = metaLeads.length > 0;
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    if (!session?.user?.id || !session?.user?.email) {
-      setRefreshing(false);
-      return;
-    }
-
-    try {
-      const userRole = await getUserRole(session.user.id, session.user.email);
-      
-      let leadsQuery = supabase
-        .from('leads')
-        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id')
-        .order('created_at', { ascending: false });
-
-      let metaQuery = supabase
-        .from('meta_ads')
-        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id')
-        .order('created_at', { ascending: false });
-
-      if (!canSeeAllLeads(userRole)) {
-        if (userRole === 'loan_officer') {
-          const teamMemberId = await getUserTeamMemberId(session.user.id, 'loan_officer');
-          if (teamMemberId) {
-            leadsQuery = leadsQuery.eq('lo_id', teamMemberId);
-            metaQuery = metaQuery.eq('lo_id', teamMemberId);
-          }
-        } else if (userRole === 'realtor') {
-          const teamMemberId = await getUserTeamMemberId(session.user.id, 'realtor');
-          if (teamMemberId) {
-            leadsQuery = leadsQuery.eq('realtor_id', teamMemberId);
-            metaQuery = metaQuery.eq('realtor_id', teamMemberId);
-          }
-        }
-      }
-
-      const { data: leadsData } = await leadsQuery;
-      const { data: metaData } = await metaQuery;
-
-      setLeads((leadsData || []) as Lead[]);
-      setMetaLeads((metaData || []) as MetaLead[]);
-      setDebugInfo(`leads rows: ${(leadsData || []).length} · meta_ads rows: ${(metaData || []).length}`);
-    } catch (e) {
-      console.error('Refresh error:', e);
-    } finally {
-      setRefreshing(false);
-    }
-  };
 
   return (
     <View style={styles.container}>
