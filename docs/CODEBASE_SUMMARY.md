@@ -1,8 +1,8 @@
 # CloseWithMario Mobile - Codebase Summary
 
-**Last Updated:** November 24, 2025  
+**Last Updated:** November 26, 2025  
 **EAS Account:** mecerrato1  
-**Latest Build:** iOS Production Build 3 (Nov 20, 2025)
+**Latest Build:** iOS Production Build 31 (v1.1.16, Nov 26, 2025)
 
 ---
 
@@ -538,12 +538,13 @@ npm start
 
 ### Current Limitations
 1. **No Lead Creation:** Cannot create new leads from mobile app
-2. **No Search/Filter:** All leads are displayed, no search or filtering capability
+2. ~~**No Search/Filter:**~~ ✅ RESOLVED - Search and filtering implemented (Nov 26)
 3. **Limited Pagination:** Only fetches 50 most recent leads per table
 4. **No Offline Support:** Requires active internet connection
-5. **No Push Notifications:** No real-time updates when new leads arrive
+5. **Callback Notifications:** Scheduled but not yet triggering push notifications
 6. **Image Asset Issue:** Logo image (CWMLogo.png) is not square (7099x5584), should be square for Android adaptive icon
 7. **Duplicate Dependencies:** Multiple copies of `expo-constants` exist in node_modules (requires cleanup)
+8. **Large File Size:** App.tsx is ~6250 lines (should be refactored into smaller components)
 
 ---
 
@@ -552,21 +553,24 @@ npm start
 ### High Priority
 1. ✅ **Lead Detail View:** COMPLETED - Full detail view with navigation
 2. ✅ **Pull to Refresh:** COMPLETED - Manual data refresh capability
-3. ✅ **Status Updates:** COMPLETED - Quick status chip selection
+3. ✅ **Status Updates:** COMPLETED - Status dropdown with modal picker
 4. ✅ **Activity Logging:** COMPLETED - Log calls, texts, emails, notes
-5. **Search & Filter:** Search by name, email, status, etc.
-6. **Pagination:** Load more leads as user scrolls (currently limited to 50)
-7. **Lead Creation/Editing:** Add forms to create and update leads
-8. **Fix Image Assets:** Create square logo for Android adaptive icon
-9. **Dependency Cleanup:** Resolve duplicate expo-constants packages
+5. ✅ **Search & Filter:** COMPLETED - Search by name, email, phone + status/LO filters
+6. ✅ **Team Management:** COMPLETED - Manage loan officers and realtors
+7. ✅ **Bilingual Support:** COMPLETED - Spanish text templates
+8. **Pagination:** Load more leads as user scrolls (currently limited to 50)
+9. **Lead Creation/Editing:** Add forms to create and update leads
+10. **Fix Image Assets:** Create square logo for Android adaptive icon
+11. **Dependency Cleanup:** Resolve duplicate expo-constants packages
+12. **Push Notifications:** Implement actual notifications for callbacks
 
 ### Medium Priority
-10. **Real-time Updates:** Use Supabase subscriptions for live data
-11. **Offline Support:** Cache data locally for offline viewing
-12. **Push Notifications:** Alert users of new leads
-13. **Lead Assignment:** Assign leads to team members from mobile
-14. **Advanced Filtering:** Filter by date range, campaign, platform
-15. **Export Functionality:** Export leads to CSV/PDF
+13. **Real-time Updates:** Use Supabase subscriptions for live data
+14. **Offline Support:** Cache data locally for offline viewing
+15. ✅ **Lead Assignment:** COMPLETED - LO assignment in detail view
+16. **Advanced Filtering:** Filter by date range, campaign, platform
+17. **Export Functionality:** Export leads to CSV/PDF
+18. **Component Refactoring:** Split App.tsx into smaller, reusable components
 
 ### Low Priority
 16. **Analytics Dashboard:** Charts and metrics (partially implemented)
@@ -596,21 +600,24 @@ npm start
 
 ## 📚 Key Files Reference
 
-### `App.tsx` (~5100 lines)
+### `App.tsx` (~6250 lines)
 Main application file containing:
 - All component definitions:
   - `AuthScreen` - Modernized login with Google OAuth
+  - `TeamManagementScreen` - Team member management (loan officers & realtors)
   - `Dashboard` - New dashboard view with stats and guide
-  - `LeadsScreen` - Leads list with tabs and pull-to-refresh
-  - `LeadDetailView` - Full lead detail with activity logging and text templates
+  - `LeadsScreen` - Leads list with tabs, filters, and pull-to-refresh
+  - `LeadDetailView` - Full lead detail with activity logging, text templates, and callback scheduling
   - `App` - Root component with session management
-- All TypeScript types (Lead, MetaLead, ActivityLog, etc.)
+- All TypeScript types (Lead, MetaLead, Activity, LoanOfficer, Realtor, etc.)
 - Authentication logic (email/password + Google OAuth)
 - Data fetching logic with RBAC filtering
 - Activity logging functionality
-- Text template modal with preview
-- All styles (~330+ style definitions)
-- Helper functions (formatStatus, getTimeAgo, etc.)
+- Text template modal with bilingual support (English/Spanish)
+- Callback scheduling with Expo Notifications
+- Team management (add/edit/delete loan officers and realtors)
+- All styles (~500+ style definitions)
+- Helper functions (formatStatus, getTimeAgo, matchesSearch, matchesLOFilter, etc.)
 
 ### `src/lib/supabase.ts` (13 lines)
 Supabase client initialization with environment variable validation.
@@ -622,12 +629,17 @@ RBAC utilities:
 - `canSeeAllLeads()` - Check if user is admin
 - Type definitions for UserRole
 
-### `src/lib/textTemplates.ts` (~91 lines)
-SMS text message templates:
+### `src/lib/textTemplates.ts` (~280 lines)
+SMS text message templates with bilingual support:
 - 4 pre-written templates (Initial Contact, Document Follow-up, Pre-approval Check-in, Stop Paying Rent)
-- Variable replacement system: `{fname}`, `{LO fullname}`, `{platform}`
+- **Bilingual support:** English and Spanish versions for all templates
+- Variable replacement system: `{fname}`, `{loFullname}`, `{loFname}`, `{loPhone}`, `{loEmail}`, `{platform}`
 - `formatPlatformName()` - Converts FB/IG to Facebook/Instagram (case-insensitive)
 - `fillTemplate()` - Replaces template variables with actual values
+- `getTemplateText()` - Returns English or Spanish version based on preference
+- `getTemplateName()` - Returns template name in selected language
+- **Auto-detection:** Automatically uses Spanish if lead's `preferred_language` is 'spanish'
+- **Manual override:** Language toggle in template modal for manual selection
 - Templates include friendly emojis and proper formatting
 
 ### `src/lib/types/leads.ts` (11 lines)
@@ -649,24 +661,46 @@ Environment variables for Supabase connection.
 
 ### Supabase Tables
 1. **`leads` table:**
-   - Columns: id, created_at, first_name, last_name, email, phone, status, loan_purpose, price, down_payment, credit_score, message, realtor_id
+   - Columns: id, created_at, first_name, last_name, email, phone, status, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id
    - Used for general lead management (website leads)
    - RBAC: Filtered by realtor_id for non-admin users
+   - LO assignment via lo_id foreign key
 
 2. **`meta_ads` table:**
-   - Columns: id, created_at, first_name, last_name, email, phone, status, platform, campaign_name, ad_id, ad_name, adset_id, adset_name, form_id, form_name, realtor_id
+   - Columns: id, created_at, first_name, last_name, email, phone, status, platform, campaign_name, ad_id, ad_name, adset_id, adset_name, form_id, form_name, lo_id, realtor_id, preferred_language, subject_address, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes
    - Used for Meta advertising platform leads
    - RBAC: Filtered by realtor_id for non-admin users
+   - LO assignment via lo_id foreign key
+   - Language preference for bilingual templates
 
 3. **`team_members` table:**
    - Used for RBAC role management
    - Columns: id, user_id, role, email
-   - Roles: 'admin' | 'realtor'
+   - Roles: 'super_admin' | 'loan_officer' | 'realtor' | 'buyer'
 
-4. **`activity_log` table:**
-   - Tracks all lead interactions
-   - Columns: id, created_at, lead_id, meta_lead_id, activity_type, note, user_id, user_email
+4. **`loan_officers` table:**
+   - Manages loan officer team members
+   - Columns: id, first_name, last_name, email, phone, active, lead_eligible, created_at
+   - lead_eligible: Determines if LO can receive auto-assigned leads
+
+5. **`realtors` table:**
+   - Manages realtor team members
+   - Columns: id, first_name, last_name, email, phone, active, created_at
+
+6. **`lead_activities` table:**
+   - Tracks interactions for website leads
+   - Columns: id, created_at, lead_id, activity_type, notes, created_by, user_email
    - Activity types: 'call', 'text', 'email', 'note'
+
+7. **`meta_ad_activities` table:**
+   - Tracks interactions for meta leads
+   - Columns: id, created_at, meta_ad_id, activity_type, notes, created_by, user_email
+   - Activity types: 'call', 'text', 'email', 'note'
+
+8. **`lead_callbacks` table:**
+   - Stores scheduled callback reminders
+   - Columns: id, created_at, lead_id, meta_ad_id, callback_time, note, user_id, completed
+   - Used with Expo Notifications for reminders
 
 ### Authentication
 - Uses Supabase Auth with email/password and Google OAuth
@@ -707,7 +741,94 @@ Environment variables for Supabase connection.
 
 ## 📅 Recent Changes (November 2025)
 
-### Major Features Added
+### November 26, 2025 - Major Update (v1.1.16, Build 31)
+
+#### New Features
+1. **Bilingual Text Templates** - Spanish language support
+   - Auto-detection based on lead's `preferred_language` field
+   - Manual language toggle (🇺🇸 English / 🇪🇸 Español) in template modal
+   - All 4 templates translated to Spanish with proper formatting
+   - Dynamic modal title based on selected language
+
+2. **Callback Scheduling** - Schedule reminders to call leads
+   - "Schedule Callback" button in lead detail view
+   - Date/time picker with default 2 hours from now
+   - Custom note field for callback context
+   - Integration with Expo Notifications
+   - Stores callbacks in `lead_callbacks` table
+
+3. **Team Management Screen** (Super Admin Only)
+   - Manage loan officers and realtors
+   - Add/edit/delete team members
+   - Toggle active status
+   - Lead eligibility toggle for loan officers
+   - Auto-assign toggle for automatic lead distribution
+   - Search functionality for team members
+   - Accessible via 👥 icon in header
+
+4. **Enhanced Status Management**
+   - Status dropdown (replaces horizontal chips)
+   - Current status badge in header area
+   - Cleaner UI with better organization
+   - Full-width dropdown for non-admin users
+   - Side-by-side status/LO dropdowns for admins
+
+5. **Advanced Filtering System**
+   - **Status filter:** Filter by any status (new, contacted, qualified, etc.)
+   - **LO filter:** Super admins can filter by assigned loan officer
+   - **Search filter:** Search by name, email, or phone
+   - **Unqualified handling:** Excluded from default "all" view
+   - Separate unqualified count card on dashboard
+   - All filters work together seamlessly
+
+6. **Smart Navigation**
+   - Navigation arrows respect ALL active filters
+   - Tab-aware navigation (combines meta + regular leads on "all" tab)
+   - Accurate lead count display (e.g., "3 of 27" for filtered view)
+   - Seamless switching between lead types when navigating
+   - Prevents navigation to unqualified leads by default
+
+7. **Ad Image Viewer**
+   - "View Ad" button for meta leads with ad images
+   - Full-screen modal image viewer
+   - Support for multiple ad campaigns:
+     - Florida Renter Ad
+     - Broward HPA Ad
+     - Condo Ad
+     - Green Acres Ad
+
+8. **Activity Enhancements**
+   - Automatic call logging when dialing
+   - Automatic text logging when sending SMS
+   - Automatic email logging when composing email
+   - Activity refresh after logging
+   - Delete activity button (super admin only)
+
+#### Bug Fixes
+- Fixed navigation showing all leads instead of filtered leads
+- Fixed lead count displaying total instead of filtered count
+- Fixed status dropdown width for non-admin users
+- Fixed navigation not working across different lead types on "all" tab
+- Fixed unqualified leads appearing in navigation despite being filtered
+
+#### UI/UX Improvements
+- Status picker modal with counts for each status
+- Language toggle with flag emojis (🇺🇸 🇪🇸)
+- Improved dropdown styling and spacing
+- Better visual hierarchy in lead detail view
+- Muted/grayed styling for unqualified count card
+- Cleaner status badge positioning
+
+#### Technical Improvements
+- Added `callbacks.ts` library for notification scheduling
+- Enhanced filter logic with `matchesSearch()` and `matchesLOFilter()` helpers
+- Tab-aware navigation with combined lead lists
+- Proper TypeScript typing for all new features
+- Optimized re-renders with proper state management
+
+### Earlier November 2025 Updates
+
+#### Major Features Added
 1. **Dashboard Screen** - New landing page with stats, guide, and recent leads
 2. **Lead Detail View** - Full lead information with next/previous navigation
 3. **Activity Logging** - Log calls, texts, emails, and notes with activity history
@@ -752,9 +873,11 @@ Environment variables for Supabase connection.
 - Corrected OAuth redirect URI configuration
 
 ### Build Information
-- **Latest iOS Build:** Build 3 (Production, Nov 20, 2025)
-- **Build Status:** Successful
+- **Latest iOS Build:** Build 31 (Production, Nov 26, 2025)
+- **App Version:** 1.1.16
+- **Build Status:** Successful - Submitted to App Store Connect
 - **Distribution:** App Store ready
+- **Processing:** Apple is processing the binary (5-10 minutes typical)
 
 ---
 
@@ -811,39 +934,54 @@ npm start
 ### Key Technologies
 - **Frontend:** React Native 0.81.5 + Expo SDK 54 + TypeScript
 - **Backend:** Supabase (PostgreSQL + Auth)
-- **Main File:** `App.tsx` (~5100 lines)
+- **Main File:** `App.tsx` (~6250 lines)
 - **Color Scheme:** Purple (#7C3AED) + Green (#10B981)
+- **Version:** 1.1.16 (Build 31)
 
 ### Main Components
 1. `AuthScreen` - Login with email/password and Google OAuth
-2. `Dashboard` - Stats, guide, and recent leads (initial view)
-3. `LeadsScreen` - Tabbed list view with pull-to-refresh
-4. `LeadDetailView` - Full lead details with activity logging and SMS templates
+2. `TeamManagementScreen` - Manage loan officers and realtors (super admin only)
+3. `Dashboard` - Stats, guide, and recent leads (initial view)
+4. `LeadsScreen` - Tabbed list view with search, filters, and pull-to-refresh
+5. `LeadDetailView` - Full lead details with activity logging, SMS templates, and callback scheduling
 
 ### Database Tables
-- `leads` - Website leads with realtor_id for RBAC
-- `meta_ads` - Meta advertising leads with realtor_id for RBAC
-- `team_members` - User roles (admin/realtor)
-- `activity_log` - Lead interaction history
+- `leads` - Website leads with lo_id and realtor_id for RBAC
+- `meta_ads` - Meta advertising leads with lo_id, realtor_id, and preferred_language
+- `team_members` - User roles (super_admin/loan_officer/realtor/buyer)
+- `loan_officers` - LO team members with lead_eligible flag
+- `realtors` - Realtor team members
+- `lead_activities` - Website lead interaction history
+- `meta_ad_activities` - Meta lead interaction history
+- `lead_callbacks` - Scheduled callback reminders
 
-### Current State
+### Current State (Nov 26, 2025)
 - ✅ Full CRUD for lead status and activities
-- ✅ RBAC with admin/realtor roles
+- ✅ RBAC with super_admin/loan_officer/realtor/buyer roles
 - ✅ Modern UI with brand colors
 - ✅ Google OAuth working
-- ✅ iOS Production Build 3 deployed
-- ✅ SMS text templates with auto-fill (Nov 24, 2025)
+- ✅ iOS Production Build 31 deployed (v1.1.16)
+- ✅ SMS text templates with bilingual support (English/Spanish)
+- ✅ Advanced filtering (status, LO, search)
+- ✅ Smart navigation (respects all filters, tab-aware)
+- ✅ Team management screen
+- ✅ Callback scheduling
+- ✅ Ad image viewer
 - ⚠️ Need to fix: Square logo for Android, duplicate dependencies
-- 🔜 Next: Search/filter, pagination, lead creation
+- 🔜 Next: Push notifications, pagination, lead creation, component refactoring
 
 ### Important Notes
-- All code in single `App.tsx` file (should be refactored)
+- All code in single `App.tsx` file (~6250 lines - should be refactored)
 - Deep link scheme: `com.closewithmario.mobile://auth/callback`
 - Supabase URL must have this redirect URL configured
-- RBAC filters leads by `realtor_id` for non-admin users
-- Activity logging writes to `activity_log` table
-- Text templates in `src/lib/textTemplates.ts` with 4 pre-written messages
-- Templates auto-fill: lead first name, LO full name, platform (FB→Facebook, IG→Instagram)
+- RBAC filters leads by `lo_id` or `realtor_id` for non-admin users
+- Activity logging writes to `lead_activities` or `meta_ad_activities` tables
+- Text templates in `src/lib/textTemplates.ts` with 4 bilingual messages
+- Templates auto-fill: {fname}, {loFullname}, {loFname}, {loPhone}, {loEmail}, {platform}
+- Spanish templates auto-selected if `preferred_language === 'spanish'`
+- Navigation respects status filter, LO filter, and search query
+- Unqualified leads excluded from default "all" view but accessible via filter
+- Tab-aware navigation combines meta + regular leads on "all" tab
 
 ---
 

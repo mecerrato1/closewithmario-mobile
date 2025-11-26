@@ -690,6 +690,7 @@ function LeadDetailView({
     try {
       const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
       const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
+      const leadTableName = isMeta ? 'meta_ads' : 'leads';
       
       const activityData = {
         [foreignKeyColumn]: record.id,
@@ -706,6 +707,17 @@ function LeadDetailView({
       if (error) {
         console.error('Error logging call activity:', error);
       } else {
+        // Update last_contact_date on the lead
+        const now = new Date().toISOString();
+        await supabase
+          .from(leadTableName)
+          .update({ last_contact_date: now })
+          .eq('id', record.id);
+        
+        // Update the lead in parent component state
+        const updatedLead = { ...record, last_contact_date: now };
+        onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
+        
         // Refresh activities to show the new log
         const { data } = await supabase
           .from(tableName)
@@ -762,6 +774,7 @@ function LeadDetailView({
     try {
       const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
       const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
+      const leadTableName = isMeta ? 'meta_ads' : 'leads';
       
       const activityData = {
         [foreignKeyColumn]: record.id,
@@ -778,6 +791,17 @@ function LeadDetailView({
       if (error) {
         console.error('Error logging text activity:', error);
       } else {
+        // Update last_contact_date on the lead
+        const now = new Date().toISOString();
+        await supabase
+          .from(leadTableName)
+          .update({ last_contact_date: now })
+          .eq('id', record.id);
+        
+        // Update the lead in parent component state
+        const updatedLead = { ...record, last_contact_date: now };
+        onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
+        
         // Refresh activities to show the new log
         const { data } = await supabase
           .from(tableName)
@@ -809,6 +833,7 @@ function LeadDetailView({
     try {
       const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
       const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
+      const leadTableName = isMeta ? 'meta_ads' : 'leads';
 
       const newActivity = {
         [foreignKeyColumn]: record.id,
@@ -825,6 +850,17 @@ function LeadDetailView({
         .single();
 
       if (data) {
+        // Update last_contact_date on the lead
+        const now = new Date().toISOString();
+        await supabase
+          .from(leadTableName)
+          .update({ last_contact_date: now })
+          .eq('id', record.id);
+        
+        // Update the lead in parent component state
+        const updatedLead = { ...record, last_contact_date: now };
+        onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
+        
         setActivities([data, ...activities]);
       }
     } catch (e) {
@@ -983,6 +1019,7 @@ function LeadDetailView({
       // Use correct table based on lead source
       const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
       const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
+      const leadTableName = isMeta ? 'meta_ads' : 'leads';
       
       const activityData = {
         [foreignKeyColumn]: record.id,
@@ -1002,6 +1039,17 @@ function LeadDetailView({
         console.error('Error saving activity:', error);
         alert('Failed to save activity. Please try again.');
       } else {
+        // Update last_contact_date on the lead
+        const now = new Date().toISOString();
+        await supabase
+          .from(leadTableName)
+          .update({ last_contact_date: now })
+          .eq('id', record.id);
+        
+        // Update the lead in parent component state
+        const updatedLead = { ...record, last_contact_date: now };
+        onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
+        
         setActivities([data, ...activities]);
         setTaskNote('');
       }
