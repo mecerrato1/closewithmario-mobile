@@ -1081,23 +1081,49 @@ function LeadDetailView({
               </View>
             </View>
           )}
-          <TouchableOpacity
-            style={styles.statusDropdownButton}
-            onPress={() => setShowStatusPicker(true)}
-          >
-            <View style={[
-              styles.statusDropdownBadge,
-              { backgroundColor: STATUS_COLOR_MAP[status || 'new']?.bg || '#F5F5F5' }
-            ]}>
-              <Text style={[
-                styles.statusDropdownBadgeText,
-                { color: STATUS_COLOR_MAP[status || 'new']?.text || '#666' }
+          
+          {/* Status and LO Assignment Row (for admins) or Full Width Status (for non-admins) */}
+          <View style={propUserRole === 'super_admin' ? styles.statusLORow : { marginTop: 0 }}>
+            <TouchableOpacity
+              style={[
+                styles.statusDropdownButton,
+                propUserRole === 'super_admin' && styles.statusDropdownButtonHalf,
+                propUserRole !== 'super_admin' && styles.statusDropdownButtonFull
+              ]}
+              onPress={() => setShowStatusPicker(true)}
+            >
+              <View style={[
+                styles.statusDropdownBadge,
+                { backgroundColor: STATUS_COLOR_MAP[status || 'new']?.bg || '#F5F5F5' }
               ]}>
-                {status ? formatStatus(status) : 'N/A'}
-              </Text>
-            </View>
-            <Text style={styles.statusDropdownArrow}>▼</Text>
-          </TouchableOpacity>
+                <Text style={[
+                  styles.statusDropdownBadgeText,
+                  { color: STATUS_COLOR_MAP[status || 'new']?.text || '#666' }
+                ]}>
+                  {status ? formatStatus(status) : 'N/A'}
+                </Text>
+              </View>
+              <Text style={styles.statusDropdownArrow}>▼</Text>
+            </TouchableOpacity>
+
+            {/* LO Assignment (Super Admin Only - Inline) */}
+            {propUserRole === 'super_admin' && (
+              <TouchableOpacity
+                style={styles.loDropdownButton}
+                onPress={() => setShowLOPicker(true)}
+                disabled={updatingLO}
+              >
+                <Text style={styles.loDropdownLabel}>👤 LO:</Text>
+                <Text style={styles.loDropdownValue} numberOfLines={1}>
+                  {record.lo_id 
+                    ? loanOfficers.find(lo => lo.id === record.lo_id)?.name || 'Unknown'
+                    : 'Unassigned'
+                  }
+                </Text>
+                <Text style={styles.statusDropdownArrow}>▼</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {/* Status Picker Modal */}
           <Modal
@@ -1208,29 +1234,9 @@ function LeadDetailView({
           {/* Divider */}
           <View style={styles.sectionDivider} />
 
-          {/* LO Assignment (Super Admin Only) */}
+          {/* LO Picker Modal (used by inline LO dropdown) */}
           {propUserRole === 'super_admin' && (
-            <>
-              <Text style={styles.sectionTitle}>👤 Assignment</Text>
-              <View style={styles.loAssignmentRow}>
-                <Text style={styles.loAssignmentLabel}>Loan Officer:</Text>
-                <TouchableOpacity
-                  style={styles.loAssignmentButton}
-                  onPress={() => setShowLOPicker(true)}
-                  disabled={updatingLO}
-                >
-                  <Text style={styles.loAssignmentValue}>
-                    {record.lo_id 
-                      ? loanOfficers.find(lo => lo.id === record.lo_id)?.name || 'Unknown'
-                      : 'Unassigned'
-                    }
-                  </Text>
-                  <Text style={styles.loAssignmentIcon}>▼</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* LO Picker Modal */}
-              <Modal
+            <Modal
                 visible={showLOPicker}
                 transparent={true}
                 animationType="fade"
@@ -1288,10 +1294,6 @@ function LeadDetailView({
                   </View>
                 </TouchableOpacity>
               </Modal>
-
-              {/* Divider */}
-              <View style={styles.sectionDivider} />
-            </>
           )}
 
           {/* Basic fields */}
@@ -2785,15 +2787,22 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const filteredLeads = leads.filter(matchesLOFilter);
     const filteredMetaLeads = metaLeads.filter(matchesLOFilter);
     
-    const totalLeads = filteredLeads.length + filteredMetaLeads.length;
-    const metaLeadsCount = filteredMetaLeads.length;
-    const organicLeadsCount = filteredLeads.length;
-    const newLeads = [...filteredLeads, ...filteredMetaLeads].filter(l => l.status === 'new').length;
-    const qualifiedLeads = [...filteredLeads, ...filteredMetaLeads].filter(l => l.status === 'qualified').length;
-    const closedLeads = [...filteredLeads, ...filteredMetaLeads].filter(l => l.status === 'closed').length;
+    // Filter out unqualified leads from default counts
+    const activeFilteredLeads = filteredLeads.filter(l => l.status !== 'unqualified');
+    const activeFilteredMetaLeads = filteredMetaLeads.filter(l => l.status !== 'unqualified');
     
-    // Get recent leads (last 5)
-    const allLeads = [...filteredMetaLeads.map(l => ({ ...l, source: 'meta' as const })), ...filteredLeads.map(l => ({ ...l, source: 'lead' as const }))];
+    const totalLeads = activeFilteredLeads.length + activeFilteredMetaLeads.length;
+    const metaLeadsCount = activeFilteredMetaLeads.length;
+    const organicLeadsCount = activeFilteredLeads.length;
+    const newLeads = [...activeFilteredLeads, ...activeFilteredMetaLeads].filter(l => l.status === 'new').length;
+    const qualifiedLeads = [...activeFilteredLeads, ...activeFilteredMetaLeads].filter(l => l.status === 'qualified').length;
+    const closedLeads = [...activeFilteredLeads, ...activeFilteredMetaLeads].filter(l => l.status === 'closed').length;
+    
+    // Separate count for unqualified leads
+    const unqualifiedLeads = [...filteredLeads, ...filteredMetaLeads].filter(l => l.status === 'unqualified').length;
+    
+    // Get recent leads (last 5) - exclude unqualified
+    const allLeads = [...activeFilteredMetaLeads.map(l => ({ ...l, source: 'meta' as const })), ...activeFilteredLeads.map(l => ({ ...l, source: 'lead' as const }))];
     const recentLeads = allLeads
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 5);
@@ -2949,6 +2958,17 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 </Text>
                 <Text style={styles.perfLabel}>Conversion</Text>
               </View>
+              <TouchableOpacity 
+                style={[styles.performanceCard, styles.performanceCardUnqualified]}
+                onPress={() => {
+                  setActiveTab('all');
+                  setSelectedStatusFilter('unqualified');
+                  setShowDashboard(false);
+                }}
+              >
+                <Text style={[styles.perfNumber, styles.perfNumberUnqualified]}>{unqualifiedLeads}</Text>
+                <Text style={[styles.perfLabel, styles.perfLabelUnqualified]}>Unqualified</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -3129,7 +3149,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             activeTab === 'meta' && styles.statNumberActive,
           ]}>
             {selectedStatusFilter === 'all' 
-              ? metaLeads.filter(matchesLOFilter).length 
+              ? metaLeads.filter(l => matchesLOFilter(l) && l.status !== 'unqualified').length 
               : metaLeads.filter(l => l.status === selectedStatusFilter && matchesLOFilter(l)).length
             }
           </Text>
@@ -3153,7 +3173,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             activeTab === 'leads' && styles.statNumberActive,
           ]}>
             {selectedStatusFilter === 'all' 
-              ? leads.filter(matchesLOFilter).length 
+              ? leads.filter(l => matchesLOFilter(l) && l.status !== 'unqualified').length 
               : leads.filter(l => l.status === selectedStatusFilter && matchesLOFilter(l)).length
             }
           </Text>
@@ -3177,7 +3197,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             activeTab === 'all' && styles.statNumberActive,
           ]}>
             {selectedStatusFilter === 'all' 
-              ? metaLeads.filter(matchesLOFilter).length + leads.filter(matchesLOFilter).length 
+              ? metaLeads.filter(l => matchesLOFilter(l) && l.status !== 'unqualified').length + leads.filter(l => matchesLOFilter(l) && l.status !== 'unqualified').length 
               : [...metaLeads, ...leads].filter(l => l.status === selectedStatusFilter && matchesLOFilter(l)).length
             }
           </Text>
@@ -3252,7 +3272,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               <Text style={styles.filterButtonLabel}>Status:</Text>
               <Text style={styles.filterButtonValue}>
                 {selectedStatusFilter === 'all' 
-                  ? `All (${[...leads, ...metaLeads].filter(matchesLOFilter).length})` 
+                  ? `All (${[...leads, ...metaLeads].filter(l => matchesLOFilter(l) && l.status !== 'unqualified').length})` 
                   : `${formatStatus(selectedStatusFilter)} (${[...leads, ...metaLeads].filter(l => l.status === selectedStatusFilter && matchesLOFilter(l)).length})`
                 }
               </Text>
@@ -3318,7 +3338,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                       <Text style={[
                         styles.statusPickerItemCount,
                         selectedStatusFilter === 'all' && styles.statusPickerItemCountActive,
-                      ]}>({[...leads, ...metaLeads].filter(matchesLOFilter).length})</Text>
+                      ]}>({[...leads, ...metaLeads].filter(l => matchesLOFilter(l) && l.status !== 'unqualified').length})</Text>
                     </View>
                     {selectedStatusFilter === 'all' && (
                       <Text style={styles.statusPickerCheck}>✓</Text>
@@ -3454,7 +3474,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           {activeTab === 'leads' && hasLeads && (
             <FlatList
               data={leads.filter(lead => 
-                (selectedStatusFilter === 'all' || lead.status === selectedStatusFilter) &&
+                (selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter) &&
                 matchesSearch(lead) &&
                 matchesLOFilter(lead)
               )}
@@ -3471,7 +3491,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           {activeTab === 'meta' && hasMetaLeads && (
             <FlatList
               data={metaLeads.filter(lead => 
-                (selectedStatusFilter === 'all' || lead.status === selectedStatusFilter) &&
+                (selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter) &&
                 matchesSearch(lead) &&
                 matchesLOFilter(lead)
               )}
@@ -3489,12 +3509,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             <FlatList
               data={[
                 ...metaLeads.filter(lead => 
-                  (selectedStatusFilter === 'all' || lead.status === selectedStatusFilter) &&
+                  (selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter) &&
                   matchesSearch(lead) &&
                   matchesLOFilter(lead)
                 ).map(lead => ({ ...lead, source: 'meta' as const })),
                 ...leads.filter(lead => 
-                  (selectedStatusFilter === 'all' || lead.status === selectedStatusFilter) &&
+                  (selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter) &&
                   matchesSearch(lead) &&
                   matchesLOFilter(lead)
                 ).map(lead => ({ ...lead, source: 'lead' as const })),
@@ -4726,6 +4746,11 @@ const styles = StyleSheet.create({
     color: '#7C3AED',
     fontWeight: '700',
   },
+  statusLORow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
   statusDropdownButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -4736,6 +4761,36 @@ const styles = StyleSheet.create({
     marginTop: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+  },
+  statusDropdownButtonHalf: {
+    flex: 1,
+    marginTop: 0,
+  },
+  statusDropdownButtonFull: {
+    width: '100%',
+  },
+  loDropdownButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  loDropdownLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748B',
+    marginRight: 8,
+  },
+  loDropdownValue: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1E293B',
   },
   statusDropdownBadge: {
     paddingHorizontal: 12,
@@ -5526,15 +5581,27 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
+  performanceCardUnqualified: {
+    backgroundColor: '#F9FAFB',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    opacity: 0.8,
+  },
   perfNumber: {
     fontSize: 24,
     fontWeight: '700',
     color: '#1E293B',
     marginBottom: 4,
   },
+  perfNumberUnqualified: {
+    color: '#9CA3AF',
+  },
   perfLabel: {
     fontSize: 12,
     color: '#6B7280',
+  },
+  perfLabelUnqualified: {
+    color: '#9CA3AF',
   },
   quickStatsCard: {
     backgroundColor: '#FFFFFF',
