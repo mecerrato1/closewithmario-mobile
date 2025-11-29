@@ -1,6 +1,6 @@
 // src/screens/LockScreen.tsx
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { useAppLock } from '../contexts/AppLockContext';
 
 type LockScreenProps = {
@@ -16,7 +16,11 @@ const LockScreen: React.FC<LockScreenProps> = ({ appName = 'Close With Mario' })
 
   return (
     <View style={styles.container}>
-      <Text style={styles.logoText}>{appName}</Text>
+      <Image 
+        source={require('../../assets/CWMLogo.png')} 
+        style={styles.logo}
+        resizeMode="contain"
+      />
       <Text style={styles.title}>App Locked</Text>
       <Text style={styles.subtitle}>Use Face ID or Touch ID to continue</Text>
 
@@ -32,38 +36,43 @@ export default LockScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#3b1154', // your purple base, tweak as needed
+    backgroundColor: '#E8DFF5', // matches AuthScreen background
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
-  logoText: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#ffffff',
-    marginBottom: 24,
+  logo: {
+    width: 200,
+    height: 80,
+    marginBottom: 32,
   },
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#ffffff',
+    color: '#1F2937',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,
-    color: '#e5e5e5',
+    color: '#6B7280',
     textAlign: 'center',
     marginBottom: 32,
   },
   button: {
-    backgroundColor: '#00c389', // your green accent, tweak if needed
+    backgroundColor: '#7C3AED',
     paddingHorizontal: 24,
-    paddingVertical: 14,
-    borderRadius: 999,
+    paddingVertical: 16,
+    borderRadius: 14,
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   buttonText: {
-    color: '#1b0430',
-    fontWeight: '600',
+    color: '#FFFFFF',
+    fontWeight: '700',
     fontSize: 16,
+    letterSpacing: 0.5,
   },
 });

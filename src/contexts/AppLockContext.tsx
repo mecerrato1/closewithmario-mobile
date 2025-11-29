@@ -42,6 +42,7 @@ export const AppLockProvider: React.FC<{ children: React.ReactNode }> = ({
       // - keep it locked and force re-login somewhere else.
       // For now, we just "unlock".
       setIsLocked(false);
+      lastBackgroundAtRef.current = null; // Clear timestamp to prevent re-locking
       return true;
     }
 
@@ -53,6 +54,7 @@ export const AppLockProvider: React.FC<{ children: React.ReactNode }> = ({
 
     if (result.success) {
       setIsLocked(false);
+      lastBackgroundAtRef.current = null; // Clear timestamp to prevent re-locking
       return true;
     }
 
@@ -73,6 +75,8 @@ export const AppLockProvider: React.FC<{ children: React.ReactNode }> = ({
           if (diffMinutes >= IDLE_MINUTES) {
             setIsLocked(true);
           }
+          // Clear the timestamp after checking so we don't re-check on subsequent state changes
+          lastBackgroundAtRef.current = null;
         }
       }
     };

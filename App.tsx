@@ -29,6 +29,8 @@ import { scheduleLeadCallback } from './src/lib/callbacks';
 import AuthScreen from './src/screens/AuthScreen';
 import { LeadDetailView } from './src/screens/LeadDetailScreen';
 import TeamManagementScreen from './src/screens/TeamManagementScreen';
+import { AppLockProvider, useAppLock } from './src/contexts/AppLockContext';
+import LockScreen from './src/screens/LockScreen';
 import { styles } from './src/styles/appStyles';
 
 import * as WebBrowser from 'expo-web-browser';
@@ -1435,23 +1437,31 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     </View>
   );
 }
-export default function App() {
+
+// Root app that knows about session + lock state
+function RootApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [notificationLead, setNotificationLead] = useState<{ id: string; source: 'lead' | 'meta' } | null>(null);
+  const { isLocked } = useAppLock();
 
-  // Check for existing session on mount
+  // Check for existing Supabase session on mount
   useEffect(() => {
     const initAuth = async () => {
-      const { data: { session: existingSession } } = await supabase.auth.getSession();
+      const {
+        data: { session: existingSession },
+      } = await supabase.auth.getSession();
+
       setSession(existingSession);
       setCheckingSession(false);
-      
+
       // Listen for auth changes
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((_event, newSession) => {
         setSession(newSession);
       });
-      
+
       return () => {
         subscription.unsubscribe();
       };
@@ -1462,13 +1472,21 @@ export default function App() {
 
   // Listen for notification taps
   useEffect(() => {
-    const subscription = Notifications.addNotificationResponseReceivedListener(response => {
-      const leadId = response.notification.request.content.data?.lead_id;
-      const leadSource = response.notification.request.content.data?.lead_source;
-      if (leadId && typeof leadId === 'string' && leadSource && (leadSource === 'lead' || leadSource === 'meta')) {
-        setNotificationLead({ id: leadId, source: leadSource });
-      }
-    });
+    const subscription =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        const leadId = response.notification.request.content.data?.lead_id;
+        const leadSource =
+          response.notification.request.content.data?.lead_source;
+
+        if (
+          leadId &&
+          typeof leadId === 'string' &&
+          leadSource &&
+          (leadSource === 'lead' || leadSource === 'meta')
+        ) {
+          setNotificationLead({ id: leadId, source: leadSource });
+        }
+      });
 
     return () => subscription.remove();
   }, []);
@@ -1482,10 +1500,22 @@ export default function App() {
     );
   }
 
+  // No Supabase session → show login
   if (!session) {
     return <AuthScreen onAuth={(sess) => setSession(sess)} />;
   }
 
+  // Have session but app is locked → show Face ID lock screen
+  if (isLocked) {
+    return (
+      <>
+        <LockScreen />
+        <StatusBar style="auto" />
+      </>
+    );
+  }
+
+  // Have session and app is unlocked → show main Leads screen
   return (
     <>
       <LeadsScreen
@@ -1499,5 +1529,14 @@ export default function App() {
       />
       <StatusBar style="auto" />
     </>
+  );
+}
+
+// Wrap everything in AppLockProvider so lock state is available globally
+export default function App() {
+  return (
+    <AppLockProvider>
+      <RootApp />
+    </AppLockProvider>
   );
 }

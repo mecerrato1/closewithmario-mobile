@@ -2,14 +2,15 @@
 
 **Last Updated:** November 29, 2025  
 **EAS Account:** mecerrato1  
-**Latest Build:** iOS Production Build 31 (v1.1.16, Nov 26, 2025)  
-**Major Refactor:** November 26, 2025 - Modular architecture with separated screens and styles
+**Latest Build:** iOS Production Build 36 (v1.1.21, Nov 29, 2025)  
+**Major Refactor:** November 26, 2025 - Modular architecture with separated screens and styles  
+**Security Update:** November 29, 2025 - Face ID/Touch ID biometric authentication
 
 ---
 
 ## 📋 Project Overview
 
-**CloseWithMario Mobile** is a React Native mobile application built with Expo that provides a comprehensive lead management system with a modern dashboard, lead tracking, status management, and activity logging. The app features email/password and Google OAuth authentication, displays leads from two sources (`leads` and `meta_ads` tables), and includes role-based access control (RBAC) for team management.
+**CloseWithMario Mobile** is a React Native mobile application built with Expo that provides a comprehensive lead management system with a modern dashboard, lead tracking, status management, and activity logging. The app features email/password and Google OAuth authentication with **Face ID/Touch ID biometric security**, displays leads from two sources (`leads` and `meta_ads` tables), and includes role-based access control (RBAC) for team management.
 
 ---
 
@@ -26,8 +27,10 @@
 ```json
 {
   "@supabase/supabase-js": "^2.84.0",
+  "@react-native-async-storage/async-storage": "^2.1.0",
   "expo": "~54.0.25",
   "expo-auth-session": "~7.0.9",
+  "expo-local-authentication": "~15.0.3",
   "expo-status-bar": "~3.0.8",
   "expo-web-browser": "~15.0.9",
   "react": "19.1.0",
@@ -47,9 +50,12 @@ closewithmario-mobile/
 ├── package.json                     # Dependencies and scripts
 ├── .env                             # Environment variables (Supabase credentials)
 ├── src/
+│   ├── contexts/                    # ✨ NEW - React contexts
+│   │   └── AppLockContext.tsx      # Biometric authentication context (~112 lines)
 │   ├── screens/                     # ✨ NEW - Screen components
 │   │   ├── AuthScreen.tsx          # Login/signup screen with OAuth (~440 lines)
 │   │   ├── LeadDetailScreen.tsx    # Lead detail view with activities (~1540 lines)
+│   │   ├── LockScreen.tsx          # ✨ Face ID/Touch ID lock screen (~79 lines)
 │   │   └── TeamManagementScreen.tsx # Team management for admins (~490 lines)
 │   ├── styles/                      # ✨ NEW - Centralized styles
 │   │   └── appStyles.ts            # All app styles in one place (~2120 lines)
@@ -90,11 +96,19 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ### Supabase Client (`src/lib/supabase.ts`)
 ```typescript
 import { createClient } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    storage: AsyncStorage,
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+  },
+});
 ```
 
 ---
@@ -169,14 +183,21 @@ type UserRole = 'admin' | 'realtor' | null;
 
 ```
 App (Root)
-├── AuthScreen (when not authenticated)
-│   ├── Logo container with shadow
-│   ├── Email/Password inputs (modern card design)
-│   ├── Sign In / Sign Up toggle
-│   ├── Google OAuth button
-│   └── Authentication handling
-│
-└── LeadsScreen (when authenticated)
+├── AppLockProvider (Biometric Authentication Context)
+│   └── RootApp
+│       ├── LockScreen (when app is locked)
+│       │   ├── Close With Mario logo
+│       │   ├── "App Locked" message
+│       │   └── "Unlock with Face ID" button
+│       │
+│       ├── AuthScreen (when not authenticated)
+│       │   ├── Logo container with shadow
+│       │   ├── Email/Password inputs (modern card design)
+│       │   ├── Sign In / Sign Up toggle
+│       │   ├── Google OAuth button
+│       │   └── Authentication handling
+│       │
+│       └── LeadsScreen (when authenticated and unlocked)
     ├── Dashboard View (initial screen)
     │   ├── Header (purple gradient)
     │   ├── Stats Grid (4 cards: Total, New, Qualified, Closed)
@@ -213,13 +234,20 @@ App (Root)
 1. **Initial Load:**
    - Check for existing Supabase session
    - Show loading spinner while checking
+   - Initialize biometric authentication context
 
-2. **No Session:**
+2. **App Lock Check (if session exists):**
+   - Check if app was backgrounded for 10+ minutes
+   - If locked, display `LockScreen`
+   - User must authenticate with Face ID/Touch ID
+   - Falls back to login if biometrics unavailable
+
+3. **No Session:**
    - Display `AuthScreen` (modernized login)
    - User can sign in with email/password or Google OAuth
-   - On successful auth, session is set
+   - On successful auth, session is set and app is unlocked
 
-3. **Active Session:**
+4. **Active Session (Unlocked):**
    - Fetch user role (admin/realtor) from `team_members` table
    - Apply RBAC filtering (realtors see only their leads)
    - Display `Dashboard` (initial view)
@@ -252,11 +280,13 @@ App (Root)
 ### Features
 - Email/password authentication via Supabase Auth
 - **Google OAuth** authentication with deep linking
-- Sign in and sign up functionality
-- Session persistence
+- **Face ID / Touch ID** biometric authentication for app access
+- Session persistence with AsyncStorage
 - Auth state change listener
 - Sign out capability
 - Modern, card-based login UI with purple branding
+- **Auto-lock after 10 minutes** of app being backgrounded
+- Graceful fallback when biometrics unavailable
 
 ### Implementation
 ```typescript
@@ -296,6 +326,24 @@ const { data, error } = await supabase.auth.signInWithOAuth({
     skipBrowserRedirect: false,
   },
 });
+```
+
+### Biometric Authentication (`expo-local-authentication`)
+```typescript
+// Check for biometric support
+const hasHardware = await LocalAuthentication.hasHardwareAsync();
+const supported = await LocalAuthentication.supportedAuthenticationTypesAsync();
+
+// Prompt for authentication
+const result = await LocalAuthentication.authenticateAsync({
+  promptMessage: 'Unlock Close With Mario',
+  cancelLabel: 'Cancel',
+  disableDeviceFallback: false,
+});
+
+// Auto-lock after idle period
+// Locks after 10 minutes of being backgrounded
+// Uses AppState API to track background/foreground transitions
 ```
 
 ### OAuth Configuration
@@ -588,7 +636,7 @@ npm start
 16. **Analytics Dashboard:** Charts and metrics (partially implemented)
 17. **Dark Mode:** Theme switching
 18. **Multi-language Support:** Internationalization
-19. **Biometric Auth:** Face ID / Touch ID login
+19. ✅ **Biometric Auth:** COMPLETED - Face ID / Touch ID with auto-lock
 20. **Lead Notes:** Add persistent notes to leads (separate from activity log)
 
 ---
@@ -626,13 +674,14 @@ Main application orchestrator containing:
 - State management for leads, filters, and UI
 - Imports modular screens and utilities
 
-### `src/screens/AuthScreen.tsx` (~440 lines) ✨ NEW
+### `src/screens/AuthScreen.tsx` (~440 lines)
 Dedicated authentication screen:
 - Email/password login and signup
 - Google OAuth integration with deep linking
 - Modern card-based UI with purple branding
 - Loading and error states
 - Keyboard-aware view
+- Session persistence with AsyncStorage
 
 ### `src/screens/LeadDetailScreen.tsx` (~1540 lines) ✨ NEW
 Comprehensive lead detail view:
@@ -676,8 +725,29 @@ Lead-related helper functions and constants:
 - `formatStatus()` - Format status for display
 - `getTimeAgo()` - Human-readable time formatting
 
-### `src/lib/supabase.ts` (13 lines)
-Supabase client initialization with environment variable validation.
+### `src/lib/supabase.ts` (~20 lines)
+Supabase client initialization with:
+- Environment variable validation
+- AsyncStorage for session persistence
+- Auto-refresh token configuration
+- Biometric-friendly session management
+
+### `src/contexts/AppLockContext.tsx` (~112 lines) ✨ NEW
+Biometric authentication context:
+- `isLocked` state management
+- `requireUnlock()` - Triggers Face ID/Touch ID prompt
+- `enableLock()` / `disableLock()` - Manual lock control
+- AppState tracking for auto-lock after 10 minutes idle
+- Hardware capability detection
+- Graceful fallback for devices without biometrics
+
+### `src/screens/LockScreen.tsx` (~79 lines) ✨ NEW
+Biometric lock screen UI:
+- Close With Mario logo display
+- "App Locked" messaging
+- "Unlock with Face ID" button
+- Matches app's purple branding
+- Integrates with AppLockContext
 
 ### `src/lib/roles.ts` (~100 lines)
 RBAC utilities:
@@ -858,8 +928,31 @@ The codebase underwent a massive refactoring to improve maintainability, readabi
 
 ## 📅 Recent Changes (November 2025)
 
-### November 29, 2025 - Dashboard Enhancement
-1. **Pull-to-Refresh on Dashboard** - Added pull-to-refresh to dashboard view
+### November 29, 2025 - Security & Infrastructure Updates (v1.1.21, Build 36)
+
+#### 🔒 Biometric Authentication (Face ID / Touch ID)
+1. **App Lock System** - Secure app access with biometrics
+   - Face ID and Touch ID support via `expo-local-authentication`
+   - Auto-lock after 10 minutes of app being backgrounded
+   - Manual lock/unlock capability via `AppLockContext`
+   - Graceful fallback for devices without biometric hardware
+   - Lock screen UI with Close With Mario branding
+   - Seamless integration with existing auth flow
+
+2. **Session Persistence Enhancement**
+   - Added AsyncStorage integration to Supabase client
+   - Persistent sessions across app restarts
+   - Auto-refresh token configuration
+   - Better session management for mobile environment
+
+3. **App Architecture Updates**
+   - New `AppLockProvider` context wrapping entire app
+   - `RootApp` component for session and lock state management
+   - `LockScreen` component for biometric prompt UI
+   - AppState tracking for background/foreground transitions
+
+#### 📊 Dashboard Enhancement
+4. **Pull-to-Refresh on Dashboard** - Added pull-to-refresh to dashboard view
    - Updates lead eligibility status in real-time
    - Refreshes stats and recent leads
    - Consistent with leads list refresh behavior
@@ -1005,11 +1098,11 @@ The codebase underwent a massive refactoring to improve maintainability, readabi
 - Corrected OAuth redirect URI configuration
 
 ### Build Information
-- **Latest iOS Build:** Build 31 (Production, Nov 26, 2025)
-- **App Version:** 1.1.16
-- **Build Status:** Successful - Submitted to App Store Connect
+- **Latest iOS Build:** Build 36 (Production, Nov 29, 2025)
+- **App Version:** 1.1.21
+- **Build Status:** Successful
 - **Distribution:** App Store ready
-- **Processing:** Apple is processing the binary (5-10 minutes typical)
+- **New Features:** Face ID/Touch ID biometric authentication
 
 ---
 
@@ -1066,16 +1159,18 @@ npm start
 ### Key Technologies
 - **Frontend:** React Native 0.81.5 + Expo SDK 54 + TypeScript
 - **Backend:** Supabase (PostgreSQL + Auth)
-- **Main File:** `App.tsx` (~6250 lines)
+- **Security:** Face ID/Touch ID biometric authentication
+- **Main File:** `App.tsx` (~1500 lines - refactored)
 - **Color Scheme:** Purple (#7C3AED) + Green (#10B981)
-- **Version:** 1.1.16 (Build 31)
+- **Version:** 1.1.21 (Build 36)
 
 ### Main Components
-1. `AuthScreen` - Login with email/password and Google OAuth
-2. `TeamManagementScreen` - Manage loan officers and realtors (super admin only)
-3. `Dashboard` - Stats, guide, and recent leads (initial view)
-4. `LeadsScreen` - Tabbed list view with search, filters, and pull-to-refresh
-5. `LeadDetailView` - Full lead details with activity logging, SMS templates, and callback scheduling
+1. `LockScreen` - Face ID/Touch ID biometric authentication (NEW)
+2. `AuthScreen` - Login with email/password and Google OAuth
+3. `TeamManagementScreen` - Manage loan officers and realtors (super admin only)
+4. `Dashboard` - Stats, guide, and recent leads (initial view)
+5. `LeadsScreen` - Tabbed list view with search, filters, and pull-to-refresh
+6. `LeadDetailView` - Full lead details with activity logging, SMS templates, and callback scheduling
 
 ### Database Tables
 - `leads` - Website leads with lo_id and realtor_id for RBAC
@@ -1087,25 +1182,31 @@ npm start
 - `meta_ad_activities` - Meta lead interaction history
 - `lead_callbacks` - Scheduled callback reminders
 
-### Current State (Nov 26, 2025)
+### Current State (Nov 29, 2025)
 - ✅ Full CRUD for lead status and activities
 - ✅ RBAC with super_admin/loan_officer/realtor/buyer roles
 - ✅ Modern UI with brand colors
 - ✅ Google OAuth working
-- ✅ iOS Production Build 31 deployed (v1.1.16)
+- ✅ **Face ID/Touch ID biometric authentication (NEW)**
+- ✅ **Auto-lock after 10 minutes idle (NEW)**
+- ✅ Session persistence with AsyncStorage (NEW)
+- ✅ iOS Production Build 36 deployed (v1.1.21)
 - ✅ SMS text templates with bilingual support (English/Spanish)
 - ✅ Advanced filtering (status, LO, search)
 - ✅ Smart navigation (respects all filters, tab-aware)
 - ✅ Team management screen
 - ✅ Callback scheduling
 - ✅ Ad image viewer
+- ✅ Modular architecture (refactored from 6250 to 1500 lines)
 - ⚠️ Need to fix: Square logo for Android, duplicate dependencies
-- 🔜 Next: Push notifications, pagination, lead creation, component refactoring
+- 🔜 Next: Push notifications, pagination, lead creation
 
 ### Important Notes
-- All code in single `App.tsx` file (~6250 lines - should be refactored)
+- Modular architecture with separated screens (~1500 line main file)
+- **Face ID/Touch ID required** after 10 minutes of being backgrounded
 - Deep link scheme: `com.closewithmario.mobile://auth/callback`
 - Supabase URL must have this redirect URL configured
+- AsyncStorage used for session persistence
 - RBAC filters leads by `lo_id` or `realtor_id` for non-admin users
 - Activity logging writes to `lead_activities` or `meta_ad_activities` tables
 - Text templates in `src/lib/textTemplates.ts` with 4 bilingual messages
