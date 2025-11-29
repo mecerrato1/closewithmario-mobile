@@ -16,6 +16,7 @@ import {
   RefreshControl,
   Modal,
 } from 'react-native';
+import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './src/lib/supabase';
 import { getUserRole, getUserTeamMemberId, canSeeAllLeads, type UserRole } from './src/lib/roles';
@@ -463,62 +464,90 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const alert = getLeadAlert(item);
     const borderColor = alert ? alert.color : '#7C3AED';
 
+    // Right-side swipe actions for website leads
+    const renderRightActions = () => (
+      <View style={styles.swipeActionsContainer}>
+        {/* Mark contacted */}
+        <TouchableOpacity
+          style={[styles.swipeActionButton, styles.swipeActionContacted]}
+          onPress={() => handleStatusChange('lead', item.id, 'contacted')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.swipeActionText}>Contacted</Text>
+        </TouchableOpacity>
+
+        {/* Mark unqualified */}
+        <TouchableOpacity
+          style={[styles.swipeActionButton, styles.swipeActionUnqualified]}
+          onPress={() => handleStatusChange('lead', item.id, 'unqualified')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.swipeActionText}>Unqualified</Text>
+        </TouchableOpacity>
+      </View>
+    );
+
     return (
-      <TouchableOpacity
-        style={[styles.leadCard, { borderLeftColor: borderColor }]}
-        onPress={() =>
-          setSelectedLead({ source: 'lead', id: item.id })
-        }
-        activeOpacity={0.7}
+      <Swipeable
+        renderRightActions={renderRightActions}
+        overshootRight={false}
       >
-        <View style={styles.leadHeader}>
-          <Text style={styles.leadName}>{fullName}</Text>
-          <View style={styles.leadSourceBadge}>
-            <Text style={styles.leadSourceText}>🌐 Web</Text>
+        <TouchableOpacity
+          style={[styles.leadCard, { borderLeftColor: borderColor }]}
+          onPress={() =>
+            setSelectedLead({ source: 'lead', id: item.id })
+          }
+          activeOpacity={0.7}
+        >
+          <View style={styles.leadHeader}>
+            <Text style={styles.leadName}>{fullName}</Text>
+            <View style={styles.leadSourceBadge}>
+              <Text style={styles.leadSourceText}>🌐 Web</Text>
+            </View>
           </View>
-        </View>
-        {alert && (
-          <View style={[styles.attentionBadge, { backgroundColor: alert.color }]}>
-            <Text style={styles.attentionBadgeText}>⚠️ {alert.label}</Text>
-          </View>
-        )}
-        <View style={[
-          styles.statusBadge,
-          { backgroundColor: statusColors.bg, borderColor: statusColors.border }
-        ]}>
-          <Text style={[styles.statusBadgeText, { color: statusColors.text }]}>
-            {statusDisplay}
-          </Text>
-        </View>
-        {item.email && (
-          <View style={styles.leadContactRow}>
-            <Text style={styles.leadContactIcon}>📧</Text>
-            <Text style={styles.leadContact} numberOfLines={1}>{item.email}</Text>
-          </View>
-        )}
-        {item.phone && (
-          <View style={styles.leadContactRow}>
-            <Text style={styles.leadContactIcon}>📞</Text>
-            <Text style={styles.leadContact} numberOfLines={1}>{formatPhoneNumber(item.phone)}</Text>
-          </View>
-        )}
-        {userRole === 'super_admin' && item.lo_id && (
-          <View style={styles.leadLORow}>
-            <Text style={styles.leadLOIcon}>👤</Text>
-            <Text style={styles.leadLOText} numberOfLines={1}>
-              {loanOfficers.find(lo => lo.id === item.lo_id)?.name || 'Unknown LO'}
+          {alert && (
+            <View style={[styles.attentionBadge, { backgroundColor: alert.color }]}>
+              <Text style={styles.attentionBadgeText}>⚠️ {alert.label}</Text>
+            </View>
+          )}
+          <View style={[
+            styles.statusBadge,
+            { backgroundColor: statusColors.bg, borderColor: statusColors.border }
+          ]}>
+            <Text style={[styles.statusBadgeText, { color: statusColors.text }]}>
+              {statusDisplay}
             </Text>
           </View>
-        )}
-        <Text style={styles.leadTimestamp}>
-          {new Date(item.created_at).toLocaleDateString('en-US', { 
-            month: 'short', 
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          })}
-        </Text>
-      </TouchableOpacity>
+          {item.email && (
+            <View style={styles.leadContactRow}>
+              <Text style={styles.leadContactIcon}>📧</Text>
+              <Text style={styles.leadContact} numberOfLines={1}>{item.email}</Text>
+            </View>
+          )}
+          {item.phone && (
+            <View style={styles.leadContactRow}>
+              <Text style={styles.leadContactIcon}>📞</Text>
+              <Text style={styles.leadContact} numberOfLines={1}>{formatPhoneNumber(item.phone)}</Text>
+            </View>
+          )}
+          {userRole === 'super_admin' && item.lo_id && (
+            <View style={styles.leadLORow}>
+              <Text style={styles.leadLOIcon}>👤</Text>
+              <Text style={styles.leadLOText} numberOfLines={1}>
+                {loanOfficers.find(lo => lo.id === item.lo_id)?.name || 'Unknown LO'}
+              </Text>
+            </View>
+          )}
+          <Text style={styles.leadTimestamp}>
+            {new Date(item.created_at).toLocaleDateString('en-US', { 
+              month: 'short', 
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </Text>
+        </TouchableOpacity>
+      </Swipeable>
     );
   };
 
@@ -527,45 +556,38 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       [item.first_name, item.last_name].filter(Boolean).join(' ') ||
       '(No name)';
     const status = item.status ? formatStatus(item.status) : 'No status';
-    const emailOrPhone = item.email || item.phone || 'No contact info';
     const platform = item.platform || 'Facebook';
     const campaign = item.campaign_name || '';
     const alert = getLeadAlert(item);
     const borderColor = alert ? alert.color : '#7C3AED';
+    const statusColors =
+      STATUS_COLOR_MAP[item.status || 'new'] || STATUS_COLOR_MAP['new'];
 
-    // Get platform badge component
     const getPlatformBadge = (platform: string) => {
       const platformLower = platform.toLowerCase();
-      
+
       let badgeText = 'FB';
       let badgeColor = '#1877F2'; // Facebook blue
       let badgeBg = '#E7F3FF';
-      
-      // Check for Instagram (ig, instagram, etc.)
+
       if (platformLower.includes('instagram') || platformLower.includes('ig')) {
         badgeText = 'IG';
-        badgeColor = '#E4405F'; // Instagram pink
+        badgeColor = '#E4405F';
         badgeBg = '#FFE8ED';
-      }
-      // Check for Facebook (fb, facebook, etc.)
-      else if (platformLower.includes('facebook') || platformLower.includes('fb')) {
+      } else if (platformLower.includes('facebook') || platformLower.includes('fb')) {
         badgeText = 'FB';
         badgeColor = '#1877F2';
         badgeBg = '#E7F3FF';
-      }
-      // Check for Messenger
-      else if (platformLower.includes('messenger')) {
+      } else if (platformLower.includes('messenger')) {
         badgeText = 'MSG';
         badgeColor = '#0084FF';
         badgeBg = '#E5F2FF';
-      }
-      // Check for WhatsApp
-      else if (platformLower.includes('whatsapp')) {
+      } else if (platformLower.includes('whatsapp')) {
         badgeText = 'WA';
         badgeColor = '#25D366';
         badgeBg = '#E8F8EF';
       }
-      
+
       return (
         <View style={[styles.platformBadge, { backgroundColor: badgeBg }]}>
           <Text style={[styles.platformBadgeText, { color: badgeColor }]}>
@@ -575,68 +597,92 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       );
     };
 
-    const statusColors = STATUS_COLOR_MAP[item.status || 'new'] || STATUS_COLOR_MAP['new'];
+    // Right-side swipe actions for meta leads
+    const renderRightActions = () => (
+      <View style={styles.swipeActionsContainer}>
+        <TouchableOpacity
+          style={[styles.swipeActionButton, styles.swipeActionContacted]}
+          onPress={() => handleStatusChange('meta', item.id, 'contacted')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.swipeActionText}>Contacted</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.swipeActionButton, styles.swipeActionUnqualified]}
+          onPress={() => handleStatusChange('meta', item.id, 'unqualified')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.swipeActionText}>Unqualified</Text>
+        </TouchableOpacity>
+      </View>
+    );
 
     return (
-      <TouchableOpacity
-        style={[styles.leadCard, { borderLeftColor: borderColor }]}
-        onPress={() =>
-          setSelectedLead({ source: 'meta', id: item.id })
-        }
-        activeOpacity={0.7}
+      <Swipeable
+        renderRightActions={renderRightActions}
+        overshootRight={false}
       >
-        <View style={styles.leadHeader}>
-          <Text style={styles.leadName}>{fullName}</Text>
-          {getPlatformBadge(platform)}
-        </View>
-        {alert && (
-          <View style={[styles.attentionBadge, { backgroundColor: alert.color }]}>
-            <Text style={styles.attentionBadgeText}>⚠️ {alert.label}</Text>
+        <TouchableOpacity
+          style={[styles.leadCard, { borderLeftColor: borderColor }]}
+          onPress={() =>
+            setSelectedLead({ source: 'meta', id: item.id })
+          }
+          activeOpacity={0.7}
+        >
+          <View style={styles.leadHeader}>
+            <Text style={styles.leadName}>{fullName}</Text>
+            {getPlatformBadge(platform)}
           </View>
-        )}
-        <View style={[
-          styles.statusBadge,
-          { backgroundColor: statusColors.bg, borderColor: statusColors.border }
-        ]}>
-          <Text style={[styles.statusBadgeText, { color: statusColors.text }]}>
-            {status}
-          </Text>
-        </View>
-        {campaign ? (
-          <View style={styles.campaignRow}>
-            <Text style={styles.campaignIcon}>📢</Text>
-            <Text style={styles.leadCampaign} numberOfLines={1}>{campaign}</Text>
-          </View>
-        ) : null}
-        {item.email && (
-          <View style={styles.leadContactRow}>
-            <Text style={styles.leadContactIcon}>📧</Text>
-            <Text style={styles.leadContact} numberOfLines={1}>{item.email}</Text>
-          </View>
-        )}
-        {item.phone && (
-          <View style={styles.leadContactRow}>
-            <Text style={styles.leadContactIcon}>📞</Text>
-            <Text style={styles.leadContact} numberOfLines={1}>{formatPhoneNumber(item.phone)}</Text>
-          </View>
-        )}
-        {userRole === 'super_admin' && item.lo_id && (
-          <View style={styles.leadLORow}>
-            <Text style={styles.leadLOIcon}>👤</Text>
-            <Text style={styles.leadLOText} numberOfLines={1}>
-              {loanOfficers.find(lo => lo.id === item.lo_id)?.name || 'Unknown LO'}
+          {alert && (
+            <View style={[styles.attentionBadge, { backgroundColor: alert.color }]}>
+              <Text style={styles.attentionBadgeText}>⚠️ {alert.label}</Text>
+            </View>
+          )}
+          <View style={[
+            styles.statusBadge,
+            { backgroundColor: statusColors.bg, borderColor: statusColors.border }
+          ]}>
+            <Text style={[styles.statusBadgeText, { color: statusColors.text }]}>
+              {status}
             </Text>
           </View>
-        )}
-        <Text style={styles.leadTimestamp}>
-          {new Date(item.created_at).toLocaleDateString('en-US', { 
-            month: 'short', 
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          })}
-        </Text>
-      </TouchableOpacity>
+          {campaign ? (
+            <View style={styles.campaignRow}>
+              <Text style={styles.campaignIcon}>📢</Text>
+              <Text style={styles.leadCampaign} numberOfLines={1}>{campaign}</Text>
+            </View>
+          ) : null}
+          {item.email && (
+            <View style={styles.leadContactRow}>
+              <Text style={styles.leadContactIcon}>📧</Text>
+              <Text style={styles.leadContact} numberOfLines={1}>{item.email}</Text>
+            </View>
+          )}
+          {item.phone && (
+            <View style={styles.leadContactRow}>
+              <Text style={styles.leadContactIcon}>📞</Text>
+              <Text style={styles.leadContact} numberOfLines={1}>{formatPhoneNumber(item.phone)}</Text>
+            </View>
+          )}
+          {userRole === 'super_admin' && item.lo_id && (
+            <View style={styles.leadLORow}>
+              <Text style={styles.leadLOIcon}>👤</Text>
+              <Text style={styles.leadLOText} numberOfLines={1}>
+                {loanOfficers.find(lo => lo.id === item.lo_id)?.name || 'Unknown LO'}
+              </Text>
+            </View>
+          )}
+          <Text style={styles.leadTimestamp}>
+            {new Date(item.created_at).toLocaleDateString('en-US', { 
+              month: 'short', 
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}
+          </Text>
+        </TouchableOpacity>
+      </Swipeable>
     );
   };
 
@@ -1535,8 +1581,10 @@ function RootApp() {
 // Wrap everything in AppLockProvider so lock state is available globally
 export default function App() {
   return (
-    <AppLockProvider>
-      <RootApp />
-    </AppLockProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AppLockProvider>
+        <RootApp />
+      </AppLockProvider>
+    </GestureHandlerRootView>
   );
 }

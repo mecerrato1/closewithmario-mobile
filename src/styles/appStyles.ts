@@ -2116,4 +2116,74 @@ export const styles = StyleSheet.create({
     marginBottom: 4,
     fontStyle: 'italic',
   },
+  // Swipe action styles
+  swipeActionsContainer: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    justifyContent: 'flex-end',
+    marginVertical: 8,
+  },
+  swipeActionButton: {
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    marginLeft: 8,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  swipeActionContacted: {
+    backgroundColor: '#3B82F6', // blue
+  },
+  swipeActionUnqualified: {
+    backgroundColor: '#EF4444', // red
+  },
+  swipeActionText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  // Voice note styles
+  voiceNoteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  voiceNoteRecordButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: '#EEF2FF', // soft purple
+    marginRight: 8,
+  },
+  voiceNoteRecordButtonActive: {
+    backgroundColor: '#F87171', // red-ish while recording
+  },
+  voiceNoteRecordButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4C1D95',
+  },
+  voiceNoteHint: {
+    flex: 1,
+    fontSize: 11,
+    color: '#64748B',
+  },
+  voiceNoteButton: {
+    marginTop: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#EEF2FF',
+  },
+  voiceNoteButtonActive: {
+    backgroundColor: '#E0E7FF',
+  },
+  voiceNoteButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#4F46E5',
+  },
 });

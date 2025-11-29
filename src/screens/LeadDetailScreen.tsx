@@ -12,9 +12,11 @@ import {
   ActivityIndicator,
   Platform,
   RefreshControl,
+  AppState,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Session } from '@supabase/supabase-js';
+import { Audio, InterruptionModeIOS } from 'expo-av';
 import type { Lead, MetaLead, SelectedLeadRef, Activity, LoanOfficer, Realtor } from '../lib/types/leads';
 import type { UserRole } from '../lib/roles';
 import { supabase } from '../lib/supabase';
@@ -80,6 +82,13 @@ export function LeadDetailView({
   const [callbackNote, setCallbackNote] = useState('');
   const [savingCallback, setSavingCallback] = useState(false);
   const [useSpanishTemplates, setUseSpanishTemplates] = useState(false);
+  
+  // Voice notes state (expo-av)
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [uploadingVoiceNote, setUploadingVoiceNote] = useState(false);
+  const [currentSound, setCurrentSound] = useState<Audio.Sound | null>(null);
+  const [playingActivityId, setPlayingActivityId] = useState<string | null>(null);
   
   const quickPhrases = [
     'Left voicemail',
@@ -577,6 +586,209 @@ export function LeadDetailView({
       setUseSpanishTemplates(false);
     }
   }, [record?.id, isMeta]);
+
+  // Cleanup current sound when component unmounts or sound changes
+  useEffect(() => {
+    return () => {
+      if (currentSound) {
+        currentSound.unloadAsync();
+      }
+    };
+  }, [currentSound]);
+
+  // Pre-request microphone permissions on mount
+  useEffect(() => {
+    const prepareMicPermissions = async () => {
+      try {
+        const current = await Audio.getPermissionsAsync();
+
+        if (!current.granted) {
+          const requested = await Audio.requestPermissionsAsync();
+
+          if (!requested.granted) {
+            alert('Please enable microphone access in Settings to record voice notes.');
+          }
+        }
+      } catch (err) {
+        console.error('Error preparing microphone permissions', err);
+      }
+    };
+
+    prepareMicPermissions();
+  }, []);
+
+  const startVoiceRecording = async () => {
+    console.log('🔴 Button pressed! isRecording:', isRecording, 'appState:', AppState.currentState);
+
+    if (isRecording) {
+      return;
+    }
+
+    try {
+      const { granted } = await Audio.getPermissionsAsync();
+      if (!granted) {
+        alert('Microphone access is required to record voice notes.');
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        staysActiveInBackground: false,
+      });
+
+      console.log('▶️ Starting recording...');
+
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+
+      setRecording(recording);
+      setIsRecording(true);
+    } catch (error: any) {
+      console.error('Failed to start recording', error);
+      alert(
+        `Could not start recording: ${
+          error?.message || 'Please make sure the app is open and try again.'
+        }`
+      );
+    }
+  };
+
+  const stopRecordingAndSaveVoiceNote = async () => {
+    if (!recording || !record) return;
+
+    setIsRecording(false);
+    setUploadingVoiceNote(true);
+
+    try {
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      setRecording(null);
+
+      if (!uri) {
+        throw new Error('No recording URI');
+      }
+
+      const response = await fetch(uri);
+      const arrayBuffer = await response.arrayBuffer();
+
+      const fileExt = 'm4a';
+      const fileName = `voice-${record.id}-${Date.now()}.${fileExt}`;
+      const filePath = `${record.id}/${fileName}`;
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('activity-voice-notes')
+        .upload(filePath, arrayBuffer, {
+          contentType: 'audio/m4a',
+        });
+
+      if (uploadError || !uploadData) {
+        console.error('Upload error', uploadError);
+        throw uploadError || new Error('Upload failed');
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from('activity-voice-notes')
+        .getPublicUrl(uploadData.path);
+
+      const audioUrl = publicUrlData?.publicUrl;
+      if (!audioUrl) {
+        throw new Error('No public URL returned for voice note');
+      }
+
+      // Insert activity (note + audio_url)
+      const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
+      const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
+      const leadTable = isMeta ? 'meta_ads' : 'leads';
+
+      const activityPayload: any = {
+        [foreignKeyColumn]: record.id,
+        activity_type: 'note',
+        notes: taskNote.trim() || 'Voice note',
+        created_by: session?.user?.id ?? null,
+        user_email: session?.user?.email ?? 'Mobile App User',
+        audio_url: audioUrl,
+      };
+
+      const { data: inserted, error: insertError } = await supabase
+        .from(tableName)
+        .insert([activityPayload])
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error('Insert activity error', insertError);
+        throw insertError;
+      }
+
+      const now = new Date().toISOString();
+
+      const { error: updateLeadError } = await supabase
+        .from(leadTable)
+        .update({ last_contact_date: now })
+        .eq('id', record.id);
+
+      if (updateLeadError) {
+        console.error('Update lead last_contact_date error', updateLeadError);
+      }
+
+      const updatedLead = { ...record, last_contact_date: now };
+      onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
+
+      setActivities((prev) => [inserted, ...prev]);
+      setTaskNote('');
+    } catch (error) {
+      console.error('Error saving voice note', error);
+      alert('Failed to save voice note. Please try again.');
+    } finally {
+      setUploadingVoiceNote(false);
+    }
+  };
+
+  const handlePlayVoiceNote = async (activity: Activity) => {
+    if (!activity.audio_url) return;
+
+    try {
+      if (playingActivityId === activity.id && currentSound) {
+        await currentSound.stopAsync();
+        await currentSound.unloadAsync();
+        setCurrentSound(null);
+        setPlayingActivityId(null);
+        return;
+      }
+
+      if (currentSound) {
+        await currentSound.stopAsync();
+        await currentSound.unloadAsync();
+        setCurrentSound(null);
+      }
+
+      const { sound } = await Audio.Sound.createAsync({ uri: activity.audio_url });
+      setCurrentSound(sound);
+      setPlayingActivityId(activity.id);
+
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (!status.isLoaded) return;
+        if (status.didJustFinish) {
+          sound.unloadAsync();
+          setCurrentSound(null);
+          setPlayingActivityId(null);
+        }
+      });
+
+      await sound.playAsync();
+    } catch (error) {
+      console.error('Error playing voice note', error);
+      alert('Could not play voice note.');
+      setPlayingActivityId(null);
+    }
+  };
+
+  const formatTime = (isoString: string) => {
+    return new Date(isoString).toLocaleString();
+  };
 
   const handleAddTask = async () => {
     if (!taskNote.trim() || !record) return;
@@ -1233,6 +1445,39 @@ export function LeadDetailView({
               onChangeText={setTaskNote}
               multiline
             />
+            
+            {/* Voice Note Recording Button */}
+            <View style={styles.voiceNoteRow}>
+              <TouchableOpacity
+                style={[
+                  styles.voiceNoteRecordButton,
+                  isRecording && styles.voiceNoteRecordButtonActive,
+                  uploadingVoiceNote && { opacity: 0.6 },
+                ]}
+                onPress={() => {
+                  console.log('🔴 Button pressed! isRecording:', isRecording);
+                  if (isRecording) {
+                    console.log('⏹️ Stopping recording...');
+                    stopRecordingAndSaveVoiceNote();
+                  } else {
+                    console.log('▶️ Starting recording...');
+                    startVoiceRecording();
+                  }
+                }}
+                disabled={uploadingVoiceNote}
+              >
+                <Text style={styles.voiceNoteRecordButtonText}>
+                  {isRecording ? '🛑 Tap to stop' : '🎤 Voice note'}
+                </Text>
+              </TouchableOpacity>
+
+              <Text style={styles.voiceNoteHint}>
+                {isRecording
+                  ? 'Recording… tap to finish and log'
+                  : 'Optional: log a quick voice note'}
+              </Text>
+            </View>
+            
             <TouchableOpacity
               style={[
                 styles.logActivityButton,
@@ -1265,10 +1510,14 @@ export function LeadDetailView({
                   <View style={styles.activityHistoryHeader}>
                     <View style={styles.activityHistoryHeaderLeft}>
                       <Text style={styles.activityHistoryType}>
-                        {getActivityIcon(activity.activity_type)} {getActivityLabel(activity.activity_type)}
+                        {activity.audio_url
+                          ? '🎤 Voice note'
+                          : `${getActivityIcon(activity.activity_type)} ${getActivityLabel(
+                              activity.activity_type
+                            )}`}
                       </Text>
                       <Text style={styles.activityHistoryTimestamp}>
-                        {new Date(activity.created_at).toLocaleString()}
+                        {formatTime(activity.created_at)}
                       </Text>
                     </View>
                     {propUserRole === 'super_admin' && (
@@ -1283,7 +1532,26 @@ export function LeadDetailView({
                       </TouchableOpacity>
                     )}
                   </View>
-                  <Text style={styles.activityHistoryNote}>{activity.notes}</Text>
+                  
+                  {activity.notes ? (
+                    <Text style={styles.activityHistoryNote}>{activity.notes}</Text>
+                  ) : null}
+                  
+                  {/* Voice note playback button */}
+                  {activity.audio_url && (
+                    <TouchableOpacity
+                      style={[
+                        styles.voiceNoteButton,
+                        playingActivityId === activity.id && styles.voiceNoteButtonActive,
+                      ]}
+                      onPress={() => handlePlayVoiceNote(activity)}
+                    >
+                      <Text style={styles.voiceNoteButtonText}>
+                        {playingActivityId === activity.id ? '▶ Playing…' : '▶ Play voice note'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  
                   {activity.user_email && (
                     <Text style={styles.activityUserEmail}>by {activity.user_email}</Text>
                   )}

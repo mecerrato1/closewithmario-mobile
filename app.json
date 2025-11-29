@@ -2,7 +2,7 @@
   "expo": {
     "name": "closewithmario-mobile",
     "slug": "closewithmario-mobile",
-    "version": "1.1.21",
+    "version": "1.1.23",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,13 +16,14 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.closewithmario.mobile",
-      "buildNumber": "36",
+      "buildNumber": "38",
       "associatedDomains": [
         "applinks:hxpvcaspgdgsehrehbhl.supabase.co"
       ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSUserNotificationUsageDescription": "We use notifications to remind you to follow up with your leads.",
+        "NSMicrophoneUsageDescription": "We need access to your microphone to record voice notes for lead activities.",
         "LSApplicationQueriesSchemes": [
           "ms-outlook"
         ]
@@ -69,6 +70,12 @@
           "icon": "./assets/icon.png",
           "color": "#7C3AED",
           "sounds": []
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Close With Mario uses your microphone to record voice notes on leads."
         }
       ]
     ]

@@ -79,6 +79,7 @@ export type Activity = {
   created_at: string;
   created_by?: string;
   user_email?: string;
+  audio_url?: string | null; // 👈 NEW - for voice notes
 };
 
 export type AttentionBadge = {
