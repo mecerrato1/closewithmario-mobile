@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,8 @@ import {
   Platform,
   RefreshControl,
   AppState,
+  Animated,
+  LayoutAnimation,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Session } from '@supabase/supabase-js';
@@ -89,6 +91,23 @@ export function LeadDetailView({
   const [uploadingVoiceNote, setUploadingVoiceNote] = useState(false);
   const [currentSound, setCurrentSound] = useState<Audio.Sound | null>(null);
   const [playingActivityId, setPlayingActivityId] = useState<string | null>(null);
+  // Micro animation for "Log Activity" button
+  const logButtonScale = useRef(new Animated.Value(1)).current;
+
+  const animateLogButton = () => {
+    Animated.sequence([
+      Animated.timing(logButtonScale, {
+        toValue: 0.96,
+        duration: 80,
+        useNativeDriver: true,
+      }),
+      Animated.timing(logButtonScale, {
+        toValue: 1,
+        duration: 80,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
   
   const quickPhrases = [
     'Left voicemail',
@@ -434,6 +453,7 @@ export function LeadDetailView({
         const updatedLead = { ...record, last_contact_date: now };
         onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
         
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setActivities([data, ...activities]);
       }
     } catch (e) {
@@ -737,6 +757,7 @@ export function LeadDetailView({
       const updatedLead = { ...record, last_contact_date: now };
       onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
 
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setActivities((prev) => [inserted, ...prev]);
       setTaskNote('');
     } catch (error) {
@@ -886,6 +907,7 @@ export function LeadDetailView({
         alert('Failed to delete activity. Please try again.');
       } else {
         // Remove from local state
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setActivities(activities.filter(a => a.id !== activityId));
       }
     } catch (e) {
@@ -1478,21 +1500,26 @@ export function LeadDetailView({
               </Text>
             </View>
             
-            <TouchableOpacity
-              style={[
-                styles.logActivityButton,
-                (!taskNote.trim() || savingActivity) && styles.logActivityButtonDisabled,
-              ]}
-              onPress={handleAddTask}
-              disabled={!taskNote.trim() || savingActivity}
-            >
-              <Text style={styles.logActivityButtonText}>
-                {savingActivity 
-                  ? 'Saving...' 
-                  : `Log ${getActivityIcon(selectedActivityType)} ${getActivityLabel(selectedActivityType)}`
-                }
-              </Text>
-            </TouchableOpacity>
+            <Animated.View style={{ transform: [{ scale: logButtonScale }] }}>
+              <TouchableOpacity
+                style={[
+                  styles.logActivityButton,
+                  (!taskNote.trim() || savingActivity) && styles.logActivityButtonDisabled,
+                ]}
+                onPress={() => {
+                  if (!taskNote.trim() || savingActivity) return;
+                  animateLogButton();
+                  handleAddTask();
+                }}
+                disabled={!taskNote.trim() || savingActivity}
+              >
+                <Text style={styles.logActivityButtonText}>
+                  {savingActivity 
+                    ? 'Saving...' 
+                    : `Log ${getActivityIcon(selectedActivityType)} ${getActivityLabel(selectedActivityType)}`}
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
           </View>
 
           {/* Divider */}

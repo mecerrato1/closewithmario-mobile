@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -15,6 +15,9 @@ import {
   Image,
   RefreshControl,
   Modal,
+  LayoutAnimation,
+  UIManager,
+  Animated,
 } from 'react-native';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { Session } from '@supabase/supabase-js';
@@ -35,6 +38,14 @@ import LockScreen from './src/screens/LockScreen';
 import { styles } from './src/styles/appStyles';
 
 import * as WebBrowser from 'expo-web-browser';
+
+// Enable LayoutAnimation on Android
+if (
+  Platform.OS === 'android' &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 // Required for AuthSession to complete on iOS
 WebBrowser.maybeCompleteAuthSession();
@@ -88,6 +99,44 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [selectedLOFilter, setSelectedLOFilter] = useState<string | null>(null); // null = all LOs
   const [showLOPicker, setShowLOPicker] = useState(false);
   const [leadEligible, setLeadEligible] = useState<boolean>(true);
+
+  // Micro animations for the lead list
+  const listOpacity = useRef(new Animated.Value(1)).current;
+  const listScale = useRef(new Animated.Value(1)).current;
+
+  const triggerListAnimation = () => {
+    // Small pulse + LayoutAnimation for item movement
+    Animated.parallel([
+      Animated.timing(listOpacity, {
+        toValue: 0.96,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.timing(listScale, {
+          toValue: 0.98,
+          duration: 120,
+          useNativeDriver: true,
+        }),
+        Animated.timing(listScale, {
+          toValue: 1,
+          duration: 120,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]).start(() => {
+      // Reset opacity so future animations look consistent
+      listOpacity.setValue(1);
+    });
+
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+  };
+
+  const animatedListStyle = {
+    flex: 1,
+    opacity: listOpacity,
+    transform: [{ scale: listScale }],
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -857,6 +906,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               <TouchableOpacity 
                 style={styles.newHeaderStatCard}
                 onPress={() => {
+                  triggerListAnimation();
                   setActiveTab('meta');
                   setSelectedStatusFilter('all');
                   setShowDashboard(false);
@@ -868,6 +918,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               <TouchableOpacity 
                 style={styles.newHeaderStatCard}
                 onPress={() => {
+                  triggerListAnimation();
                   setActiveTab('leads');
                   setSelectedStatusFilter('all');
                   setShowDashboard(false);
@@ -880,6 +931,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             <TouchableOpacity 
               style={styles.newHeaderStatCardLarge}
               onPress={() => {
+                triggerListAnimation();
                 setActiveTab('all');
                 setSelectedStatusFilter('all');
                 setShowDashboard(false);
@@ -902,6 +954,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           <TouchableOpacity
             style={styles.newViewAllButton}
             onPress={() => {
+              triggerListAnimation();
               setActiveTab('all');
               setSelectedStatusFilter('all');
               setShowDashboard(false);
@@ -1088,6 +1141,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             activeTab === 'meta' && styles.statCardActive,
           ]}
           onPress={() => {
+            triggerListAnimation();
             setActiveTab('meta');
             setHasManuallySelectedTab(true);
           }}
@@ -1112,6 +1166,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             activeTab === 'leads' && styles.statCardActive,
           ]}
           onPress={() => {
+            triggerListAnimation();
             setActiveTab('leads');
             setHasManuallySelectedTab(true);
           }}
@@ -1136,6 +1191,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             activeTab === 'all' && styles.statCardActive,
           ]}
           onPress={() => {
+            triggerListAnimation();
             setActiveTab('all');
             setHasManuallySelectedTab(true);
           }}
@@ -1273,6 +1329,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                       selectedStatusFilter === 'all' && styles.statusPickerItemActive,
                     ]}
                     onPress={() => {
+                      triggerListAnimation();
                       setSelectedStatusFilter('all');
                       setActiveTab('all');
                       setShowStatusPicker(false);
@@ -1302,6 +1359,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                           selectedStatusFilter === status && styles.statusPickerItemActive,
                         ]}
                         onPress={() => {
+                          triggerListAnimation();
                           setSelectedStatusFilter(status);
                           setActiveTab('all');
                           setShowStatusPicker(false);
@@ -1351,6 +1409,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                         selectedLOFilter === null && styles.statusPickerItemActive,
                       ]}
                       onPress={() => {
+                        triggerListAnimation();
                         setSelectedLOFilter(null);
                         setShowLOPicker(false);
                       }}
@@ -1373,6 +1432,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                         selectedLOFilter === 'unassigned' && styles.statusPickerItemActive,
                       ]}
                       onPress={() => {
+                        triggerListAnimation();
                         setSelectedLOFilter('unassigned');
                         setShowLOPicker(false);
                       }}
@@ -1397,6 +1457,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                           selectedLOFilter === lo.id && styles.statusPickerItemActive,
                         ]}
                         onPress={() => {
+                          triggerListAnimation();
                           setSelectedLOFilter(lo.id);
                           setShowLOPicker(false);
                         }}
@@ -1420,63 +1481,69 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
           {/* Lead Content */}
           {activeTab === 'leads' && hasLeads && (
-            <FlatList
-              data={leads.filter(lead => 
-                (selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter) &&
-                matchesSearch(lead) &&
-                matchesLOFilter(lead)
-              )}
-              keyExtractor={(item) => item.id}
-              renderItem={renderLeadItem}
-              contentContainerStyle={styles.listContent}
-              refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-              }
-              showsVerticalScrollIndicator={false}
-            />
+            <Animated.View style={animatedListStyle}>
+              <FlatList
+                data={leads.filter(lead => 
+                  (selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter) &&
+                  matchesSearch(lead) &&
+                  matchesLOFilter(lead)
+                )}
+                keyExtractor={(item) => item.id}
+                renderItem={renderLeadItem}
+                contentContainerStyle={styles.listContent}
+                refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+                showsVerticalScrollIndicator={false}
+              />
+            </Animated.View>
           )}
 
           {activeTab === 'meta' && hasMetaLeads && (
-            <FlatList
-              data={metaLeads.filter(lead => 
-                (selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter) &&
-                matchesSearch(lead) &&
-                matchesLOFilter(lead)
-              )}
-              keyExtractor={(item) => item.id}
-              renderItem={renderMetaLeadItem}
-              contentContainerStyle={styles.listContent}
-              refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-              }
-              showsVerticalScrollIndicator={false}
-            />
+            <Animated.View style={animatedListStyle}>
+              <FlatList
+                data={metaLeads.filter(lead => 
+                  (selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter) &&
+                  matchesSearch(lead) &&
+                  matchesLOFilter(lead)
+                )}
+                keyExtractor={(item) => item.id}
+                renderItem={renderMetaLeadItem}
+                contentContainerStyle={styles.listContent}
+                refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+                showsVerticalScrollIndicator={false}
+              />
+            </Animated.View>
           )}
 
           {activeTab === 'all' && (hasLeads || hasMetaLeads) && (
-            <FlatList
-              data={[
-                ...metaLeads.filter(lead => 
-                  (selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter) &&
-                  matchesSearch(lead) &&
-                  matchesLOFilter(lead)
-                ).map(lead => ({ ...lead, source: 'meta' as const })),
-                ...leads.filter(lead => 
-                  (selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter) &&
-                  matchesSearch(lead) &&
-                  matchesLOFilter(lead)
-                ).map(lead => ({ ...lead, source: 'lead' as const })),
-              ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())}
-              keyExtractor={(item) => `${item.source}-${item.id}`}
-              renderItem={({ item }) => 
-                item.source === 'meta' ? renderMetaLeadItem({ item }) : renderLeadItem({ item })
-              }
-              contentContainerStyle={styles.listContent}
-              refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-              }
-              showsVerticalScrollIndicator={false}
-            />
+            <Animated.View style={animatedListStyle}>
+              <FlatList
+                data={[
+                  ...metaLeads.filter(lead => 
+                    (selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter) &&
+                    matchesSearch(lead) &&
+                    matchesLOFilter(lead)
+                  ).map(lead => ({ ...lead, source: 'meta' as const })),
+                  ...leads.filter(lead => 
+                    (selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter) &&
+                    matchesSearch(lead) &&
+                    matchesLOFilter(lead)
+                  ).map(lead => ({ ...lead, source: 'lead' as const })),
+                ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())}
+                keyExtractor={(item) => `${item.source}-${item.id}`}
+                renderItem={({ item }) => 
+                  item.source === 'meta' ? renderMetaLeadItem({ item }) : renderLeadItem({ item })
+                }
+                contentContainerStyle={styles.listContent}
+                refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
+                showsVerticalScrollIndicator={false}
+              />
+            </Animated.View>
           )}
         </>
       )}
