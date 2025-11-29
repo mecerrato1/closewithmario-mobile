@@ -1,8 +1,9 @@
 # CloseWithMario Mobile - Codebase Summary
 
-**Last Updated:** November 26, 2025  
+**Last Updated:** November 29, 2025  
 **EAS Account:** mecerrato1  
-**Latest Build:** iOS Production Build 31 (v1.1.16, Nov 26, 2025)
+**Latest Build:** iOS Production Build 31 (v1.1.16, Nov 26, 2025)  
+**Major Refactor:** November 26, 2025 - Modular architecture with separated screens and styles
 
 ---
 
@@ -40,28 +41,39 @@
 
 ```
 closewithmario-mobile/
-├── App.tsx                          # Main application entry point (~5100 lines)
+├── App.tsx                          # Main application entry point (~1500 lines) ✨ REFACTORED
 ├── index.ts                         # Expo entry file
 ├── app.json                         # Expo configuration
 ├── package.json                     # Dependencies and scripts
 ├── .env                             # Environment variables (Supabase credentials)
 ├── src/
-│   └── lib/
+│   ├── screens/                     # ✨ NEW - Screen components
+│   │   ├── AuthScreen.tsx          # Login/signup screen with OAuth (~440 lines)
+│   │   ├── LeadDetailScreen.tsx    # Lead detail view with activities (~1540 lines)
+│   │   └── TeamManagementScreen.tsx # Team management for admins (~490 lines)
+│   ├── styles/                      # ✨ NEW - Centralized styles
+│   │   └── appStyles.ts            # All app styles in one place (~2120 lines)
+│   └── lib/                         # Utilities and helpers
 │       ├── supabase.ts             # Supabase client configuration
 │       ├── roles.ts                # RBAC role management utilities
 │       ├── textTemplates.ts        # SMS text message templates with variables
+│       ├── callbacks.ts            # Notification scheduling utilities
+│       ├── leadsHelpers.ts         # ✨ NEW - Lead helper functions and constants
 │       └── types/
-│           └── leads.ts            # TypeScript type definitions
+│           └── leads.ts            # TypeScript type definitions (expanded)
 ├── docs/                            # Documentation folder
 │   └── CODEBASE_SUMMARY.md         # This file
 ├── assets/                          # App icons and images
 │   ├── CWMLogo.png                 # Main logo (7099x5584)
+│   ├── BrowardHPA_Ad.jpg           # Ad image for Broward HPA campaign
+│   ├── Fl_Renter_Ad.png            # Ad image for FL Renter campaign
+│   ├── Condo_Ad.jpg                # Ad image for Condo campaign
+│   ├── Green_Acres_Ad.jpg          # Ad image for Green Acres campaign
+│   ├── LO.png                      # Loan officer placeholder image
 │   ├── icon.png
 │   ├── splash-icon.png
 │   ├── adaptive-icon.png
-│   ├── favicon.png
-│   ├── fb.png                      # Facebook icon (deprecated - now using badges)
-│   └── IG.png                      # Instagram icon (deprecated - now using badges)
+│   └── favicon.png
 └── android/                         # Android native project files
 ```
 
@@ -544,7 +556,7 @@ npm start
 5. **Callback Notifications:** Scheduled but not yet triggering push notifications
 6. **Image Asset Issue:** Logo image (CWMLogo.png) is not square (7099x5584), should be square for Android adaptive icon
 7. **Duplicate Dependencies:** Multiple copies of `expo-constants` exist in node_modules (requires cleanup)
-8. **Large File Size:** App.tsx is ~6250 lines (should be refactored into smaller components)
+8. ~~**Large File Size:**~~ ✅ RESOLVED - App.tsx refactored from ~6250 lines to ~1500 lines (Nov 26)
 
 ---
 
@@ -570,7 +582,7 @@ npm start
 15. ✅ **Lead Assignment:** COMPLETED - LO assignment in detail view
 16. **Advanced Filtering:** Filter by date range, campaign, platform
 17. **Export Functionality:** Export leads to CSV/PDF
-18. **Component Refactoring:** Split App.tsx into smaller, reusable components
+18. ~~**Component Refactoring:**~~ ✅ COMPLETED - Modular architecture with separate screens and styles (Nov 26)
 
 ### Low Priority
 16. **Analytics Dashboard:** Charts and metrics (partially implemented)
@@ -600,24 +612,69 @@ npm start
 
 ## 📚 Key Files Reference
 
-### `App.tsx` (~6250 lines)
-Main application file containing:
-- All component definitions:
-  - `AuthScreen` - Modernized login with Google OAuth
-  - `TeamManagementScreen` - Team member management (loan officers & realtors)
-  - `Dashboard` - New dashboard view with stats and guide
-  - `LeadsScreen` - Leads list with tabs, filters, and pull-to-refresh
-  - `LeadDetailView` - Full lead detail with activity logging, text templates, and callback scheduling
-  - `App` - Root component with session management
-- All TypeScript types (Lead, MetaLead, Activity, LoanOfficer, Realtor, etc.)
-- Authentication logic (email/password + Google OAuth)
-- Data fetching logic with RBAC filtering
-- Activity logging functionality
-- Text template modal with bilingual support (English/Spanish)
-- Callback scheduling with Expo Notifications
-- Team management (add/edit/delete loan officers and realtors)
-- All styles (~500+ style definitions)
-- Helper functions (formatStatus, getTimeAgo, matchesSearch, matchesLOFilter, etc.)
+### `App.tsx` (~1500 lines) ✨ REFACTORED
+Main application orchestrator containing:
+- Root `App` component with session management
+- `LeadsScreen` component - Main leads list view with:
+  - Dashboard view with stats and recent leads
+  - Tabbed interface (Meta Leads / Website Leads / All)
+  - Search and filter functionality
+  - Pull-to-refresh
+  - Lead card display
+- Navigation logic between screens
+- Data fetching with RBAC filtering
+- State management for leads, filters, and UI
+- Imports modular screens and utilities
+
+### `src/screens/AuthScreen.tsx` (~440 lines) ✨ NEW
+Dedicated authentication screen:
+- Email/password login and signup
+- Google OAuth integration with deep linking
+- Modern card-based UI with purple branding
+- Loading and error states
+- Keyboard-aware view
+
+### `src/screens/LeadDetailScreen.tsx` (~1540 lines) ✨ NEW
+Comprehensive lead detail view:
+- Sticky header with navigation (back, next/previous)
+- Sticky name bar (always visible when scrolling)
+- Status management with dropdown picker
+- LO assignment (admin only)
+- Contact buttons (Call, Text with templates, Email)
+- Activity logging section (Call, Text, Email, Note)
+- Activity history display
+- Text template modal with bilingual support
+- Callback scheduling
+- Ad image viewer for Meta leads
+- Deep linking for phone/SMS/email
+
+### `src/screens/TeamManagementScreen.tsx` (~490 lines) ✨ NEW
+Team management interface (super admin only):
+- Manage loan officers and realtors
+- Add/edit/delete team members
+- Toggle active status
+- Lead eligibility toggle for LOs
+- Auto-assign toggle for automatic lead distribution
+- Search functionality
+- Separate tabs for LOs and realtors
+
+### `src/styles/appStyles.ts` (~2120 lines) ✨ NEW
+Centralized style definitions:
+- All component styles in one organized file
+- Purple/green design system
+- Status color mappings
+- Responsive layouts
+- Reusable style patterns
+- ~500+ style definitions extracted from App.tsx
+
+### `src/lib/leadsHelpers.ts` (~90 lines) ✨ NEW
+Lead-related helper functions and constants:
+- `STATUSES` - Array of valid status values
+- `STATUS_DISPLAY_MAP` - Status to display name mapping
+- `STATUS_COLOR_MAP` - Status to color scheme mapping
+- `getLeadAlert()` - Attention badge logic (matches web)
+- `formatStatus()` - Format status for display
+- `getTimeAgo()` - Human-readable time formatting
 
 ### `src/lib/supabase.ts` (13 lines)
 Supabase client initialization with environment variable validation.
@@ -642,8 +699,22 @@ SMS text message templates with bilingual support:
 - **Manual override:** Language toggle in template modal for manual selection
 - Templates include friendly emojis and proper formatting
 
-### `src/lib/types/leads.ts` (11 lines)
-Type definitions for Lead model (currently duplicated in App.tsx).
+### `src/lib/types/leads.ts` (~80 lines) ✨ EXPANDED
+Comprehensive TypeScript type definitions:
+- `Lead` - Website leads type
+- `MetaLead` - Meta ads leads type
+- `Activity` - Activity log type
+- `LoanOfficer` - Loan officer type
+- `Realtor` - Realtor type
+- `SelectedLeadRef` - Selected lead reference type
+- `AttentionBadge` - Attention badge type for alerts
+- All types centralized and shared across components
+
+### `src/lib/callbacks.ts` (~60 lines)
+Notification scheduling utilities:
+- `scheduleLeadCallback()` - Schedule callback notifications
+- Integration with Expo Notifications
+- Stores callbacks in `lead_callbacks` table
 
 ### `app.json` (~70 lines)
 Expo configuration for iOS, Android, and web platforms:
@@ -710,38 +781,99 @@ Environment variables for Supabase connection.
 
 ---
 
-## 📝 Code Quality Notes
+## � Major Refactoring (November 26, 2025)
+
+### What Changed
+The codebase underwent a massive refactoring to improve maintainability, readability, and scalability:
+
+**Before:**
+- Single monolithic `App.tsx` file (~6250 lines)
+- All components, styles, types, and logic in one file
+- Difficult to navigate and maintain
+- Slow IDE performance with large file
+
+**After:**
+- Modular architecture with separated concerns
+- `App.tsx` reduced to ~1500 lines (76% reduction!)
+- 3 dedicated screen components
+- Centralized styles file
+- Expanded utility libraries
+- Better code organization
+
+### Files Created
+1. **`src/screens/AuthScreen.tsx`** - Authentication UI (440 lines)
+2. **`src/screens/LeadDetailScreen.tsx`** - Lead detail view (1540 lines)
+3. **`src/screens/TeamManagementScreen.tsx`** - Team management (490 lines)
+4. **`src/styles/appStyles.ts`** - All styles centralized (2120 lines)
+5. **`src/lib/leadsHelpers.ts`** - Lead helper functions (90 lines)
+
+### Benefits Achieved
+- ✅ **Better Organization:** Each screen in its own file
+- ✅ **Easier Maintenance:** Changes isolated to specific files
+- ✅ **Improved Performance:** Faster IDE navigation and autocomplete
+- ✅ **Code Reusability:** Shared utilities and types
+- ✅ **Better Testing:** Easier to unit test individual components
+- ✅ **Team Collaboration:** Multiple developers can work on different screens
+- ✅ **Cleaner Imports:** Clear dependencies between modules
+
+### Migration Notes
+- All functionality preserved - zero breaking changes
+- Types centralized in `src/lib/types/leads.ts`
+- Styles extracted to `src/styles/appStyles.ts`
+- Helper functions moved to `src/lib/leadsHelpers.ts`
+- Screen components maintain same props interfaces
+- Asset file renamed: `BrowardHPA _Ad.jpg` → `BrowardHPA_Ad.jpg` (removed space)
+
+---
+
+## � Code Quality Notes
 
 ### Strengths
-- **Modern UI/UX** with purple/green brand colors
-- **Comprehensive feature set** (dashboard, detail view, activity logging)
-- **TypeScript** for type safety
-- **RBAC implementation** for team management
-- **Proper error handling** with user-friendly messages
-- **Loading and empty states** throughout
-- **Pull-to-refresh** for data updates
-- **Deep linking** for OAuth and contact actions
-- **Consistent styling** with design system
-- **Well-commented sections** and helper functions
+- ✅ **Modular Architecture** with separated screens and styles (NEW)
+- ✅ **Modern UI/UX** with purple/green brand colors
+- ✅ **Comprehensive feature set** (dashboard, detail view, activity logging)
+- ✅ **TypeScript** for type safety
+- ✅ **RBAC implementation** for team management
+- ✅ **Proper error handling** with user-friendly messages
+- ✅ **Loading and empty states** throughout
+- ✅ **Pull-to-refresh** for data updates
+- ✅ **Deep linking** for OAuth and contact actions
+- ✅ **Consistent styling** with centralized design system (NEW)
+- ✅ **Well-organized code** with clear separation of concerns (NEW)
+- ✅ **Reusable utilities** and helper functions (NEW)
 
 ### Areas for Improvement
-- **Large single file:** App.tsx is ~5100 lines (should be split into components)
-- **Types are duplicated** (in App.tsx and types/leads.ts)
+- ~~**Large single file:**~~ ✅ RESOLVED - Modular architecture implemented
+- ~~**Types are duplicated:**~~ ✅ RESOLVED - Types centralized in types/leads.ts
+- ~~**Styles could be extracted:**~~ ✅ RESOLVED - Centralized in appStyles.ts
 - **No unit tests** or integration tests
 - **No component library** (could use React Native Paper, NativeBase, etc.)
-- **Styles could be extracted** to separate file or theme provider
 - **No logging/analytics integration** (e.g., Sentry, Mixpanel)
 - **Image assets need optimization** (logo is not square)
 - **Duplicate dependencies** in node_modules need cleanup
 - **Limited pagination** (only 50 leads per table)
-- **No search/filter** functionality yet
 - **Text templates are hardcoded** (could be stored in database for customization)
 
 ---
 
 ## 📅 Recent Changes (November 2025)
 
-### November 26, 2025 - Major Update (v1.1.16, Build 31)
+### November 29, 2025 - Dashboard Enhancement
+1. **Pull-to-Refresh on Dashboard** - Added pull-to-refresh to dashboard view
+   - Updates lead eligibility status in real-time
+   - Refreshes stats and recent leads
+   - Consistent with leads list refresh behavior
+
+### November 26, 2025 - Major Refactoring & Updates (v1.1.16, Build 31)
+
+#### 🔄 Major Refactoring
+1. **Modular Architecture** - Complete codebase restructuring
+   - Split App.tsx from ~6250 lines to ~1500 lines (76% reduction)
+   - Created 3 dedicated screen components (Auth, LeadDetail, TeamManagement)
+   - Centralized all styles in `src/styles/appStyles.ts` (2120 lines)
+   - Extracted lead helpers to `src/lib/leadsHelpers.ts`
+   - Expanded type definitions in `src/lib/types/leads.ts`
+   - Renamed asset file: `BrowardHPA _Ad.jpg` → `BrowardHPA_Ad.jpg`
 
 #### New Features
 1. **Bilingual Text Templates** - Spanish language support
