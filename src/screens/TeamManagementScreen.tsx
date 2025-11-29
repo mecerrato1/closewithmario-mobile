@@ -227,7 +227,7 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
       <View style={styles.dashboardHeader}>
         <View style={styles.headerContent}>
           <TouchableOpacity onPress={onBack} style={styles.teamBackButton}>
-            <Text style={styles.teamBackButtonText}>â† Back</Text>
+            <Text style={styles.teamBackButtonText}>← Back</Text>
           </TouchableOpacity>
           <Text style={styles.dashboardTitle}>Team Management</Text>
         </View>
@@ -276,7 +276,7 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
                 styles.teamTabText,
                 activeTab === 'loan_officers' && styles.teamTabTextActive,
               ]}>
-                ðŸ‘” Loan Officers ({loanOfficers.length})
+                👔 Loan Officers ({loanOfficers.length})
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -290,7 +290,7 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
                 styles.teamTabText,
                 activeTab === 'realtors' && styles.teamTabTextActive,
               ]}>
-                ðŸ  Realtors ({realtors.length})
+                🏠 Realtors ({realtors.length})
               </Text>
             </TouchableOpacity>
           </View>
@@ -298,7 +298,7 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
           {/* Search and Add Button */}
           <View style={styles.teamActionsRow}>
             <View style={styles.teamSearchContainer}>
-              <Text style={styles.searchIcon}>ðŸ”</Text>
+              <Text style={styles.searchIcon}>🔍</Text>
               <TextInput
                 style={styles.teamSearchInput}
                 placeholder="Search by name or email..."
@@ -313,7 +313,7 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
                   onPress={() => setSearchQuery('')}
                   style={styles.searchClearButton}
                 >
-                  <Text style={styles.searchClearText}>âœ•</Text>
+                  <Text style={styles.searchClearText}>✕</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -343,15 +343,15 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
                       styles.teamMemberStatusText,
                       item.active ? styles.teamMemberStatusTextActive : styles.teamMemberStatusTextInactive
                     ]}>
-                      {item.active ? 'âœ“ Active' : 'â—‹ Inactive'}
+                      {item.active ? '✓ Active' : '○ Inactive'}
                     </Text>
                   </View>
                 </View>
                 {item.email && (
-                  <Text style={styles.teamMemberDetail}>ðŸ“§ {item.email}</Text>
+                  <Text style={styles.teamMemberDetail}>📧 {item.email}</Text>
                 )}
                 {item.phone && (
-                  <Text style={styles.teamMemberDetail}>ðŸ“± {item.phone}</Text>
+                  <Text style={styles.teamMemberDetail}>📱 {item.phone}</Text>
                 )}
                 {activeTab === 'loan_officers' && 'lead_eligible' in item && (
                   <View style={styles.teamMemberEligible}>
@@ -359,7 +359,7 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
                       styles.teamMemberEligibleText,
                       item.lead_eligible ? styles.teamMemberEligibleYes : styles.teamMemberEligibleNo
                     ]}>
-                      {item.lead_eligible ? 'âœ“ Lead Eligible' : 'âœ• Not Eligible'}
+                      {item.lead_eligible ? '✓ Lead Eligible' : '✕ Not Eligible'}
                     </Text>
                   </View>
                 )}
@@ -430,7 +430,7 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
                       styles.teamCheckbox,
                       formData.active && styles.teamCheckboxChecked
                     ]}>
-                      {formData.active && <Text style={styles.teamCheckboxCheck}>âœ“</Text>}
+                      {formData.active && <Text style={styles.teamCheckboxCheck}>✓</Text>}
                     </View>
                     <Text style={styles.teamCheckboxLabel}>Active</Text>
                   </TouchableOpacity>
@@ -444,7 +444,7 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
                         styles.teamCheckbox,
                         formData.lead_eligible && styles.teamCheckboxChecked
                       ]}>
-                        {formData.lead_eligible && <Text style={styles.teamCheckboxCheck}>âœ“</Text>}
+                        {formData.lead_eligible && <Text style={styles.teamCheckboxCheck}>✓</Text>}
                       </View>
                       <Text style={styles.teamCheckboxLabel}>Eligible for auto-assigned leads</Text>
                     </TouchableOpacity>
