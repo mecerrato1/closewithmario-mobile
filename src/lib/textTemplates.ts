@@ -197,6 +197,74 @@ Esta llamada es para ver cómo podemos ayudarlo a convertirse en propietario de 
 ☎️ Móvil {LO phone}
 📧 Email {LO email}`,
   },
+  {
+    id: 'variable_income_docs',
+    name: 'Variable Income Docs',
+    nameEs: 'Documentos de Ingresos Variables',
+    template: `Hi {fname} 👋
+
+Here's the list of documents needed for your preapproval:
+
+📄 Most recent paystub
+📄 Last paystub of {recentYear}
+📄 Last paystub of {prevYear}
+📄 {recentYear} W-2
+📄 {prevYear} W-2
+📄 Driver's license
+
+Please send these when you get a chance! Let me know if you have any questions.
+
+☎️ Mobile {LO phone}
+📧 Email {LO email}`,
+    templateEs: `Hola {fname} 👋
+
+Aquí está la lista de documentos necesarios para su pre-aprobación:
+
+📄 Talón de pago más reciente
+📄 Último talón de pago de {recentYear}
+📄 Último talón de pago de {prevYear}
+📄 W-2 de {recentYear}
+📄 W-2 de {prevYear}
+📄 Licencia de conducir
+
+¡Por favor envíe estos cuando pueda! Avíseme si tiene alguna pregunta.
+
+☎️ Móvil {LO phone}
+📧 Email {LO email}`,
+  },
+  {
+    id: 'self_employed_docs',
+    name: 'Self-Employed Docs',
+    nameEs: 'Documentos de Trabajador Independiente',
+    template: `Hi {fname} 👋
+
+Here's the list of documents needed for your preapproval:
+
+📄 {recentYear} personal tax returns (all pages)
+📄 {prevYear} personal tax returns (all pages)
+📄 {recentYear} W-2 (issued from business)
+📄 {prevYear} W-2 (issued from business)
+📄 Driver's license
+
+Please send these when you get a chance! Let me know if you have any questions.
+
+☎️ Mobile {LO phone}
+📧 Email {LO email}`,
+    templateEs: `Hola {fname} 👋
+
+Aquí está la lista de documentos necesarios para su pre-aprobación:
+
+📄 Declaración de impuestos personales de {recentYear} (todas las páginas)
+📄 Declaración de impuestos personales de {prevYear} (todas las páginas)
+📄 W-2 de {recentYear} (emitido por el negocio)
+📄 W-2 de {prevYear} (emitido por el negocio)
+📄 Licencia de conducir
+
+¡Por favor envíe estos cuando pueda! Avíseme si tiene alguna pregunta.
+
+☎️ Móvil {LO phone}
+📧 Email {LO email}`,
+  },
 ];
 
 export type TemplateVariables = {
@@ -206,6 +274,8 @@ export type TemplateVariables = {
   loPhone: string;
   loEmail: string;
   platform: string;
+  recentYear?: string;
+  prevYear?: string;
 };
 
 /**
@@ -296,6 +366,15 @@ export function fillTemplate(
   
   // Replace {platform} with the friendly platform name
   result = result.replace(/{platform}/g, formatPlatformName(variables.platform));
+
+  // Calculate dynamic years: recentYear = current year - 1, prevYear = current year - 2
+  const currentYear = new Date().getFullYear();
+  const recentYear = variables.recentYear || String(currentYear - 1);
+  const prevYear = variables.prevYear || String(currentYear - 2);
   
+  // Replace {recentYear} and {prevYear}
+  result = result.replace(/{recentYear}/g, recentYear);
+  result = result.replace(/{prevYear}/g, prevYear);
+
   return result;
 }

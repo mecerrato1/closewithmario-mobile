@@ -10,7 +10,9 @@ import {
   ScrollView,
   Image,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { Session } from '@supabase/supabase-js';
+import { useThemeColors } from '../styles/theme';
 import { supabase } from '../lib/supabase';
 import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
@@ -29,6 +31,7 @@ export type AuthScreenProps = {
 };
 
 export default function AuthScreen({ onAuth }: AuthScreenProps) {
+  const { colors, isDark } = useThemeColors();
   const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -157,16 +160,17 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
 
   return (
     <KeyboardAvoidingView
-      style={styles.authContainer}
+      style={[styles.authContainer, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       <ScrollView 
         contentContainerStyle={styles.authScrollContent}
         showsVerticalScrollIndicator={false}
       >
         {/* Logo at Top */}
         <View style={styles.authTopLogoContainer}>
-          <View style={styles.authTopLogoCircle}>
+          <View style={[styles.authTopLogoCircle, { backgroundColor: colors.cardBackground }]}>
             <Image
               source={require('../../assets/CWMLogo.png')}
               style={styles.authTopLogoImage}
@@ -177,14 +181,14 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
 
         {/* Title with Mascot Sitting On It */}
         <View style={styles.authTitleWithMascot}>
-          <Text style={styles.authMainTitleWithMascot}>Close With Mario</Text>
+          <Text style={[styles.authMainTitleWithMascot, { color: colors.textPrimary }]}>Close With Mario</Text>
           <Image
             source={require('../../assets/LO.png')}
             style={styles.authMascotSitting}
             resizeMode="contain"
           />
-          <Text style={styles.authSubtitleWithMascot}>Your mortgage workflow simplified.</Text>
-          <Text style={styles.authWelcomeText}>
+          <Text style={[styles.authSubtitleWithMascot, { color: colors.textSecondary }]}>Your mortgage workflow simplified.</Text>
+          <Text style={[styles.authWelcomeText, { color: colors.textSecondary }]}>
             {mode === 'signIn' ? 'Welcome back! Sign in to continue' : 'Create your account to get started'}
           </Text>
         </View>
@@ -192,9 +196,9 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
         {/* Form Container */}
         <View style={styles.authFormCompact}>
           <TextInput
-            style={styles.authInputCompact}
+            style={[styles.authInputCompact, { backgroundColor: colors.cardBackground, borderColor: colors.border, color: colors.textPrimary }]}
             placeholder="Email address"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textSecondary}
             autoCapitalize="none"
             keyboardType="email-address"
             value={email}
@@ -202,9 +206,9 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
           />
 
           <TextInput
-            style={styles.authInputCompact}
+            style={[styles.authInputCompact, { backgroundColor: colors.cardBackground, borderColor: colors.border, color: colors.textPrimary }]}
             placeholder="Password"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor={colors.textSecondary}
             secureTextEntry
             autoCapitalize="none"
             value={password}
@@ -243,13 +247,13 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
           <Text style={styles.authOrTextCompact}>OR</Text>
 
           <TouchableOpacity
-            style={[styles.authGoogleButtonCompact, authLoading && styles.authButtonDisabled]}
+            style={[styles.authGoogleButtonCompact, { backgroundColor: colors.cardBackground, borderColor: colors.border }, authLoading && styles.authButtonDisabled]}
             onPress={handleGoogleSignIn}
             disabled={authLoading}
             activeOpacity={0.8}
           >
             <Text style={styles.authGoogleIconNew}>G</Text>
-            <Text style={styles.authGoogleButtonTextNew}>Continue with Google</Text>
+            <Text style={[styles.authGoogleButtonTextNew, { color: colors.textPrimary }]}>Continue with Google</Text>
           </TouchableOpacity>
         </View>
 

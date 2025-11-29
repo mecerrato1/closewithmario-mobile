@@ -238,6 +238,13 @@ export const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 8,
   },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#3B82F6', // blue dot
+    marginLeft: 6,
+  },
   attentionBadgeText: {
     fontSize: 11,
     fontWeight: '700',

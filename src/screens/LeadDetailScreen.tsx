@@ -28,6 +28,8 @@ import { STATUSES, STATUS_DISPLAY_MAP, STATUS_COLOR_MAP, getLeadAlert, formatSta
 import { scheduleLeadCallback } from '../lib/callbacks';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { styles } from '../styles/appStyles';
+import { Ionicons } from '@expo/vector-icons';
+import { useThemeColors } from '../styles/theme';
 
 export type LeadDetailViewProps = {
   selected: SelectedLeadRef;
@@ -66,6 +68,7 @@ export function LeadDetailView({
   selectedLOFilter,
   activeTab,
 }: LeadDetailViewProps) {
+  const { colors, isDark } = useThemeColors();
   const [taskNote, setTaskNote] = useState('');
   const [activities, setActivities] = useState<Activity[]>([]);
   const [selectedActivityType, setSelectedActivityType] = useState<'call' | 'text' | 'email' | 'note'>('call');
@@ -867,12 +870,21 @@ export function LeadDetailView({
     setShowQuickPhrases(false);
   };
 
-  const getActivityIcon = (type: 'call' | 'text' | 'email' | 'note') => {
+  type ActivityType = 'call' | 'text' | 'email' | 'note';
+
+  const getActivityIconName = (
+    type: ActivityType
+  ): React.ComponentProps<typeof Ionicons>['name'] => {
     switch (type) {
-      case 'call': return '📞';
-      case 'text': return '💬';
-      case 'email': return '📧';
-      case 'note': return '📝';
+      case 'call':
+        return 'call-outline';
+      case 'text':
+        return 'chatbubble-ellipses-outline';
+      case 'email':
+        return 'mail-outline';
+      case 'note':
+      default:
+        return 'document-text-outline';
     }
   };
 
@@ -954,7 +966,8 @@ export function LeadDetailView({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
       {/* Modern Detail Header with Navigation */}
       <View style={styles.detailHeader}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
@@ -985,10 +998,10 @@ export function LeadDetailView({
       </View>
 
       {/* Sticky Name Bar */}
-      <View style={styles.stickyNameBar}>
+      <View style={[styles.stickyNameBar, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
         <View style={styles.stickyNameColumn}>
           <View style={styles.stickyNameRow}>
-            <Text style={styles.stickyName} numberOfLines={1}>{fullName}</Text>
+            <Text style={[styles.stickyName, { color: colors.textPrimary }]} numberOfLines={1}>{fullName}</Text>
             <View style={[
               styles.stickyStatusBadge,
               { backgroundColor: STATUS_COLOR_MAP[status || 'new']?.bg || '#F5F5F5' }
@@ -1015,8 +1028,8 @@ export function LeadDetailView({
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
-        <View style={styles.detailCard}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 32, backgroundColor: colors.background }} showsVerticalScrollIndicator={false}>
+        <View style={[styles.detailCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
 
           {/* Divider */}
           <View style={styles.sectionDivider} />
@@ -1245,8 +1258,8 @@ export function LeadDetailView({
           )}
 
           {/* Basic fields */}
-          <Text style={styles.sectionTitle}>ℹ️ Details</Text>
-          <Text style={styles.detailFieldBlock} selectable={true}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>ℹ️ Details</Text>
+          <Text style={[styles.detailFieldBlock, { color: colors.textPrimary }]} selectable={true}>
             Email: {email || 'N/A'}{'\n'}
             Phone: {phone || 'N/A'}
           </Text>
@@ -1254,27 +1267,27 @@ export function LeadDetailView({
           {!isMeta && (
             <>
               {(record as Lead).loan_purpose && (
-                <Text style={styles.detailField} selectable={true}>
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Loan Purpose: {(record as Lead).loan_purpose}
                 </Text>
               )}
               {(record as Lead).price != null && (
-                <Text style={styles.detailField} selectable={true}>
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Price: ${(record as Lead).price?.toLocaleString()}
                 </Text>
               )}
               {(record as Lead).down_payment != null && (
-                <Text style={styles.detailField} selectable={true}>
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Down Payment: ${(record as Lead).down_payment?.toLocaleString()}
                 </Text>
               )}
               {(record as Lead).credit_score != null && (
-                <Text style={styles.detailField} selectable={true}>
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Credit Score: {(record as Lead).credit_score}
                 </Text>
               )}
               {(record as Lead).message && (
-                <Text style={styles.detailField} selectable={true}>
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Message: {(record as Lead).message}
                 </Text>
               )}
@@ -1284,18 +1297,18 @@ export function LeadDetailView({
           {isMeta && (
             <>
               {(record as MetaLead).platform && (
-                <Text style={styles.detailField} selectable={true}>
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Platform: {(record as MetaLead).platform}
                 </Text>
               )}
               {(record as MetaLead).campaign_name && (
-                <Text style={styles.detailField} selectable={true}>
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Campaign: {(record as MetaLead).campaign_name}
                 </Text>
               )}
               {(record as MetaLead).ad_name && (
                 <>
-                  <Text style={styles.detailField} selectable={true}>
+                  <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                     Ad Name: {(record as MetaLead).ad_name}
                   </Text>
                   {adImage && (
@@ -1309,57 +1322,57 @@ export function LeadDetailView({
                 </>
               )}
               {(record as MetaLead).subject_address && (
-                <Text style={styles.detailField} selectable={true}>
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Address: {(record as MetaLead).subject_address}
                 </Text>
               )}
               {(record as MetaLead).preferred_language && (
-                <Text style={styles.detailField} selectable={true}>
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Language: {(record as MetaLead).preferred_language}
                 </Text>
               )}
               {(record as MetaLead).credit_range && (
-                <Text style={styles.detailField} selectable={true}>
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Credit Range: {(record as MetaLead).credit_range}
                 </Text>
               )}
               {(record as MetaLead).income_type && (
-                <Text style={styles.detailField} selectable={true}>
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Income Type: {(record as MetaLead).income_type}
                 </Text>
               )}
               {(record as MetaLead).purchase_timeline && (
-                <Text style={styles.detailField} selectable={true}>
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Purchase Timeline: {(record as MetaLead).purchase_timeline}
                 </Text>
               )}
               {(record as MetaLead).price_range && (
-                <Text style={styles.detailField} selectable={true}>
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Price Range: {(record as MetaLead).price_range}
                 </Text>
               )}
               {(record as MetaLead).down_payment_saved && (
-                <Text style={styles.detailField} selectable={true}>
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Down Payment Saved: {(record as MetaLead).down_payment_saved}
                 </Text>
               )}
               {(record as MetaLead).has_realtor != null && (
-                <Text style={styles.detailField} selectable={true}>
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Has Realtor: {(record as MetaLead).has_realtor ? 'Yes' : 'No'}
                 </Text>
               )}
               {(record as MetaLead).county_interest && (
-                <Text style={styles.detailField} selectable={true}>
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   County Interest: {(record as MetaLead).county_interest}
                 </Text>
               )}
               {(record as MetaLead).monthly_income && (
-                <Text style={styles.detailField} selectable={true}>
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Monthly Income: {(record as MetaLead).monthly_income}
                 </Text>
               )}
               {((record as MetaLead).meta_ad_notes || (record as MetaLead).additional_notes) && (
-                <Text style={styles.detailField} selectable={true}>
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Notes: {(record as MetaLead).meta_ad_notes || (record as MetaLead).additional_notes}
                 </Text>
               )}
@@ -1370,7 +1383,7 @@ export function LeadDetailView({
           <View style={styles.sectionDivider} />
 
           {/* Tasks / Logging Section */}
-          <Text style={styles.sectionTitle}>✍️ Log Activity</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>✍️ Log Activity</Text>
           
           {/* Activity Type Buttons */}
           <View style={styles.activityTypeRow}>
@@ -1385,7 +1398,12 @@ export function LeadDetailView({
                 styles.activityTypeText,
                 selectedActivityType === 'call' && styles.activityTypeTextActive,
               ]}>
-                📞 Call
+                <Ionicons
+                  name="call-outline"
+                  size={14}
+                  color={selectedActivityType === 'call' ? '#059669' : '#64748B'}
+                />{' '}
+                Call
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -1399,7 +1417,12 @@ export function LeadDetailView({
                 styles.activityTypeText,
                 selectedActivityType === 'text' && styles.activityTypeTextActive,
               ]}>
-                💬 Text
+                <Ionicons
+                  name="chatbubble-ellipses-outline"
+                  size={14}
+                  color={selectedActivityType === 'text' ? '#059669' : '#64748B'}
+                />{' '}
+                Text
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -1413,7 +1436,12 @@ export function LeadDetailView({
                 styles.activityTypeText,
                 selectedActivityType === 'email' && styles.activityTypeTextActive,
               ]}>
-                📧 Email
+                <Ionicons
+                  name="mail-outline"
+                  size={14}
+                  color={selectedActivityType === 'email' ? '#059669' : '#64748B'}
+                />{' '}
+                Email
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -1427,7 +1455,12 @@ export function LeadDetailView({
                 styles.activityTypeText,
                 selectedActivityType === 'note' && styles.activityTypeTextActive,
               ]}>
-                📝 Note
+                <Ionicons
+                  name="document-text-outline"
+                  size={14}
+                  color={selectedActivityType === 'note' ? '#059669' : '#64748B'}
+                />{' '}
+                Note
               </Text>
             </TouchableOpacity>
           </View>
@@ -1438,7 +1471,8 @@ export function LeadDetailView({
             onPress={() => setShowQuickPhrases(!showQuickPhrases)}
           >
             <Text style={styles.quickPhrasesButtonText}>
-              📋 Quick Phrases {showQuickPhrases ? '▲' : '▼'}
+              <Ionicons name="list-circle-outline" size={16} color="#0F172A" />{' '}
+              Quick Phrases {showQuickPhrases ? '▲' : '▼'}
             </Text>
           </TouchableOpacity>
 
@@ -1458,7 +1492,7 @@ export function LeadDetailView({
           )}
           
           {/* Activity Input */}
-          <View style={styles.activityInputCard}>
+          <View style={[styles.activityInputCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
             <TextInput
               style={styles.activityInput}
               placeholder={`Enter ${selectedActivityType} details...`}
@@ -1513,11 +1547,21 @@ export function LeadDetailView({
                 }}
                 disabled={!taskNote.trim() || savingActivity}
               >
-                <Text style={styles.logActivityButtonText}>
-                  {savingActivity 
-                    ? 'Saving...' 
-                    : `Log ${getActivityIcon(selectedActivityType)} ${getActivityLabel(selectedActivityType)}`}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  {!savingActivity && (
+                    <Ionicons
+                      name={getActivityIconName(selectedActivityType)}
+                      size={16}
+                      color="#FFFFFF"
+                      style={{ marginRight: 6 }}
+                    />
+                  )}
+                  <Text style={styles.logActivityButtonText}>
+                    {savingActivity
+                      ? 'Saving...'
+                      : `Log ${getActivityLabel(selectedActivityType)}`}
+                  </Text>
+                </View>
               </TouchableOpacity>
             </Animated.View>
           </View>
@@ -1526,23 +1570,37 @@ export function LeadDetailView({
           <View style={styles.sectionDivider} />
 
           {/* Activity History */}
-          <Text style={styles.sectionTitle}>📋 Activity History</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+            <Ionicons
+              name="time-outline"
+              size={16}
+              color={colors.textPrimary}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Activity History</Text>
+          </View>
 
           {loadingActivities ? (
             <ActivityIndicator size="small" color="#007aff" style={{ marginTop: 12 }} />
           ) : activities.length > 0 ? (
             <View style={styles.tasksList}>
               {activities.map((activity) => (
-                <View key={activity.id} style={styles.activityHistoryItem}>
+                <View key={activity.id} style={[styles.activityHistoryItem, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
                   <View style={styles.activityHistoryHeader}>
                     <View style={styles.activityHistoryHeaderLeft}>
-                      <Text style={styles.activityHistoryType}>
-                        {activity.audio_url
-                          ? '🎤 Voice note'
-                          : `${getActivityIcon(activity.activity_type)} ${getActivityLabel(
-                              activity.activity_type
-                            )}`}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Ionicons
+                          name={activity.audio_url ? 'mic-outline' : getActivityIconName(activity.activity_type)}
+                          size={14}
+                          color={colors.textPrimary}
+                          style={{ marginRight: 6 }}
+                        />
+                        <Text style={styles.activityHistoryType}>
+                          {activity.audio_url
+                            ? 'Voice note'
+                            : getActivityLabel(activity.activity_type)}
+                        </Text>
+                      </View>
                       <Text style={styles.activityHistoryTimestamp}>
                         {formatTime(activity.created_at)}
                       </Text>
@@ -1553,9 +1611,15 @@ export function LeadDetailView({
                         disabled={deletingActivityId === activity.id}
                         style={styles.deleteActivityButton}
                       >
-                        <Text style={styles.deleteActivityButtonText}>
-                          {deletingActivityId === activity.id ? '⏳' : '🗑️'}
-                        </Text>
+                        {deletingActivityId === activity.id ? (
+                          <ActivityIndicator size="small" color="#DC2626" />
+                        ) : (
+                          <Ionicons
+                            name="trash-outline"
+                            size={16}
+                            color="#DC2626"
+                          />
+                        )}
                       </TouchableOpacity>
                     )}
                   </View>

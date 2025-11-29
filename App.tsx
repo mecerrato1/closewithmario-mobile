@@ -20,6 +20,7 @@ import {
   Animated,
 } from 'react-native';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
+import { Ionicons } from '@expo/vector-icons';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './src/lib/supabase';
 import { getUserRole, getUserTeamMemberId, canSeeAllLeads, type UserRole } from './src/lib/roles';
@@ -36,6 +37,7 @@ import TeamManagementScreen from './src/screens/TeamManagementScreen';
 import { AppLockProvider, useAppLock } from './src/contexts/AppLockContext';
 import LockScreen from './src/screens/LockScreen';
 import { styles } from './src/styles/appStyles';
+import { useThemeColors } from './src/styles/theme';
 
 import * as WebBrowser from 'expo-web-browser';
 
@@ -76,6 +78,7 @@ type LeadsScreenProps = {
 };
 
 function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandled }: LeadsScreenProps) {
+  const { colors, isDark } = useThemeColors();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [metaLeads, setMetaLeads] = useState<MetaLead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -512,6 +515,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const emailOrPhone = item.email || item.phone || 'No contact info';
     const alert = getLeadAlert(item);
     const borderColor = alert ? alert.color : '#7C3AED';
+    const isUnread = !item.last_contact_date && (item.status === 'new' || !item.status);
 
     // Right-side swipe actions for website leads
     const renderRightActions = () => (
@@ -542,21 +546,45 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         overshootRight={false}
       >
         <TouchableOpacity
-          style={[styles.leadCard, { borderLeftColor: borderColor }]}
+          style={[
+            styles.leadCard,
+            {
+              borderLeftColor: borderColor,
+              backgroundColor: colors.cardBackground,
+              borderColor: colors.border,
+            },
+          ]}
           onPress={() =>
             setSelectedLead({ source: 'lead', id: item.id })
           }
           activeOpacity={0.7}
         >
           <View style={styles.leadHeader}>
-            <Text style={styles.leadName}>{fullName}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
+              <Text style={[styles.leadName, { color: colors.textPrimary }]} numberOfLines={1}>
+                {fullName}
+              </Text>
+              {isUnread && <View style={styles.unreadDot} />}
+            </View>
             <View style={styles.leadSourceBadge}>
-              <Text style={styles.leadSourceText}>🌐 Web</Text>
+              <Ionicons
+                name="globe-outline"
+                size={12}
+                color="#0F172A"
+                style={{ marginRight: 4 }}
+              />
+              <Text style={styles.leadSourceText}>Web</Text>
             </View>
           </View>
           {alert && (
             <View style={[styles.attentionBadge, { backgroundColor: alert.color }]}>
-              <Text style={styles.attentionBadgeText}>⚠️ {alert.label}</Text>
+              <Ionicons
+                name="warning-outline"
+                size={12}
+                color="#FFF"
+                style={{ marginRight: 4 }}
+              />
+              <Text style={styles.attentionBadgeText}>{alert.label}</Text>
             </View>
           )}
           <View style={[
@@ -569,19 +597,36 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           </View>
           {item.email && (
             <View style={styles.leadContactRow}>
-              <Text style={styles.leadContactIcon}>📧</Text>
-              <Text style={styles.leadContact} numberOfLines={1}>{item.email}</Text>
+              <Ionicons
+                name="mail-outline"
+                size={14}
+                color={colors.textSecondary}
+                style={styles.leadContactIcon as any}
+              />
+              <Text style={[styles.leadContact, { color: colors.textSecondary }]} numberOfLines={1}>{item.email}</Text>
             </View>
           )}
           {item.phone && (
             <View style={styles.leadContactRow}>
-              <Text style={styles.leadContactIcon}>📞</Text>
-              <Text style={styles.leadContact} numberOfLines={1}>{formatPhoneNumber(item.phone)}</Text>
+              <Ionicons
+                name="call-outline"
+                size={14}
+                color={colors.textSecondary}
+                style={styles.leadContactIcon as any}
+              />
+              <Text style={[styles.leadContact, { color: colors.textSecondary }]} numberOfLines={1}>
+                {formatPhoneNumber(item.phone)}
+              </Text>
             </View>
           )}
           {userRole === 'super_admin' && item.lo_id && (
             <View style={styles.leadLORow}>
-              <Text style={styles.leadLOIcon}>👤</Text>
+              <Ionicons
+                name="person-circle-outline"
+                size={14}
+                color="#64748B"
+                style={styles.leadLOIcon as any}
+              />
               <Text style={styles.leadLOText} numberOfLines={1}>
                 {loanOfficers.find(lo => lo.id === item.lo_id)?.name || 'Unknown LO'}
               </Text>
@@ -611,6 +656,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const borderColor = alert ? alert.color : '#7C3AED';
     const statusColors =
       STATUS_COLOR_MAP[item.status || 'new'] || STATUS_COLOR_MAP['new'];
+    const isUnread = !item.last_contact_date && (item.status === 'new' || !item.status);
 
     const getPlatformBadge = (platform: string) => {
       const platformLower = platform.toLowerCase();
@@ -673,19 +719,37 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         overshootRight={false}
       >
         <TouchableOpacity
-          style={[styles.leadCard, { borderLeftColor: borderColor }]}
+          style={[
+            styles.leadCard,
+            {
+              borderLeftColor: borderColor,
+              backgroundColor: colors.cardBackground,
+              borderColor: colors.border,
+            },
+          ]}
           onPress={() =>
             setSelectedLead({ source: 'meta', id: item.id })
           }
           activeOpacity={0.7}
         >
           <View style={styles.leadHeader}>
-            <Text style={styles.leadName}>{fullName}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
+              <Text style={[styles.leadName, { color: colors.textPrimary }]} numberOfLines={1}>
+                {fullName}
+              </Text>
+              {isUnread && <View style={styles.unreadDot} />}
+            </View>
             {getPlatformBadge(platform)}
           </View>
           {alert && (
             <View style={[styles.attentionBadge, { backgroundColor: alert.color }]}>
-              <Text style={styles.attentionBadgeText}>⚠️ {alert.label}</Text>
+              <Ionicons
+                name="warning-outline"
+                size={12}
+                color="#FFF"
+                style={{ marginRight: 4 }}
+              />
+              <Text style={styles.attentionBadgeText}>{alert.label}</Text>
             </View>
           )}
           <View style={[
@@ -698,31 +762,51 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           </View>
           {campaign ? (
             <View style={styles.campaignRow}>
-              <Text style={styles.campaignIcon}>📢</Text>
-              <Text style={styles.leadCampaign} numberOfLines={1}>{campaign}</Text>
+              <Ionicons
+                name="megaphone-outline"
+                size={14}
+                color={colors.textSecondary}
+                style={{ marginRight: 4 }}
+              />
+              <Text style={[styles.leadCampaign, { color: colors.textSecondary }]} numberOfLines={1}>{campaign}</Text>
             </View>
           ) : null}
           {item.email && (
             <View style={styles.leadContactRow}>
-              <Text style={styles.leadContactIcon}>📧</Text>
-              <Text style={styles.leadContact} numberOfLines={1}>{item.email}</Text>
+              <Ionicons
+                name="mail-outline"
+                size={14}
+                color={colors.textSecondary}
+                style={styles.leadContactIcon as any}
+              />
+              <Text style={[styles.leadContact, { color: colors.textSecondary }]} numberOfLines={1}>{item.email}</Text>
             </View>
           )}
           {item.phone && (
             <View style={styles.leadContactRow}>
-              <Text style={styles.leadContactIcon}>📞</Text>
-              <Text style={styles.leadContact} numberOfLines={1}>{formatPhoneNumber(item.phone)}</Text>
+              <Ionicons
+                name="call-outline"
+                size={14}
+                color={colors.textSecondary}
+                style={styles.leadContactIcon as any}
+              />
+              <Text style={[styles.leadContact, { color: colors.textSecondary }]} numberOfLines={1}>{formatPhoneNumber(item.phone)}</Text>
             </View>
           )}
           {userRole === 'super_admin' && item.lo_id && (
             <View style={styles.leadLORow}>
-              <Text style={styles.leadLOIcon}>👤</Text>
-              <Text style={styles.leadLOText} numberOfLines={1}>
+              <Ionicons
+                name="person-circle-outline"
+                size={14}
+                color={colors.textSecondary}
+                style={styles.leadLOIcon as any}
+              />
+              <Text style={[styles.leadLOText, { color: colors.textSecondary }]} numberOfLines={1}>
                 {loanOfficers.find(lo => lo.id === item.lo_id)?.name || 'Unknown LO'}
               </Text>
             </View>
           )}
-          <Text style={styles.leadTimestamp}>
+          <Text style={[styles.leadTimestamp, { color: colors.textSecondary }]}>
             {new Date(item.created_at).toLocaleDateString('en-US', { 
               month: 'short', 
               day: 'numeric',
@@ -856,9 +940,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                           'there';
 
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
         {/* Purple Gradient Header */}
-        <View style={styles.newDashboardHeader}>
+        <View style={[styles.newDashboardHeader, { backgroundColor: colors.headerBackground }]}>
           {/* User Info Row */}
           <View style={styles.newHeaderTop}>
             <View style={styles.newUserInfo}>
@@ -964,49 +1048,49 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           </TouchableOpacity>
 
           {/* Performance Section */}
-          <View style={styles.performanceSection}>
+          <View style={[styles.performanceSection, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>📈 Performance</Text>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>📈 Performance</Text>
             </View>
             <View style={styles.performanceGrid}>
               <TouchableOpacity 
-                style={styles.performanceCard}
+                style={[styles.performanceCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
                 onPress={() => {
                   setActiveTab('all');
                   setSelectedStatusFilter('new');
                   setShowDashboard(false);
                 }}
               >
-                <Text style={styles.perfNumber}>{newLeads}</Text>
-                <Text style={styles.perfLabel}>New Leads</Text>
+                <Text style={[styles.perfNumber, { color: colors.textPrimary }]}>{newLeads}</Text>
+                <Text style={[styles.perfLabel, { color: colors.textSecondary }]}>New Leads</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={styles.performanceCard}
+                style={[styles.performanceCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
                 onPress={() => {
                   setActiveTab('all');
                   setSelectedStatusFilter('qualified');
                   setShowDashboard(false);
                 }}
               >
-                <Text style={styles.perfNumber}>{qualifiedLeads}</Text>
-                <Text style={styles.perfLabel}>Qualified</Text>
+                <Text style={[styles.perfNumber, { color: colors.textPrimary }]}>{qualifiedLeads}</Text>
+                <Text style={[styles.perfLabel, { color: colors.textSecondary }]}>Qualified</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={styles.performanceCard}
+                style={[styles.performanceCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
                 onPress={() => {
                   setActiveTab('all');
                   setSelectedStatusFilter('closed');
                   setShowDashboard(false);
                 }}
               >
-                <Text style={styles.perfNumber}>{closedLeads}</Text>
-                <Text style={styles.perfLabel}>Closed</Text>
+                <Text style={[styles.perfNumber, { color: colors.textPrimary }]}>{closedLeads}</Text>
+                <Text style={[styles.perfLabel, { color: colors.textSecondary }]}>Closed</Text>
               </TouchableOpacity>
-              <View style={styles.performanceCard}>
-                <Text style={styles.perfNumber}>
+              <View style={[styles.performanceCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+                <Text style={[styles.perfNumber, { color: colors.textPrimary }]}>
                   {totalLeads > 0 ? Math.round((closedLeads / totalLeads) * 100) : 0}%
                 </Text>
-                <Text style={styles.perfLabel}>Conversion</Text>
+                <Text style={[styles.perfLabel, { color: colors.textSecondary }]}>Conversion</Text>
               </View>
               <TouchableOpacity 
                 style={[styles.performanceCard, styles.performanceCardUnqualified]}
@@ -1050,9 +1134,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           )}
 
           {/* Recent Leads Section */}
-          <View style={styles.recentLeadsSection}>
+          <View style={[styles.recentLeadsSection, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>🕒 Recent Leads</Text>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>🕒 Recent Leads</Text>
             </View>
             {recentLeads.length > 0 ? (
               recentLeads.map((lead) => {
@@ -1061,14 +1145,15 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 const isNew = lead.status === 'new';
                 const isQualified = lead.status === 'qualified';
                 const source = lead.source === 'meta' 
-                  ? `📱 Facebook${(lead as MetaLead).campaign_name ? ' • ' + (lead as MetaLead).campaign_name : ''}`
-                  : '🌐 Website Contact';
+                  ? `Facebook${(lead as MetaLead).campaign_name ? ' • ' + (lead as MetaLead).campaign_name : ''}`
+                  : 'Website Contact';
                 
                 return (
                   <TouchableOpacity
                     key={`${lead.source}-${lead.id}`}
                     style={[
                       styles.newLeadCard,
+                      { backgroundColor: colors.cardBackground, borderColor: colors.border },
                       isNew && styles.newLeadCardNew,
                       isQualified && styles.newLeadCardQualified
                     ]}
@@ -1079,9 +1164,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   >
                     <View style={styles.newLeadHeader}>
                       <View style={styles.newLeadLeft}>
-                        <Text style={styles.newLeadName}>{fullName}</Text>
-                        <Text style={styles.newLeadSource} numberOfLines={1}>{source}</Text>
-                        <Text style={styles.newLeadTime}>{timeAgo}</Text>
+                        <Text style={[styles.newLeadName, { color: colors.textPrimary }]}>{fullName}</Text>
+                        <Text style={[styles.newLeadSource, { color: colors.textSecondary }]} numberOfLines={1}>{source}</Text>
+                        <Text style={[styles.newLeadTime, { color: colors.textSecondary }]}>{timeAgo}</Text>
                       </View>
                       <View style={styles.newLeadBadges}>
                         {isNew && (
@@ -1117,9 +1202,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const hasMetaLeads = metaLeads.length > 0;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Modern Purple Header with Stats and Search */}
-      <View style={styles.leadsHeaderContainer}>
+      <View style={[styles.leadsHeaderContainer, { backgroundColor: colors.headerBackground }]}>
         <View style={styles.headerContent}>
           <TouchableOpacity onPress={() => setShowDashboard(true)} style={styles.homeButton}>
             <Text style={styles.homeButtonText}>← Home</Text>
