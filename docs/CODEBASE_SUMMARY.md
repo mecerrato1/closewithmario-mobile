@@ -2,9 +2,10 @@
 
 **Last Updated:** November 29, 2025  
 **EAS Account:** mecerrato1  
-**Latest Build:** iOS Production Build 36 (v1.1.21, Nov 29, 2025)  
+**Latest Build:** iOS Production Build 37+ (v1.1.22+, Nov 29, 2025)  
 **Major Refactor:** November 26, 2025 - Modular architecture with separated screens and styles  
-**Security Update:** November 29, 2025 - Face ID/Touch ID biometric authentication
+**Security Update:** November 29, 2025 - Face ID/Touch ID biometric authentication  
+**Feature Update:** November 29, 2025 - Voice notes, unread indicators, document templates
 
 ---
 
@@ -30,6 +31,7 @@
   "@react-native-async-storage/async-storage": "^2.1.0",
   "expo": "~54.0.25",
   "expo-auth-session": "~7.0.9",
+  "expo-av": "~15.0.2",
   "expo-local-authentication": "~15.0.3",
   "expo-status-bar": "~3.0.8",
   "expo-web-browser": "~15.0.9",
@@ -756,17 +758,19 @@ RBAC utilities:
 - `canSeeAllLeads()` - Check if user is admin
 - Type definitions for UserRole
 
-### `src/lib/textTemplates.ts` (~280 lines)
+### `src/lib/textTemplates.ts` (~380 lines)
 SMS text message templates with bilingual support:
-- 4 pre-written templates (Initial Contact, Document Follow-up, Pre-approval Check-in, Stop Paying Rent)
+- **10 pre-written templates** (Initial Contact, Document Follow-up, Pre-approval Check-in, Stop Paying Rent, Not Ready - General, Not Ready - Credit, Callback Confirmation, Hung Up, Variable Income Docs, Self-Employed Docs)
 - **Bilingual support:** English and Spanish versions for all templates
-- Variable replacement system: `{fname}`, `{loFullname}`, `{loFname}`, `{loPhone}`, `{loEmail}`, `{platform}`
+- Variable replacement system: `{fname}`, `{loFullname}`, `{loFname}`, `{loPhone}`, `{loEmail}`, `{platform}`, `{recentYear}`, `{prevYear}`
+- **Dynamic year calculation:** `{recentYear}` = current year - 1, `{prevYear}` = current year - 2
 - `formatPlatformName()` - Converts FB/IG to Facebook/Instagram (case-insensitive)
-- `fillTemplate()` - Replaces template variables with actual values
+- `fillTemplate()` - Replaces template variables with actual values including dynamic years
 - `getTemplateText()` - Returns English or Spanish version based on preference
 - `getTemplateName()` - Returns template name in selected language
 - **Auto-detection:** Automatically uses Spanish if lead's `preferred_language` is 'spanish'
 - **Manual override:** Language toggle in template modal for manual selection
+- **Document Checklists:** Variable Income Docs and Self-Employed Docs templates with tax year placeholders
 - Templates include friendly emojis and proper formatting
 
 ### `src/lib/types/leads.ts` (~80 lines) ✨ EXPANDED
@@ -830,13 +834,21 @@ Environment variables for Supabase connection.
 
 6. **`lead_activities` table:**
    - Tracks interactions for website leads
-   - Columns: id, created_at, lead_id, activity_type, notes, created_by, user_email
+   - Columns: id, created_at, lead_id, activity_type, notes, created_by, user_email, audio_url
    - Activity types: 'call', 'text', 'email', 'note'
+   - `audio_url` stores voice note recordings
+
+9. **Supabase Storage Bucket:**
+   - **`activity-voice-notes`** - Stores voice note audio files
+   - Public read access for playback
+   - Authenticated upload/delete access
+   - Files organized by lead ID
 
 7. **`meta_ad_activities` table:**
    - Tracks interactions for meta leads
-   - Columns: id, created_at, meta_ad_id, activity_type, notes, created_by, user_email
+   - Columns: id, created_at, meta_ad_id, activity_type, notes, created_by, user_email, audio_url
    - Activity types: 'call', 'text', 'email', 'note'
+   - `audio_url` stores voice note recordings
 
 8. **`lead_callbacks` table:**
    - Stores scheduled callback reminders
@@ -927,6 +939,57 @@ The codebase underwent a massive refactoring to improve maintainability, readabi
 ---
 
 ## 📅 Recent Changes (November 2025)
+
+### November 29, 2025 - Voice Notes, Unread Indicators & Document Templates (v1.1.22+)
+
+#### 🎙️ Voice Notes Feature
+1. **Audio Recording** - Record voice notes for lead activities
+   - Uses `expo-av` for audio recording (HIGH_QUALITY preset)
+   - Microphone permission handling with graceful prompts
+   - Visual recording indicator with red mic button
+   - Stop recording and auto-save functionality
+
+2. **Voice Note Storage**
+   - Uploads to Supabase Storage bucket `activity-voice-notes`
+   - Files stored as `.m4a` format
+   - Public URL generation for playback
+   - Stored in `audio_url` column of activity tables
+
+3. **Voice Note Playback**
+   - Play button on activities with voice notes
+   - Stop/pause functionality
+   - Inverted audio player styling for dark theme
+   - Works on both `lead_activities` and `meta_ad_activities`
+
+#### 🔵 Unread Lead Indicator
+4. **New Lead Visual Indicator**
+   - Blue dot appears next to lead name for unread leads
+   - Unread = `!last_contact_date && (status === 'new' || !status)`
+   - Shows on both website leads and meta leads cards
+   - Helps identify leads that haven't been contacted yet
+
+#### 📄 Document Checklist Templates
+5. **Variable Income Docs Template** (English/Spanish)
+   - Most recent paystub
+   - Last paystub of {recentYear} and {prevYear}
+   - W-2 for {recentYear} and {prevYear}
+   - Driver's license
+   - Dynamic year calculation (current year - 1 and - 2)
+
+6. **Self-Employed Docs Template** (English/Spanish)
+   - Personal tax returns (all pages) for {recentYear} and {prevYear}
+   - W-2 (issued from business) for {recentYear} and {prevYear}
+   - Driver's license
+   - Dynamic year calculation
+
+#### ✨ UI Micro-Animations
+7. **Log Activity Button Animation**
+   - Subtle scale animation on press (0.96 → 1.0)
+   - 80ms duration for snappy feedback
+   - Uses `Animated.sequence` for smooth effect
+   - `LayoutAnimation` for activity list updates
+
+---
 
 ### November 29, 2025 - Security & Infrastructure Updates (v1.1.21, Build 36)
 
@@ -1187,11 +1250,15 @@ npm start
 - ✅ RBAC with super_admin/loan_officer/realtor/buyer roles
 - ✅ Modern UI with brand colors
 - ✅ Google OAuth working
-- ✅ **Face ID/Touch ID biometric authentication (NEW)**
-- ✅ **Auto-lock after 10 minutes idle (NEW)**
-- ✅ Session persistence with AsyncStorage (NEW)
-- ✅ iOS Production Build 36 deployed (v1.1.21)
-- ✅ SMS text templates with bilingual support (English/Spanish)
+- ✅ Face ID/Touch ID biometric authentication
+- ✅ Auto-lock after 10 minutes idle
+- ✅ Session persistence with AsyncStorage
+- ✅ iOS Production Build 37+ deployed (v1.1.22+)
+- ✅ SMS text templates with bilingual support (10 templates, English/Spanish)
+- ✅ **Voice notes recording and playback (NEW)**
+- ✅ **Unread lead indicator - blue dot (NEW)**
+- ✅ **Document checklist templates with dynamic years (NEW)**
+- ✅ **UI micro-animations (NEW)**
 - ✅ Advanced filtering (status, LO, search)
 - ✅ Smart navigation (respects all filters, tab-aware)
 - ✅ Team management screen
@@ -1209,8 +1276,10 @@ npm start
 - AsyncStorage used for session persistence
 - RBAC filters leads by `lo_id` or `realtor_id` for non-admin users
 - Activity logging writes to `lead_activities` or `meta_ad_activities` tables
-- Text templates in `src/lib/textTemplates.ts` with 4 bilingual messages
-- Templates auto-fill: {fname}, {loFullname}, {loFname}, {loPhone}, {loEmail}, {platform}
+- Text templates in `src/lib/textTemplates.ts` with 10 bilingual messages
+- Templates auto-fill: {fname}, {loFullname}, {loFname}, {loPhone}, {loEmail}, {platform}, {recentYear}, {prevYear}
+- Voice notes stored in Supabase Storage bucket `activity-voice-notes`
+- Unread leads identified by `!last_contact_date && (status === 'new' || !status)`
 - Spanish templates auto-selected if `preferred_language === 'spanish'`
 - Navigation respects status filter, LO filter, and search query
 - Unqualified leads excluded from default "all" view but accessible via filter
