@@ -353,6 +353,56 @@ export function LeadDetailView({
 
     console.log('Current LO Info when creating template:', currentLOInfo);
 
+    // Helper function to format callback date/time
+    const formatCallbackDateTime = (date: Date): string => {
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const callbackDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      
+      const timeStr = date.toLocaleString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      });
+      
+      if (callbackDay.getTime() === today.getTime()) {
+        return `today at ${timeStr}`;
+      } else if (callbackDay.getTime() === tomorrow.getTime()) {
+        return `tomorrow at ${timeStr}`;
+      } else {
+        const dateStr = date.toLocaleString('en-US', {
+          month: '2-digit',
+          day: '2-digit',
+          year: 'numeric',
+        });
+        return `${dateStr} at ${timeStr}`;
+      }
+    };
+
+    // Fetch the most recent callback for this lead if using callback_confirmation template
+    let callbackTime = '';
+    if (templateId === 'callback_confirmation') {
+      try {
+        const now = new Date();
+        const { data: callbacks } = await supabase
+          .from('lead_callbacks')
+          .select('scheduled_for')
+          .or(isMeta ? `meta_ad_id.eq.${record.id}` : `lead_id.eq.${record.id}`)
+          .gte('scheduled_for', now.toISOString()) // Only get future callbacks
+          .order('scheduled_for', { ascending: true }) // Get the soonest upcoming callback
+          .limit(1);
+        
+        if (callbacks && callbacks.length > 0) {
+          const scheduledDate = new Date(callbacks[0].scheduled_for);
+          callbackTime = ` ${formatCallbackDateTime(scheduledDate)}`; // Add space before the time
+        }
+      } catch (error) {
+        console.error('Error fetching callback:', error);
+      }
+    }
+
     const variables: TemplateVariables = {
       fname: record.first_name || 'there',
       loFullname: currentLOInfo 
@@ -362,6 +412,7 @@ export function LeadDetailView({
       loPhone: currentLOInfo?.phone || '[Phone]',
       loEmail: currentLOInfo?.email || '[Email]',
       platform: isMeta ? (record as MetaLead).platform || 'Facebook' : 'our website',
+      callbackTime: callbackTime,
     };
 
     console.log('Template variables:', variables);
@@ -1454,7 +1505,16 @@ export function LeadDetailView({
             <>
               {(record as MetaLead).platform && (
                 <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
-                  Platform: {(record as MetaLead).platform}
+                  Platform: <Text style={{ fontWeight: '700' }}>{(() => {
+                    const platformValue = (record as MetaLead).platform;
+                    if (!platformValue) return '';
+                    const platform = platformValue.toLowerCase();
+                    if (platform.includes('fb') || platform.includes('facebook')) return 'Facebook';
+                    if (platform.includes('ig') || platform.includes('instagram')) return 'Instagram';
+                    if (platform.includes('messenger')) return 'Messenger';
+                    if (platform.includes('whatsapp')) return 'WhatsApp';
+                    return platformValue;
+                  })()}</Text>
                 </Text>
               )}
               {(record as MetaLead).campaign_name && (
@@ -2046,16 +2106,35 @@ export function LeadDetailView({
                     const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
                     const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
 
-                    // Format date as MM/DD/YYYY HH:MMam/pm
-                    const formattedDate = callbackDate.toLocaleString('en-US', {
-                      month: '2-digit',
-                      day: '2-digit',
-                      year: 'numeric',
-                      hour: 'numeric',
-                      minute: '2-digit',
-                      hour12: true,
-                    });
+                    // Format date with smart relative dates (today/tomorrow)
+                    const formatCallbackDate = (date: Date): string => {
+                      const now = new Date();
+                      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                      const tomorrow = new Date(today);
+                      tomorrow.setDate(tomorrow.getDate() + 1);
+                      const callbackDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+                      
+                      const timeStr = date.toLocaleString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true,
+                      });
+                      
+                      if (callbackDay.getTime() === today.getTime()) {
+                        return `today at ${timeStr}`;
+                      } else if (callbackDay.getTime() === tomorrow.getTime()) {
+                        return `tomorrow at ${timeStr}`;
+                      } else {
+                        const dateStr = date.toLocaleString('en-US', {
+                          month: '2-digit',
+                          day: '2-digit',
+                          year: 'numeric',
+                        });
+                        return `${dateStr} at ${timeStr}`;
+                      }
+                    };
 
+                    const formattedDate = formatCallbackDate(callbackDate);
                     const callbackMessage = `Callback scheduled for ${formattedDate}${callbackNote ? ` - ${callbackNote}` : ''}`;
 
                     const { data: newActivity } = await supabase.from(tableName).insert([

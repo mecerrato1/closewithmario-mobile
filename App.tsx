@@ -93,6 +93,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [activeTab, setActiveTab] = useState<'leads' | 'meta' | 'all'>('all');
   const [showDashboard, setShowDashboard] = useState(true);
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
+  const [attentionFilter, setAttentionFilter] = useState(false);
   const [hasManuallySelectedTab, setHasManuallySelectedTab] = useState(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [loanOfficers, setLoanOfficers] = useState<Array<{ id: string; name: string }>>([]);
@@ -686,6 +687,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     return lead.lo_id === selectedLOFilter;
   };
 
+  // Attention filter: when enabled, only show leads with an attention badge
+  const matchesAttentionFilter = (lead: Lead | MetaLead) => {
+    if (!attentionFilter) return true;
+    return !!getLeadAlert(lead);
+  };
+
   const renderLeadItem = ({ item }: { item: Lead }) => {
     const fullName =
       [item.first_name, item.last_name].filter(Boolean).join(' ') ||
@@ -1161,6 +1168,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     
     // Separate count for unqualified leads
     const unqualifiedLeads = [...filteredLeads, ...filteredMetaLeads].filter(l => l.status === 'unqualified').length;
+
+    // Leads that currently have an attention badge
+    const attentionLeadsCount = [...activeFilteredLeads, ...activeFilteredMetaLeads]
+      .filter(l => !!getLeadAlert(l))
+      .length;
     
     // Get recent leads (last 5) - exclude unqualified
     // Use _tableType to distinguish between leads/meta_ads without overwriting the source field
@@ -1229,6 +1241,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 style={styles.newHeaderStatCard}
                 onPress={() => {
                   triggerListAnimation();
+                  setAttentionFilter(false);
                   setActiveTab('meta');
                   setSelectedStatusFilter('all');
                   setShowDashboard(false);
@@ -1241,6 +1254,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 style={styles.newHeaderStatCard}
                 onPress={() => {
                   triggerListAnimation();
+                  setAttentionFilter(false);
                   setActiveTab('leads');
                   setSelectedStatusFilter('all');
                   setShowDashboard(false);
@@ -1254,6 +1268,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               style={styles.newHeaderStatCardLarge}
               onPress={() => {
                 triggerListAnimation();
+                setAttentionFilter(false);
                 setActiveTab('all');
                 setSelectedStatusFilter('all');
                 setShowDashboard(false);
@@ -1281,52 +1296,52 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               <TouchableOpacity 
                 style={[styles.performanceCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
                 onPress={() => {
+                  setAttentionFilter(false);
                   setActiveTab('all');
                   setSelectedStatusFilter('new');
                   setShowDashboard(false);
                 }}
               >
-                <Text style={[styles.perfNumber, { color: colors.textPrimary }]}>{newLeads}</Text>
+                <Text style={[styles.perfNumber, { color: colors.textPrimary }]}>✨ {newLeads}</Text>
                 <Text style={[styles.perfLabel, { color: colors.textSecondary }]}>New Leads</Text>
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.performanceCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
                 onPress={() => {
+                  setAttentionFilter(false);
                   setActiveTab('all');
                   setSelectedStatusFilter('qualified');
                   setShowDashboard(false);
                 }}
               >
-                <Text style={[styles.perfNumber, { color: colors.textPrimary }]}>{qualifiedLeads}</Text>
+                <Text style={[styles.perfNumber, { color: colors.textPrimary }]}>🎯 {qualifiedLeads}</Text>
                 <Text style={[styles.perfLabel, { color: colors.textSecondary }]}>Qualified</Text>
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.performanceCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
                 onPress={() => {
+                  setAttentionFilter(false);
                   setActiveTab('all');
                   setSelectedStatusFilter('closed');
                   setShowDashboard(false);
                 }}
               >
-                <Text style={[styles.perfNumber, { color: colors.textPrimary }]}>{closedLeads}</Text>
+                <Text style={[styles.perfNumber, { color: colors.textPrimary }]}>🎉 {closedLeads}</Text>
                 <Text style={[styles.perfLabel, { color: colors.textSecondary }]}>Closed</Text>
               </TouchableOpacity>
-              <View style={[styles.performanceCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-                <Text style={[styles.perfNumber, { color: colors.textPrimary }]}>
-                  {totalLeads > 0 ? Math.round((closedLeads / totalLeads) * 100) : 0}%
-                </Text>
-                <Text style={[styles.perfLabel, { color: colors.textSecondary }]}>Conversion</Text>
-              </View>
+              {/* Needs Attention card: leads with an attention badge */}
               <TouchableOpacity 
-                style={[styles.performanceCard, styles.performanceCardUnqualified]}
+                style={[styles.performanceCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
                 onPress={() => {
+                  triggerListAnimation();
+                  setAttentionFilter(true);
                   setActiveTab('all');
-                  setSelectedStatusFilter('unqualified');
+                  setSelectedStatusFilter('all');
                   setShowDashboard(false);
                 }}
               >
-                <Text style={[styles.perfNumber, styles.perfNumberUnqualified]}>{unqualifiedLeads}</Text>
-                <Text style={[styles.perfLabel, styles.perfLabelUnqualified]}>Unqualified</Text>
+                <Text style={[styles.perfNumber, { color: colors.textPrimary }]}>⚠️ {attentionLeadsCount}</Text>
+                <Text style={[styles.perfLabel, { color: colors.textSecondary }]}>Needs Attention</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1462,8 +1477,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             activeTab === 'meta' && styles.statNumberActive,
           ]}>
             {selectedStatusFilter === 'all' 
-              ? metaLeads.filter(l => matchesLOFilter(l) && l.status !== 'unqualified').length 
-              : metaLeads.filter(l => l.status === selectedStatusFilter && matchesLOFilter(l)).length
+              ? metaLeads.filter(l => matchesLOFilter(l) && matchesAttentionFilter(l) && l.status !== 'unqualified').length 
+              : metaLeads.filter(l => l.status === selectedStatusFilter && matchesLOFilter(l) && matchesAttentionFilter(l)).length
             }
           </Text>
           <Text style={[
@@ -1487,8 +1502,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             activeTab === 'leads' && styles.statNumberActive,
           ]}>
             {selectedStatusFilter === 'all' 
-              ? leads.filter(l => matchesLOFilter(l) && l.status !== 'unqualified').length 
-              : leads.filter(l => l.status === selectedStatusFilter && matchesLOFilter(l)).length
+              ? leads.filter(l => matchesLOFilter(l) && matchesAttentionFilter(l) && l.status !== 'unqualified').length 
+              : leads.filter(l => l.status === selectedStatusFilter && matchesLOFilter(l) && matchesAttentionFilter(l)).length
             }
           </Text>
           <Text style={[
@@ -1512,8 +1527,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             activeTab === 'all' && styles.statNumberActive,
           ]}>
             {selectedStatusFilter === 'all' 
-              ? metaLeads.filter(l => matchesLOFilter(l) && l.status !== 'unqualified').length + leads.filter(l => matchesLOFilter(l) && l.status !== 'unqualified').length 
-              : [...metaLeads, ...leads].filter(l => l.status === selectedStatusFilter && matchesLOFilter(l)).length
+              ? metaLeads.filter(l => matchesLOFilter(l) && matchesAttentionFilter(l) && l.status !== 'unqualified').length + leads.filter(l => matchesLOFilter(l) && matchesAttentionFilter(l) && l.status !== 'unqualified').length 
+              : [...metaLeads, ...leads].filter(l => l.status === selectedStatusFilter && matchesLOFilter(l) && matchesAttentionFilter(l)).length
             }
           </Text>
           <Text style={[
@@ -1641,6 +1656,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                     ]}
                     onPress={() => {
                       triggerListAnimation();
+                      setAttentionFilter(false);
                       setSelectedStatusFilter('all');
                       setActiveTab('all');
                       setShowStatusPicker(false);
@@ -1671,6 +1687,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                         ]}
                         onPress={() => {
                           triggerListAnimation();
+                          setAttentionFilter(false);
                           setSelectedStatusFilter(status);
                           setActiveTab('all');
                           setShowStatusPicker(false);
@@ -1789,74 +1806,125 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               </TouchableOpacity>
             </Modal>
           )}
-
-          {/* Lead Content */}
-          {activeTab === 'leads' && hasLeads && (
-            <Animated.View style={animatedListStyle}>
-              <FlatList
-                data={leads.filter(lead => 
-                  (selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter) &&
-                  matchesSearch(lead) &&
-                  matchesLOFilter(lead)
-                )}
-                keyExtractor={(item) => item.id}
-                renderItem={renderLeadItem}
-                contentContainerStyle={styles.listContent}
-                refreshControl={
-                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                }
-                showsVerticalScrollIndicator={false}
-              />
-            </Animated.View>
-          )}
-
-          {activeTab === 'meta' && hasMetaLeads && (
-            <Animated.View style={animatedListStyle}>
-              <FlatList
-                data={metaLeads.filter(lead => 
-                  (selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter) &&
-                  matchesSearch(lead) &&
-                  matchesLOFilter(lead)
-                )}
-                keyExtractor={(item) => item.id}
-                renderItem={renderMetaLeadItem}
-                contentContainerStyle={styles.listContent}
-                refreshControl={
-                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                }
-                showsVerticalScrollIndicator={false}
-              />
-            </Animated.View>
-          )}
-
-          {activeTab === 'all' && (hasLeads || hasMetaLeads) && (
-            <Animated.View style={animatedListStyle}>
-              <FlatList
-                data={[
-                  ...metaLeads.filter(lead => 
-                    (selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter) &&
-                    matchesSearch(lead) &&
-                    matchesLOFilter(lead)
-                  ).map(lead => ({ ...lead, _tableType: 'meta' as const })),
-                  ...leads.filter(lead => 
-                    (selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter) &&
-                    matchesSearch(lead) &&
-                    matchesLOFilter(lead)
-                  ).map(lead => ({ ...lead, _tableType: 'lead' as const })),
-                ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())}
-                keyExtractor={(item) => `${item._tableType}-${item.id}`}
-                renderItem={({ item }) => 
-                  item._tableType === 'meta' ? renderMetaLeadItem({ item }) : renderLeadItem({ item })
-                }
-                contentContainerStyle={styles.listContent}
-                refreshControl={
-                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                }
-                showsVerticalScrollIndicator={false}
-              />
-            </Animated.View>
-          )}
         </>
+      )}
+
+      {/* Lead Content - FlatLists for each tab */}
+      {activeTab === 'leads' && hasLeads && (
+        <Animated.View style={animatedListStyle}>
+          <FlatList
+            data={leads.filter(lead => {
+              const statusMatch = selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter;
+              const searchMatch = matchesSearch(lead);
+              const loMatch = matchesLOFilter(lead);
+              const attentionMatch = matchesAttentionFilter(lead);
+              
+              console.log('📋 Leads tab filter', {
+                leadId: lead.id,
+                leadName: `${lead.first_name} ${lead.last_name}`,
+                statusMatch,
+                searchMatch,
+                loMatch,
+                attentionMatch,
+                selectedStatusFilter,
+                attentionFilter,
+              });
+              
+              return statusMatch && searchMatch && loMatch && attentionMatch;
+            })}
+            renderItem={renderLeadItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            showsVerticalScrollIndicator={false}
+          />
+        </Animated.View>
+      )}
+
+      {activeTab === 'meta' && hasMetaLeads && (
+        <Animated.View style={animatedListStyle}>
+          <FlatList
+            data={metaLeads.filter(lead => {
+              const statusMatch = selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter;
+              const searchMatch = matchesSearch(lead);
+              const loMatch = matchesLOFilter(lead);
+              const attentionMatch = matchesAttentionFilter(lead);
+              
+              console.log('📋 Meta tab filter', {
+                leadId: lead.id,
+                leadName: `${lead.first_name} ${lead.last_name}`,
+                statusMatch,
+                searchMatch,
+                loMatch,
+                attentionMatch,
+                selectedStatusFilter,
+                attentionFilter,
+              });
+              
+              return statusMatch && searchMatch && loMatch && attentionMatch;
+            })}
+            renderItem={renderMetaLeadItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            showsVerticalScrollIndicator={false}
+          />
+        </Animated.View>
+      )}
+
+      {activeTab === 'all' && (hasLeads || hasMetaLeads) && (
+        <Animated.View style={animatedListStyle}>
+          <FlatList
+            data={(() => {
+              const metaArr = metaLeads.filter(lead => {
+                const statusMatch = selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter;
+                const searchMatch = matchesSearch(lead);
+                const loMatch = matchesLOFilter(lead);
+                const attentionMatch = matchesAttentionFilter(lead);
+                return statusMatch && searchMatch && loMatch && attentionMatch;
+              }).map(lead => ({ ...lead, _tableType: 'meta' as const }));
+              
+              const leadsArr = leads.filter(lead => {
+                const statusMatch = selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter;
+                const searchMatch = matchesSearch(lead);
+                const loMatch = matchesLOFilter(lead);
+                const attentionMatch = matchesAttentionFilter(lead);
+                return statusMatch && searchMatch && loMatch && attentionMatch;
+              }).map(lead => ({ ...lead, _tableType: 'lead' as const }));
+              
+              const combined = [...metaArr, ...leadsArr].sort(
+                (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+              );
+              
+              console.log('📋 All tab data', {
+                totalMeta: metaLeads.length,
+                totalLeads: leads.length,
+                afterFilters: combined.length,
+                selectedStatusFilter,
+                attentionFilter,
+                activeTab,
+              });
+              
+              return combined;
+            })()}
+            renderItem={({ item }) => {
+              if (item._tableType === 'meta') {
+                return renderMetaLeadItem({ item });
+              }
+              return renderLeadItem({ item });
+            }}
+            keyExtractor={(item) => `${item._tableType}-${item.id}`}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            showsVerticalScrollIndicator={false}
+          />
+        </Animated.View>
       )}
 
       {/* FAB - Add Lead Button (for LOs and Super Admins) */}

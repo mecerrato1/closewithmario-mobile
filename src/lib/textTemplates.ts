@@ -171,7 +171,7 @@ Entiendo que va a trabajar en su crédito. No dude en contactarme cuando esté l
 
 This is {LO fullname}, good speaking to you.
 
-Look forward to our callback
+Look forward to our callback{callbackTime}
 
 ☎️ Mobile {LO phone}
 📧 Email {LO email}`,
@@ -179,7 +179,7 @@ Look forward to our callback
 
 Soy {LO fullname}, fue un placer hablar con usted.
 
-Espero con ansias nuestra llamada
+Espero con ansias nuestra llamada{callbackTime}
 
 ☎️ Móvil {LO phone}
 📧 Email {LO email}`,
@@ -253,6 +253,39 @@ Aquí está la lista de documentos necesarios para su pre-aprobación:
 📧 Email {LO email}`,
   },
   {
+    id: 'w2_regular',
+    name: 'W2 Regular',
+    nameEs: 'W2 Regular',
+    subject: 'Documents needed for your preapproval',
+    subjectEs: 'Documentos necesarios para su preaprobación',
+    template: `Hi {fname} 👋
+
+Here's the list of documents needed for your preapproval:
+
+📄 Most recent paystub
+📄 {recentYear} W-2
+📄 {prevYear} W-2
+📄 Driver's license
+
+Please send these when you get a chance! Let me know if you have any questions.
+
+☎️ Mobile {LO phone}
+📧 Email {LO email}`,
+    templateEs: `Hola {fname} 👋
+
+Aquí está la lista de documentos necesarios para su pre-aprobación:
+
+📄 Talón de pago más reciente
+📄 W-2 de {recentYear}
+📄 W-2 de {prevYear}
+📄 Licencia de conducir
+
+¡Por favor envíe estos cuando pueda! Avíseme si tiene alguna pregunta.
+
+☎️ Móvil {LO phone}
+📧 Email {LO email}`,
+  },
+  {
     id: 'self_employed_docs',
     name: 'Self-Employed Docs',
     nameEs: 'Documentos de Trabajador Independiente',
@@ -298,6 +331,7 @@ export type TemplateVariables = {
   platform: string;
   recentYear?: string;
   prevYear?: string;
+  callbackTime?: string;
 };
 
 /**
@@ -407,6 +441,9 @@ export function fillTemplate(
   // Replace {recentYear} and {prevYear}
   result = result.replace(/{recentYear}/g, recentYear);
   result = result.replace(/{prevYear}/g, prevYear);
+
+  // Replace {callbackTime} with the formatted callback date/time
+  result = result.replace(/{callbackTime}/g, variables.callbackTime || '');
 
   return result;
 }
