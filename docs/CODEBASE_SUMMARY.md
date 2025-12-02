@@ -1,12 +1,13 @@
 # CloseWithMario Mobile - Codebase Summary
 
-**Last Updated:** December 2, 2025  
+**Last Updated:** December 2, 2025 at 4:54 PM EST  
+**Platform:** iOS Mobile Application  
 **EAS Account:** mecerrato1  
 **Latest Build:** iOS Production Build 41 (v1.1.26, Dec 2, 2025)  
 **Major Refactor:** November 26, 2025 - Modular architecture with separated screens and styles  
 **Security Update:** November 29, 2025 - Face ID/Touch ID biometric authentication  
 **Feature Update:** December 1, 2025 - "My Lead" self-created leads, voice note preview, LO activity deletion  
-**UI/UX Update:** December 2, 2025 - Dashboard performance cards with emojis, callback templates with smart dates, platform name formatting, W2 Regular template
+**UI/UX Update:** December 2, 2025 - Dashboard performance cards with emojis, callback templates with smart dates, platform name formatting, W2 Regular template, Quote of the Day
 
 ---
 
@@ -53,19 +54,27 @@ closewithmario-mobile/
 ├── package.json                     # Dependencies and scripts
 ├── .env                             # Environment variables (Supabase credentials)
 ├── src/
+│   ├── components/                  # ✨ NEW - Reusable components
+│   │   └── dashboard/
+│   │       └── QuoteOfTheDay.tsx   # Daily motivational quote component (~72 lines)
+│   ├── constants/                   # ✨ NEW - App constants
+│   │   └── salesQuotes.ts          # Sales motivation quotes (~171 lines, 40 quotes)
 │   ├── contexts/                    # ✨ NEW - React contexts
 │   │   └── AppLockContext.tsx      # Biometric authentication context (~112 lines)
 │   ├── screens/                     # ✨ NEW - Screen components
 │   │   ├── AuthScreen.tsx          # Login/signup screen with OAuth (~440 lines)
-│   │   ├── LeadDetailScreen.tsx    # Lead detail view with activities (~1540 lines)
+│   │   ├── LeadDetailScreen.tsx    # Lead detail view with activities (~1700 lines)
 │   │   ├── LockScreen.tsx          # ✨ Face ID/Touch ID lock screen (~79 lines)
 │   │   └── TeamManagementScreen.tsx # Team management for admins (~490 lines)
 │   ├── styles/                      # ✨ NEW - Centralized styles
-│   │   └── appStyles.ts            # All app styles in one place (~2120 lines)
+│   │   ├── appStyles.ts            # All app styles in one place (~2120 lines)
+│   │   └── theme.ts                # Theme colors (light/dark mode support) (~27 lines)
+│   ├── utils/                       # ✨ NEW - Utility functions
+│   │   └── getQuoteOfTheDay.ts     # Quote selection logic (~25 lines)
 │   └── lib/                         # Utilities and helpers
 │       ├── supabase.ts             # Supabase client configuration
 │       ├── roles.ts                # RBAC role management utilities
-│       ├── textTemplates.ts        # SMS text message templates with variables
+│       ├── textTemplates.ts        # SMS/Email templates with variables (~417 lines)
 │       ├── callbacks.ts            # Notification scheduling utilities
 │       ├── leadsHelpers.ts         # ✨ NEW - Lead helper functions and constants
 │       └── types/
@@ -424,6 +433,11 @@ if (!canSeeAll) {
 
 #### Dashboard Screen (NEW) ✨ UPDATED Dec 2
 - **Purple gradient header** with "Dashboard" title
+- **Quote of the Day** - Daily motivational sales quote (40 rotating quotes)
+  - Purple gradient card with golden "Daily Motivation" header
+  - Personalized per user (based on email hash + day of year)
+  - Quotes from sales coaching, Zig Ziglar, James Clear, etc.
+  - Italic quote text with author attribution
 - **Stats grid** (3 cards):
   - Meta Ads count
   - My Leads count
@@ -773,9 +787,10 @@ RBAC utilities:
 - Type definitions for UserRole
 
 ### `src/lib/textTemplates.ts` (~417 lines) ✨ UPDATED Dec 2
-SMS text message templates with bilingual support:
+SMS/Email text message templates with bilingual support:
 - **11 pre-written templates** (Initial Contact, Document Follow-up, Pre-approval Check-in, Stop Paying Rent, Not Ready - General, Not Ready - Credit, Callback Confirmation, Hung Up, Variable Income Docs, Self-Employed Docs, **W2 Regular**)
 - **Bilingual support:** English and Spanish versions for all templates
+- **Works for both SMS and Email** - Same templates used in text and email functionality
 - Variable replacement system: `{fname}`, `{loFullname}`, `{loFname}`, `{loPhone}`, `{loEmail}`, `{platform}`, `{recentYear}`, `{prevYear}`, **`{callbackTime}`**
 - **Dynamic year calculation:** `{recentYear}` = current year - 1, `{prevYear}` = current year - 2
 - **Smart callback dates:** `{callbackTime}` shows "today at 6:00 PM", "tomorrow at 10:00 AM", or "12/05/2025 at 2:30 PM"
@@ -809,7 +824,44 @@ Notification scheduling utilities:
 - Integration with Expo Notifications
 - Stores callbacks in `lead_callbacks` table
 
-### `app.json` (~70 lines)
+### `src/components/dashboard/QuoteOfTheDay.tsx` (~72 lines) ✨ NEW Dec 2
+Daily motivational quote component:
+- Displays rotating sales/motivation quotes
+- Purple gradient card with golden header
+- Bulb icon with "Daily Motivation" label
+- Italic quote text with author attribution
+- Personalized per user (email hash + day of year)
+- 40 curated quotes from sales coaching experts
+- Seamlessly integrated into dashboard view
+
+### `src/constants/salesQuotes.ts` (~171 lines) ✨ NEW Dec 2
+Sales motivation quotes database:
+- **40 curated quotes** for loan officers and sales professionals
+- Topics: Speed to lead, follow-up, pipeline management, consistency
+- Authors: Sales Coaching, Zig Ziglar, James Clear, Mortgage Coaching
+- TypeScript type: `SalesQuote { text: string; author: string }`
+- Examples:
+  - "Speed to lead is the #1 predictor of your closing rate."
+  - "The fortune is in the follow-up." - Zig Ziglar
+  - "Your future closings are hiding in today's follow-ups."
+
+### `src/utils/getQuoteOfTheDay.ts` (~25 lines) ✨ NEW Dec 2
+Quote selection logic:
+- Calculates day of year for daily rotation
+- Optional user-based offset for personalization
+- Deterministic selection (same quote per user per day)
+- Returns `SalesQuote` object with text and author
+- Used by `QuoteOfTheDay` component
+
+### `src/styles/theme.ts` (~27 lines) ✨ NEW Dec 2
+Theme color system:
+- Light and dark color schemes defined
+- `useThemeColors()` hook for theme-aware components
+- Supports future dark mode implementation
+- Colors: background, cardBackground, headerBackground, text, border
+- Currently app uses light mode only
+
+### `app.json` (~84 lines)
 Expo configuration for iOS, Android, and web platforms:
 - Deep linking scheme configuration
 - Android intent filters for OAuth
@@ -1203,20 +1255,29 @@ The codebase underwent a massive refactoring to improve maintainability, readabi
 ### December 2, 2025 Updates
 
 #### UI/UX Enhancements
-1. **Dashboard Performance Cards with Emojis**
+1. **Quote of the Day Feature** ✨ NEW
+   - Daily motivational sales quotes on dashboard
+   - 40 curated quotes rotating daily
+   - Personalized per user (email + day of year)
+   - Purple gradient card with golden "Daily Motivation" header
+   - Quotes from sales coaching, Zig Ziglar, James Clear
+   - Topics: Speed to lead, follow-up, pipeline, consistency
+   - New components: `QuoteOfTheDay.tsx`, `salesQuotes.ts`, `getQuoteOfTheDay.ts`
+
+2. **Dashboard Performance Cards with Emojis**
    - ✨ New Leads
    - 🎯 Qualified
    - 🎉 Closed
    - ⚠️ Needs Attention
    - Visual indicators make cards more engaging and easier to scan
 
-2. **"Needs Attention" Filter**
+3. **"Needs Attention" Filter**
    - New performance card that filters leads requiring follow-up
    - Shows leads with attention badges (no response, stale, etc.)
    - Integrates with existing attention badge system
    - Filter persists when switching between tabs (Meta Ads, My Leads, Total)
 
-3. **Smart Callback Date Formatting**
+4. **Smart Callback Date Formatting**
    - Callback confirmation template now includes dynamic date/time
    - Shows "today at 6:00 PM" for same-day callbacks
    - Shows "tomorrow at 10:00 AM" for next-day callbacks
@@ -1224,7 +1285,7 @@ The codebase underwent a massive refactoring to improve maintainability, readabi
    - Only fetches future callbacks (ignores past dates)
    - Gracefully handles missing callbacks (omits date if none scheduled)
 
-4. **Platform Name Formatting**
+5. **Platform Name Formatting**
    - Lead detail view now shows full platform names
    - FB → **Facebook** (bold)
    - IG → **Instagram** (bold)
@@ -1232,11 +1293,17 @@ The codebase underwent a massive refactoring to improve maintainability, readabi
    - WhatsApp → **WhatsApp** (bold)
    - Case-insensitive matching
 
-5. **W2 Regular Document Template**
+6. **W2 Regular Document Template**
    - New simplified template for W2 employees
    - Checklist: Most recent paystub, 2 years W-2s, driver's license
    - Bilingual support (English/Spanish)
    - Complements existing Variable Income and Self-Employed templates
+
+7. **Email Templates Integration**
+   - All 11 SMS templates now work for email too
+   - Template selector in email compose flow
+   - Same variable replacement system
+   - Bilingual support for email messages
 
 #### Technical Implementation
 - Added `callbackTime` variable to template system
@@ -1244,6 +1311,8 @@ The codebase underwent a massive refactoring to improve maintainability, readabi
 - Query optimization to fetch only future callbacks
 - Platform name helper function with bold styling
 - Template variable expansion for callback dates
+- Quote rotation algorithm with user personalization
+- Theme system with light/dark mode support (foundation for future dark mode)
 
 ### Earlier November 2025 Updates
 
@@ -1296,7 +1365,7 @@ The codebase underwent a massive refactoring to improve maintainability, readabi
 - **App Version:** 1.1.26
 - **Build Status:** Successful, submitted to TestFlight
 - **Distribution:** App Store ready
-- **Latest Features:** Dashboard performance cards with emojis, smart callback dates, platform name formatting, W2 Regular template
+- **Latest Features:** Quote of the Day, dashboard performance cards with emojis, email templates, smart callback dates, platform name formatting, W2 Regular template, theme system foundation
 
 ---
 
@@ -1351,20 +1420,22 @@ npm start
 ## 🎯 Quick Reference for LLMs
 
 ### Key Technologies
-- **Frontend:** React Native 0.81.5 + Expo SDK 54 + TypeScript
-- **Backend:** Supabase (PostgreSQL + Auth)
+- **Frontend:** React Native 0.81.5 + Expo SDK 54 + TypeScript 5.9.2
+- **Backend:** Supabase (PostgreSQL + Auth + Storage)
 - **Security:** Face ID/Touch ID biometric authentication
-- **Main File:** `App.tsx` (~1500 lines - refactored)
+- **Main File:** `App.tsx` (~2268 lines - modular with imported screens)
 - **Color Scheme:** Purple (#7C3AED) + Green (#10B981)
-- **Version:** 1.1.21 (Build 36)
+- **Version:** 1.1.26 (Build 41)
+- **Latest Update:** December 2, 2025
 
 ### Main Components
-1. `LockScreen` - Face ID/Touch ID biometric authentication (NEW)
+1. `LockScreen` - Face ID/Touch ID biometric authentication
 2. `AuthScreen` - Login with email/password and Google OAuth
 3. `TeamManagementScreen` - Manage loan officers and realtors (super admin only)
-4. `Dashboard` - Stats, guide, and recent leads (initial view)
-5. `LeadsScreen` - Tabbed list view with search, filters, and pull-to-refresh
-6. `LeadDetailView` - Full lead details with activity logging, SMS templates, and callback scheduling
+4. `Dashboard` - Stats, Quote of the Day, performance cards, and recent leads (initial view)
+5. `QuoteOfTheDay` - Daily rotating motivational sales quotes (NEW Dec 2)
+6. `LeadsScreen` - Tabbed list view with search, filters, and pull-to-refresh
+7. `LeadDetailView` - Full lead details with activity logging, SMS/Email templates, voice notes, and callback scheduling
 
 ### Database Tables
 - `leads` - Website leads with lo_id and realtor_id for RBAC
@@ -1376,53 +1447,62 @@ npm start
 - `meta_ad_activities` - Meta lead interaction history
 - `lead_callbacks` - Scheduled callback reminders
 
-### Current State (Dec 1, 2025)
+### Current State (Dec 2, 2025)
 - ✅ Full CRUD for lead status and activities
 - ✅ RBAC with super_admin/loan_officer/realtor/buyer roles
-- ✅ Modern UI with brand colors
+- ✅ Modern UI with brand colors (purple/green)
 - ✅ Google OAuth working
 - ✅ Face ID/Touch ID biometric authentication
 - ✅ Auto-lock after 10 minutes idle
 - ✅ Session persistence with AsyncStorage
-- ✅ iOS Production Build 37+ deployed (v1.1.22+)
-- ✅ SMS text templates with bilingual support (10 templates, English/Spanish)
+- ✅ iOS Production Build 41 deployed (v1.1.26)
+- ✅ SMS/Email templates with bilingual support (11 templates, English/Spanish)
 - ✅ Voice notes recording with preview and playback
 - ✅ Unread lead indicator - blue dot
 - ✅ Document checklist templates with dynamic years
 - ✅ UI micro-animations
-- ✅ Advanced filtering (status, LO, search)
+- ✅ Advanced filtering (status, LO, search, attention)
 - ✅ Smart navigation (respects all filters, tab-aware)
 - ✅ Team management screen
-- ✅ Callback scheduling
+- ✅ Callback scheduling with smart date formatting
 - ✅ Ad image viewer
 - ✅ Modular architecture (refactored from 6250 to 1500 lines)
-- ✅ **"My Lead" self-created leads with green badge (NEW)**
-- ✅ **LOs can delete their own leads (swipe + detail button) (NEW)**
-- ✅ **LOs can delete activities on their own leads (NEW)**
-- ✅ **Voice note preview before saving (NEW)**
-- ✅ **Referral source tracking and display (NEW)**
+- ✅ "My Lead" self-created leads with green badge
+- ✅ LOs can delete their own leads (swipe + detail button)
+- ✅ LOs can delete activities on their own leads
+- ✅ Voice note preview before saving
+- ✅ Referral source tracking and display
+- ✅ **Quote of the Day - 40 rotating motivational quotes (NEW Dec 2)**
+- ✅ **Dashboard performance cards with emojis (NEW Dec 2)**
+- ✅ **Email templates integration (NEW Dec 2)**
+- ✅ **Platform name formatting (FB→Facebook, IG→Instagram) (NEW Dec 2)**
+- ✅ **W2 Regular document template (NEW Dec 2)**
+- ✅ **Theme system foundation for dark mode (NEW Dec 2)**
 - ⚠️ Need to fix: Square logo for Android, duplicate dependencies
-- 🔜 Next: Push notifications, pagination
+- 🔜 Next: Push notifications, pagination, dark mode implementation
 
 ### Important Notes
-- Modular architecture with separated screens (~1500 line main file)
+- Modular architecture with separated screens (~2268 line main file with imports)
 - **Face ID/Touch ID required** after 10 minutes of being backgrounded
 - Deep link scheme: `com.closewithmario.mobile://auth/callback`
 - Supabase URL must have this redirect URL configured
 - AsyncStorage used for session persistence
 - RBAC filters leads by `lo_id` or `realtor_id` for non-admin users
 - Activity logging writes to `lead_activities` or `meta_ad_activities` tables
-- Text templates in `src/lib/textTemplates.ts` with 10 bilingual messages
+- **SMS/Email templates** in `src/lib/textTemplates.ts` with **11 bilingual messages**
+- **Quote of the Day** - 40 rotating sales quotes personalized per user
 - **"My Lead" leads** have `source: 'My Lead'` and can be deleted by the creating LO
 - **Loan purpose values** must match database constraint: 'Home Buying', 'Home Selling', 'Mortgage Refinance', 'Investment Property', 'General Real Estate'
 - **`_tableType`** field used internally to distinguish leads vs meta_ads (not `source`)
-- Templates auto-fill: {fname}, {loFullname}, {loFname}, {loPhone}, {loEmail}, {platform}, {recentYear}, {prevYear}
+- Templates auto-fill: {fname}, {loFullname}, {loFname}, {loPhone}, {loEmail}, {platform}, {recentYear}, {prevYear}, **{callbackTime}**
 - Voice notes stored in Supabase Storage bucket `activity-voice-notes`
 - Unread leads identified by `!last_contact_date && (status === 'new' || !status)`
 - Spanish templates auto-selected if `preferred_language === 'spanish'`
-- Navigation respects status filter, LO filter, and search query
+- Navigation respects status filter, LO filter, search query, and attention filter
 - Unqualified leads excluded from default "all" view but accessible via filter
 - Tab-aware navigation combines meta + regular leads on "all" tab
+- Platform names formatted: FB→Facebook, IG→Instagram (case-insensitive)
+- Theme system foundation in place for future dark mode implementation
 
 ---
 
