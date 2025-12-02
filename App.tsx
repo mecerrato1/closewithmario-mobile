@@ -4,20 +4,20 @@ import {
   StyleSheet,
   Text,
   View,
-  ActivityIndicator,
-  FlatList,
   TextInput,
   TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
+  ActivityIndicator,
   ScrollView,
-  Linking,
-  Image,
-  RefreshControl,
+  FlatList,
   Modal,
+  RefreshControl,
+  Platform,
+  KeyboardAvoidingView,
   LayoutAnimation,
   UIManager,
   Animated,
+  Alert,
+  Image,
 } from 'react-native';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -36,6 +36,7 @@ import { LeadDetailView } from './src/screens/LeadDetailScreen';
 import TeamManagementScreen from './src/screens/TeamManagementScreen';
 import { AppLockProvider, useAppLock } from './src/contexts/AppLockContext';
 import LockScreen from './src/screens/LockScreen';
+import QuoteOfTheDay from './src/components/dashboard/QuoteOfTheDay';
 import { styles } from './src/styles/appStyles';
 import { useThemeColors } from './src/styles/theme';
 
@@ -102,6 +103,22 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [selectedLOFilter, setSelectedLOFilter] = useState<string | null>(null); // null = all LOs
   const [showLOPicker, setShowLOPicker] = useState(false);
   const [leadEligible, setLeadEligible] = useState<boolean>(true);
+  
+  // Add Lead Modal state
+  const [showAddLeadModal, setShowAddLeadModal] = useState(false);
+  const [savingNewLead, setSavingNewLead] = useState(false);
+  const [addLeadError, setAddLeadError] = useState<string | null>(null);
+  const [newLead, setNewLead] = useState({
+    first_name: '',
+    last_name: '',
+    phone: '',
+    email: '',
+    referral_source: '',
+    loan_purpose: 'Home Buying',
+    message: '',
+  });
+  const [showLoanPurposePicker, setShowLoanPurposePicker] = useState(false);
+  const LOAN_PURPOSES = ['Home Buying', 'Home Selling', 'Mortgage Refinance', 'Investment Property', 'General Real Estate'];
 
   // Micro animations for the lead list
   const listOpacity = useRef(new Animated.Value(1)).current;
@@ -195,7 +212,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         let leadsQuery = supabase
           .from('leads')
           .select(
-            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id'
+            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id, source, source_detail'
           )
           .order('created_at', { ascending: false });
 
@@ -292,12 +309,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         }
       )
       .subscribe((status) => {
-        console.log('📡 Subscription status:', status);
         if (status === 'SUBSCRIBED') {
-          console.log('✅ Successfully subscribed to loan officer changes');
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('❌ Error subscribing to loan officer changes');
+          console.log('✅ Subscribed to loan officer changes');
         }
+        // Silently handle errors - polling fallback will keep things working
       });
 
     // Also poll every 30 seconds as a fallback (in case Realtime isn't enabled)
@@ -376,7 +391,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       
       let leadsQuery = supabase
         .from('leads')
-        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id')
+        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id, source, source_detail')
         .order('created_at', { ascending: false });
 
       let metaQuery = supabase
@@ -476,6 +491,172 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     return phone;
   };
 
+  // Format phone for display as user types (for Add Lead form)
+  const formatPhoneDisplay = (value: string): string => {
+    const digits = value.replace(/\D/g, '').slice(0, 10);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  };
+
+  // Save new lead function
+  const saveNewLead = async () => {
+    // Validation
+    if (!newLead.first_name.trim()) {
+      setAddLeadError('First name is required');
+      return;
+    }
+    if (!newLead.last_name.trim()) {
+      setAddLeadError('Last name is required');
+      return;
+    }
+    
+    const phoneDigits = newLead.phone.replace(/\D/g, '');
+    if (phoneDigits.length !== 10) {
+      setAddLeadError('Please enter a valid 10-digit phone number');
+      return;
+    }
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newLead.email.trim())) {
+      setAddLeadError('Please enter a valid email address');
+      return;
+    }
+
+    setSavingNewLead(true);
+    setAddLeadError(null);
+
+    try {
+      // Get the LO's ID from loan_officers table
+      let loId: string | null = null;
+      
+      console.log('🔍 Saving lead - userRole:', userRole, 'teamMemberId:', teamMemberId, 'email:', session?.user?.email);
+      
+      if (userRole === 'loan_officer' && teamMemberId) {
+        loId = teamMemberId;
+        console.log('✅ Using teamMemberId as loId:', loId);
+      } else if (session?.user?.email) {
+        // For super_admin or if teamMemberId not set, try to find by email
+        const { data: loData, error: loError } = await supabase
+          .from('loan_officers')
+          .select('id')
+          .eq('email', session.user.email.toLowerCase())
+          .eq('active', true)
+          .maybeSingle();
+        
+        console.log('🔍 LO lookup result:', loData, 'error:', loError);
+        
+        if (loData) {
+          loId = loData.id;
+        }
+      }
+      
+      console.log('📝 Final loId for insert:', loId);
+
+      const fullName = `${newLead.first_name.trim()} ${newLead.last_name.trim()}`;
+      
+      const leadData = {
+        name: fullName,
+        first_name: newLead.first_name.trim(),
+        last_name: newLead.last_name.trim(),
+        phone: phoneDigits,
+        email: newLead.email.trim().toLowerCase(),
+        loan_purpose: newLead.loan_purpose,
+        source: 'My Lead',
+        source_detail: newLead.referral_source.trim() || null,
+        lo_id: loId,
+        message: newLead.message.trim() || null,
+        status: 'new',
+      };
+
+      const { data, error } = await supabase
+        .from('leads')
+        .insert([leadData])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error saving lead:', error);
+        setAddLeadError(error.message || 'Failed to save lead');
+        return;
+      }
+
+      if (data) {
+        // Add to leads list with animation
+        console.log('✅ Lead saved - DB returned source:', data.source);
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        // Explicitly set source to 'My Lead' for immediate UI update
+        const savedLead: Lead = {
+          ...data,
+          source: 'My Lead',
+          source_detail: newLead.referral_source.trim() || null,
+        };
+        console.log('✅ Adding to state with source:', savedLead.source);
+        setLeads(prev => [savedLead, ...prev]);
+        
+        // Reset form and close modal
+        setNewLead({
+          first_name: '',
+          last_name: '',
+          phone: '',
+          email: '',
+          referral_source: '',
+          loan_purpose: 'Home Buying',
+          message: '',
+        });
+        setShowAddLeadModal(false);
+        
+        // Show success feedback
+        alert('Lead added successfully!');
+      }
+    } catch (e: any) {
+      console.error('Unexpected error saving lead:', e);
+      setAddLeadError(e?.message || 'Unexpected error occurred');
+    } finally {
+      setSavingNewLead(false);
+    }
+  };
+
+  // Delete My Lead function
+  const deleteMyLead = async (leadId: string) => {
+    // Confirm deletion
+    Alert.alert(
+      'Delete Lead',
+      'Are you sure you want to delete this lead? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('leads')
+                .delete()
+                .eq('id', leadId)
+                .eq('source', 'My Lead'); // Extra safety check
+
+              if (error) {
+                console.error('Error deleting lead:', error);
+                Alert.alert('Error', 'Failed to delete lead. Please try again.');
+                return;
+              }
+
+              // Remove from local state with animation
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              setLeads(prev => prev.filter(lead => lead.id !== leadId));
+              
+              Alert.alert('Success', 'Lead deleted successfully.');
+            } catch (e: any) {
+              console.error('Unexpected error deleting lead:', e);
+              Alert.alert('Error', 'An unexpected error occurred.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   // Search filter function
   const matchesSearch = (lead: Lead | MetaLead) => {
     if (!searchQuery.trim()) return true;
@@ -537,6 +718,18 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         >
           <Text style={styles.swipeActionText}>Unqualified</Text>
         </TouchableOpacity>
+
+        {/* Delete - only for My Lead */}
+        {item.source === 'My Lead' && (
+          <TouchableOpacity
+            style={[styles.swipeActionButton, styles.swipeActionDelete]}
+            onPress={() => deleteMyLead(item.id)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="trash-outline" size={18} color="#FFFFFF" />
+            <Text style={styles.swipeActionText}>Delete</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
 
@@ -566,15 +759,26 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               </Text>
               {isUnread && <View style={styles.unreadDot} />}
             </View>
-            <View style={styles.leadSourceBadge}>
-              <Ionicons
-                name="globe-outline"
-                size={12}
-                color="#0F172A"
-                style={{ marginRight: 4 }}
-              />
-              <Text style={styles.leadSourceText}>Web</Text>
-            </View>
+            {item.source === 'My Lead' ? (
+              <View style={styles.myLeadBadge}>
+                <Ionicons
+                  name="person-add-outline"
+                  size={12}
+                  color="#16A34A"
+                />
+                <Text style={styles.myLeadBadgeText}>My Lead</Text>
+              </View>
+            ) : (
+              <View style={styles.leadSourceBadge}>
+                <Ionicons
+                  name="globe-outline"
+                  size={12}
+                  color="#0F172A"
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={styles.leadSourceText}>Web</Text>
+              </View>
+            )}
           </View>
           {alert && (
             <View style={[styles.attentionBadge, { backgroundColor: alert.color }]}>
@@ -616,6 +820,19 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               />
               <Text style={[styles.leadContact, { color: colors.textSecondary }]} numberOfLines={1}>
                 {formatPhoneNumber(item.phone)}
+              </Text>
+            </View>
+          )}
+          {item.source_detail && (
+            <View style={styles.leadContactRow}>
+              <Ionicons
+                name="megaphone-outline"
+                size={14}
+                color="#16A34A"
+                style={styles.leadContactIcon as any}
+              />
+              <Text style={[styles.leadContact, { color: '#16A34A' }]} numberOfLines={1}>
+                {item.source_detail}
               </Text>
             </View>
           )}
@@ -872,6 +1089,23 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         searchQuery={searchQuery}
         selectedLOFilter={selectedLOFilter}
         activeTab={activeTab}
+        onDeleteLead={async (leadId: string) => {
+          // Delete from database
+          const { error } = await supabase
+            .from('leads')
+            .delete()
+            .eq('id', leadId)
+            .eq('source', 'My Lead');
+          
+          if (error) {
+            console.error('Error deleting lead:', error);
+            throw error;
+          }
+          
+          // Remove from local state
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          setLeads(prev => prev.filter(lead => lead.id !== leadId));
+        }}
         onLeadUpdate={(updatedLead, source) => {
           console.log('🔄 onLeadUpdate called:', { source, leadId: updatedLead.id, last_contact_date: updatedLead.last_contact_date });
           if (source === 'lead') {
@@ -929,7 +1163,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const unqualifiedLeads = [...filteredLeads, ...filteredMetaLeads].filter(l => l.status === 'unqualified').length;
     
     // Get recent leads (last 5) - exclude unqualified
-    const allLeads = [...activeFilteredMetaLeads.map(l => ({ ...l, source: 'meta' as const })), ...activeFilteredLeads.map(l => ({ ...l, source: 'lead' as const }))];
+    // Use _tableType to distinguish between leads/meta_ads without overwriting the source field
+    const allLeads = [...activeFilteredMetaLeads.map(l => ({ ...l, _tableType: 'meta' as const })), ...activeFilteredLeads.map(l => ({ ...l, _tableType: 'lead' as const }))];
     const recentLeads = allLeads
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 5);
@@ -984,6 +1219,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           <Text style={styles.newGreeting}>Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {userFirstName}!</Text>
           <Text style={styles.newSubGreeting}>Here's your lead overview</Text>
 
+          {/* Quote of the Day */}
+          <QuoteOfTheDay userKey={session?.user?.email} />
+
           {/* Stats Grid in Header */}
           <View style={styles.newHeaderStatsGrid}>
             <View style={styles.newHeaderStatsRow}>
@@ -1009,7 +1247,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 }}
               >
                 <Text style={styles.newHeaderStatNumber}>{organicLeadsCount}</Text>
-                <Text style={styles.newHeaderStatLabel}>Organic</Text>
+                <Text style={styles.newHeaderStatLabel}>My Leads</Text>
               </TouchableOpacity>
             </View>
             <TouchableOpacity 
@@ -1034,19 +1272,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
         >
-          {/* View All Leads Button */}
-          <TouchableOpacity
-            style={styles.newViewAllButton}
-            onPress={() => {
-              triggerListAnimation();
-              setActiveTab('all');
-              setSelectedStatusFilter('all');
-              setShowDashboard(false);
-            }}
-          >
-            <Text style={styles.newViewAllText}>📊 View All Leads</Text>
-          </TouchableOpacity>
-
           {/* Performance Section */}
           <View style={[styles.performanceSection, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
             <View style={styles.sectionHeader}>
@@ -1144,13 +1369,14 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 const timeAgo = getTimeAgo(new Date(lead.created_at));
                 const isNew = lead.status === 'new';
                 const isQualified = lead.status === 'qualified';
-                const source = lead.source === 'meta' 
-                  ? `Facebook${(lead as MetaLead).campaign_name ? ' • ' + (lead as MetaLead).campaign_name : ''}`
+                const isMeta = lead._tableType === 'meta';
+                const sourceDisplay = isMeta 
+                  ? `Facebook${(lead as MetaLead & { _tableType: string }).campaign_name ? ' • ' + (lead as MetaLead & { _tableType: string }).campaign_name : ''}`
                   : 'Website Contact';
                 
                 return (
                   <TouchableOpacity
-                    key={`${lead.source}-${lead.id}`}
+                    key={`${lead._tableType}-${lead.id}`}
                     style={[
                       styles.newLeadCard,
                       { backgroundColor: colors.cardBackground, borderColor: colors.border },
@@ -1159,13 +1385,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                     ]}
                     onPress={() => {
                       setShowDashboard(false);
-                      setSelectedLead({ source: lead.source, id: lead.id });
+                      setSelectedLead({ source: lead._tableType, id: lead.id });
                     }}
                   >
                     <View style={styles.newLeadHeader}>
                       <View style={styles.newLeadLeft}>
                         <Text style={[styles.newLeadName, { color: colors.textPrimary }]}>{fullName}</Text>
-                        <Text style={[styles.newLeadSource, { color: colors.textSecondary }]} numberOfLines={1}>{source}</Text>
+                        <Text style={[styles.newLeadSource, { color: colors.textSecondary }]} numberOfLines={1}>{sourceDisplay}</Text>
                         <Text style={[styles.newLeadTime, { color: colors.textSecondary }]}>{timeAgo}</Text>
                       </View>
                       <View style={styles.newLeadBadges}>
@@ -1268,7 +1494,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           <Text style={[
             styles.statLabel,
             activeTab === 'leads' && styles.statLabelActive,
-          ]}>Organic</Text>
+          ]}>My Leads</Text>
         </TouchableOpacity>
         <TouchableOpacity 
           style={[
@@ -1611,16 +1837,16 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                     (selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter) &&
                     matchesSearch(lead) &&
                     matchesLOFilter(lead)
-                  ).map(lead => ({ ...lead, source: 'meta' as const })),
+                  ).map(lead => ({ ...lead, _tableType: 'meta' as const })),
                   ...leads.filter(lead => 
                     (selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter) &&
                     matchesSearch(lead) &&
                     matchesLOFilter(lead)
-                  ).map(lead => ({ ...lead, source: 'lead' as const })),
+                  ).map(lead => ({ ...lead, _tableType: 'lead' as const })),
                 ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())}
-                keyExtractor={(item) => `${item.source}-${item.id}`}
+                keyExtractor={(item) => `${item._tableType}-${item.id}`}
                 renderItem={({ item }) => 
-                  item.source === 'meta' ? renderMetaLeadItem({ item }) : renderLeadItem({ item })
+                  item._tableType === 'meta' ? renderMetaLeadItem({ item }) : renderLeadItem({ item })
                 }
                 contentContainerStyle={styles.listContent}
                 refreshControl={
@@ -1632,6 +1858,237 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           )}
         </>
       )}
+
+      {/* FAB - Add Lead Button (for LOs and Super Admins) */}
+      {(userRole === 'loan_officer' || userRole === 'super_admin') && !showDashboard && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={() => {
+            setAddLeadError(null);
+            setShowAddLeadModal(true);
+          }}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="add" size={28} color="#FFFFFF" />
+        </TouchableOpacity>
+      )}
+
+      {/* Add Lead Modal */}
+      <Modal
+        visible={showAddLeadModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowAddLeadModal(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.addLeadModalOverlay}
+        >
+          <TouchableOpacity 
+            style={{ flex: 1 }} 
+            activeOpacity={1} 
+            onPress={() => setShowAddLeadModal(false)}
+          />
+          <View style={styles.addLeadModalContainer}>
+            {/* Header */}
+            <View style={styles.addLeadModalHeader}>
+              <Text style={styles.addLeadModalTitle}>➕ Add My Lead</Text>
+              <TouchableOpacity 
+                style={styles.addLeadCloseButton}
+                onPress={() => {
+                  setShowAddLeadModal(false);
+                  setAddLeadError(null);
+                }}
+              >
+                <Text style={styles.addLeadCloseText}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Form */}
+            <ScrollView style={styles.addLeadForm} showsVerticalScrollIndicator={false}>
+              {addLeadError && (
+                <View style={styles.addLeadError}>
+                  <Text style={styles.addLeadErrorText}>{addLeadError}</Text>
+                </View>
+              )}
+
+              {/* Name Row */}
+              <View style={[styles.addLeadRow, { marginBottom: 16 }]}>
+                <View style={styles.addLeadFieldHalf}>
+                  <Text style={styles.addLeadLabel}>
+                    First Name <Text style={styles.addLeadRequired}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={styles.addLeadInput}
+                    value={newLead.first_name}
+                    onChangeText={(text) => setNewLead(prev => ({ ...prev, first_name: text }))}
+                    placeholder="John"
+                    placeholderTextColor="#9CA3AF"
+                    autoCapitalize="words"
+                  />
+                </View>
+                <View style={styles.addLeadFieldHalf}>
+                  <Text style={styles.addLeadLabel}>
+                    Last Name <Text style={styles.addLeadRequired}>*</Text>
+                  </Text>
+                  <TextInput
+                    style={styles.addLeadInput}
+                    value={newLead.last_name}
+                    onChangeText={(text) => setNewLead(prev => ({ ...prev, last_name: text }))}
+                    placeholder="Doe"
+                    placeholderTextColor="#9CA3AF"
+                    autoCapitalize="words"
+                  />
+                </View>
+              </View>
+
+              {/* Phone */}
+              <View style={styles.addLeadField}>
+                <Text style={styles.addLeadLabel}>
+                  Phone <Text style={styles.addLeadRequired}>*</Text>
+                </Text>
+                <TextInput
+                  style={styles.addLeadInput}
+                  value={newLead.phone}
+                  onChangeText={(text) => setNewLead(prev => ({ ...prev, phone: formatPhoneDisplay(text) }))}
+                  placeholder="(555) 123-4567"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="phone-pad"
+                  maxLength={14}
+                />
+              </View>
+
+              {/* Email */}
+              <View style={styles.addLeadField}>
+                <Text style={styles.addLeadLabel}>
+                  Email <Text style={styles.addLeadRequired}>*</Text>
+                </Text>
+                <TextInput
+                  style={styles.addLeadInput}
+                  value={newLead.email}
+                  onChangeText={(text) => setNewLead(prev => ({ ...prev, email: text }))}
+                  placeholder="john@example.com"
+                  placeholderTextColor="#9CA3AF"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+              </View>
+
+              {/* Referral Source */}
+              <View style={styles.addLeadField}>
+                <Text style={styles.addLeadLabel}>Referral Source</Text>
+                <TextInput
+                  style={styles.addLeadInput}
+                  value={newLead.referral_source}
+                  onChangeText={(text) => setNewLead(prev => ({ ...prev, referral_source: text }))}
+                  placeholder="Friend, Zillow, Open House, etc."
+                  placeholderTextColor="#9CA3AF"
+                />
+              </View>
+
+              {/* Loan Purpose */}
+              <View style={styles.addLeadField}>
+                <Text style={styles.addLeadLabel}>Loan Purpose</Text>
+                <TouchableOpacity
+                  style={styles.addLeadPickerContainer}
+                  onPress={() => setShowLoanPurposePicker(!showLoanPurposePicker)}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12 }}>
+                    <Text style={{ fontSize: 15, color: '#111827' }}>{newLead.loan_purpose}</Text>
+                    <Ionicons name={showLoanPurposePicker ? "chevron-up" : "chevron-down"} size={20} color="#6B7280" />
+                  </View>
+                </TouchableOpacity>
+                {showLoanPurposePicker && (
+                  <View style={{ backgroundColor: '#F9FAFB', borderRadius: 8, marginTop: 4, borderWidth: 1, borderColor: '#E5E7EB' }}>
+                    {LOAN_PURPOSES.map((purpose) => (
+                      <TouchableOpacity
+                        key={purpose}
+                        style={{
+                          padding: 12,
+                          borderBottomWidth: purpose !== LOAN_PURPOSES[LOAN_PURPOSES.length - 1] ? 1 : 0,
+                          borderBottomColor: '#E5E7EB',
+                          backgroundColor: newLead.loan_purpose === purpose ? '#EDE9FE' : 'transparent',
+                        }}
+                        onPress={() => {
+                          setNewLead(prev => ({ ...prev, loan_purpose: purpose }));
+                          setShowLoanPurposePicker(false);
+                        }}
+                      >
+                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Text style={{ 
+                            fontSize: 15, 
+                            color: newLead.loan_purpose === purpose ? '#7C3AED' : '#374151',
+                            fontWeight: newLead.loan_purpose === purpose ? '600' : '400',
+                          }}>{purpose}</Text>
+                          {newLead.loan_purpose === purpose && (
+                            <Ionicons name="checkmark" size={18} color="#7C3AED" />
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+
+              {/* Notes */}
+              <View style={styles.addLeadField}>
+                <Text style={styles.addLeadLabel}>Notes</Text>
+                <TextInput
+                  style={[styles.addLeadInput, styles.addLeadTextArea]}
+                  value={newLead.message}
+                  onChangeText={(text) => setNewLead(prev => ({ ...prev, message: text }))}
+                  placeholder="Any additional notes about this lead..."
+                  placeholderTextColor="#9CA3AF"
+                  multiline
+                  numberOfLines={3}
+                />
+              </View>
+
+              {/* Info Box */}
+              <View style={styles.addLeadInfoBox}>
+                <Text style={styles.addLeadInfoText}>
+                  <Text style={{ fontWeight: '700' }}>Source:</Text> My Lead
+                </Text>
+                <Text style={styles.addLeadInfoSubtext}>
+                  This lead will be assigned to you and visible only to you.
+                </Text>
+              </View>
+            </ScrollView>
+
+            {/* Footer */}
+            <View style={styles.addLeadFooter}>
+              <TouchableOpacity
+                style={styles.addLeadCancelButton}
+                onPress={() => {
+                  setShowAddLeadModal(false);
+                  setAddLeadError(null);
+                }}
+              >
+                <Text style={styles.addLeadCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.addLeadSaveButton,
+                  savingNewLead && styles.addLeadSaveButtonDisabled
+                ]}
+                onPress={saveNewLead}
+                disabled={savingNewLead}
+              >
+                {savingNewLead ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Ionicons name="save-outline" size={18} color="#FFFFFF" />
+                )}
+                <Text style={styles.addLeadSaveText}>
+                  {savingNewLead ? 'Saving...' : 'Save Lead'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
     </View>
   );
 }

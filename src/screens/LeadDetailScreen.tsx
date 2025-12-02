@@ -15,6 +15,7 @@ import {
   AppState,
   Animated,
   LayoutAnimation,
+  Alert,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Session } from '@supabase/supabase-js';
@@ -46,6 +47,7 @@ export type LeadDetailViewProps = {
   loanOfficers: Array<{ id: string; name: string }>;
   userRole: UserRole;
   onLeadUpdate: (updatedLead: Lead | MetaLead, source: 'lead' | 'meta') => void;
+  onDeleteLead?: (leadId: string) => Promise<void>;
   selectedStatusFilter: string;
   searchQuery: string;
   selectedLOFilter: string | null;
@@ -63,6 +65,7 @@ export function LeadDetailView({
   loanOfficers,
   userRole: propUserRole,
   onLeadUpdate,
+  onDeleteLead,
   selectedStatusFilter,
   searchQuery,
   selectedLOFilter,
@@ -87,6 +90,7 @@ export function LeadDetailView({
   const [callbackNote, setCallbackNote] = useState('');
   const [savingCallback, setSavingCallback] = useState(false);
   const [useSpanishTemplates, setUseSpanishTemplates] = useState(false);
+  const [deletingLead, setDeletingLead] = useState(false);
   
   // Voice notes state (expo-av)
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -94,6 +98,10 @@ export function LeadDetailView({
   const [uploadingVoiceNote, setUploadingVoiceNote] = useState(false);
   const [currentSound, setCurrentSound] = useState<Audio.Sound | null>(null);
   const [playingActivityId, setPlayingActivityId] = useState<string | null>(null);
+  // Voice note preview state
+  const [pendingVoiceNoteUri, setPendingVoiceNoteUri] = useState<string | null>(null);
+  const [previewSound, setPreviewSound] = useState<Audio.Sound | null>(null);
+  const [isPlayingPreview, setIsPlayingPreview] = useState(false);
   // Micro animation for "Log Activity" button
   const logButtonScale = useRef(new Animated.Value(1)).current;
 
@@ -679,22 +687,87 @@ export function LeadDetailView({
     }
   };
 
-  const stopRecordingAndSaveVoiceNote = async () => {
-    if (!recording || !record) return;
+  // Stop recording and show preview (don't save yet)
+  const stopRecordingForPreview = async () => {
+    if (!recording) return;
 
     setIsRecording(false);
-    setUploadingVoiceNote(true);
 
     try {
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
       setRecording(null);
 
-      if (!uri) {
-        throw new Error('No recording URI');
+      if (uri) {
+        setPendingVoiceNoteUri(uri);
+        console.log('🎤 Recording stopped, URI saved for preview:', uri);
+      }
+    } catch (error) {
+      console.error('Error stopping recording', error);
+      alert('Failed to stop recording. Please try again.');
+    }
+  };
+
+  // Play/pause preview of pending voice note
+  const togglePreviewPlayback = async () => {
+    if (!pendingVoiceNoteUri) return;
+
+    try {
+      if (isPlayingPreview && previewSound) {
+        await previewSound.stopAsync();
+        await previewSound.unloadAsync();
+        setPreviewSound(null);
+        setIsPlayingPreview(false);
+      } else {
+        // Stop any existing preview sound
+        if (previewSound) {
+          await previewSound.unloadAsync();
+        }
+        
+        const { sound } = await Audio.Sound.createAsync(
+          { uri: pendingVoiceNoteUri },
+          { shouldPlay: true }
+        );
+        setPreviewSound(sound);
+        setIsPlayingPreview(true);
+        
+        sound.setOnPlaybackStatusUpdate((status) => {
+          if (status.isLoaded && status.didJustFinish) {
+            setIsPlayingPreview(false);
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error playing preview', error);
+    }
+  };
+
+  // Discard pending voice note
+  const discardVoiceNote = async () => {
+    if (previewSound) {
+      await previewSound.unloadAsync();
+      setPreviewSound(null);
+    }
+    setPendingVoiceNoteUri(null);
+    setIsPlayingPreview(false);
+    console.log('🗑️ Voice note discarded');
+  };
+
+  // Confirm and save voice note
+  const confirmAndSaveVoiceNote = async () => {
+    if (!pendingVoiceNoteUri || !record) return;
+
+    setUploadingVoiceNote(true);
+
+    try {
+      // Stop preview if playing
+      if (previewSound) {
+        await previewSound.unloadAsync();
+        setPreviewSound(null);
+        setIsPlayingPreview(false);
       }
 
-      const response = await fetch(uri);
+      const response = await fetch(pendingVoiceNoteUri);
       const arrayBuffer = await response.arrayBuffer();
 
       const fileExt = 'm4a';
@@ -763,6 +836,8 @@ export function LeadDetailView({
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
       setActivities((prev) => [inserted, ...prev]);
       setTaskNote('');
+      setPendingVoiceNoteUri(null);
+      console.log('✅ Voice note saved successfully');
     } catch (error) {
       console.error('Error saving voice note', error);
       alert('Failed to save voice note. Please try again.');
@@ -1266,6 +1341,83 @@ export function LeadDetailView({
 
           {!isMeta && (
             <>
+              {(record as Lead).source === 'My Lead' && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <View style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: '#DCFCE7',
+                    paddingHorizontal: 10,
+                    paddingVertical: 6,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    borderColor: '#86EFAC',
+                  }}>
+                    <Ionicons name="person-add-outline" size={14} color="#16A34A" />
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: '#16A34A', marginLeft: 6 }}>
+                      My Lead
+                    </Text>
+                  </View>
+                  {onDeleteLead && (
+                    <TouchableOpacity
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        backgroundColor: '#FEE2E2',
+                        paddingHorizontal: 12,
+                        paddingVertical: 6,
+                        borderRadius: 12,
+                        borderWidth: 1,
+                        borderColor: '#FECACA',
+                      }}
+                      onPress={() => {
+                        Alert.alert(
+                          'Delete Lead',
+                          'Are you sure you want to delete this lead? This action cannot be undone.',
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            {
+                              text: 'Delete',
+                              style: 'destructive',
+                              onPress: async () => {
+                                setDeletingLead(true);
+                                try {
+                                  await onDeleteLead(record.id);
+                                  onBack();
+                                } catch (e) {
+                                  Alert.alert('Error', 'Failed to delete lead');
+                                } finally {
+                                  setDeletingLead(false);
+                                }
+                              },
+                            },
+                          ]
+                        );
+                      }}
+                      disabled={deletingLead}
+                    >
+                      {deletingLead ? (
+                        <ActivityIndicator size="small" color="#DC2626" />
+                      ) : (
+                        <>
+                          <Ionicons name="trash-outline" size={14} color="#DC2626" />
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: '#DC2626', marginLeft: 6 }}>
+                            Delete
+                          </Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+              {(record as Lead).source_detail && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                  <Ionicons name="megaphone-outline" size={16} color="#16A34A" style={{ marginRight: 8 }} />
+                  <Text style={[styles.detailField, { color: '#16A34A', marginBottom: 0 }]} selectable={true}>
+                    Referral: {(record as Lead).source_detail}
+                  </Text>
+                </View>
+              )}
               {(record as Lead).loan_purpose && (
                 <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Loan Purpose: {(record as Lead).loan_purpose}
@@ -1502,37 +1654,83 @@ export function LeadDetailView({
               multiline
             />
             
-            {/* Voice Note Recording Button */}
-            <View style={styles.voiceNoteRow}>
-              <TouchableOpacity
-                style={[
-                  styles.voiceNoteRecordButton,
-                  isRecording && styles.voiceNoteRecordButtonActive,
-                  uploadingVoiceNote && { opacity: 0.6 },
-                ]}
-                onPress={() => {
-                  console.log('🔴 Button pressed! isRecording:', isRecording);
-                  if (isRecording) {
-                    console.log('⏹️ Stopping recording...');
-                    stopRecordingAndSaveVoiceNote();
-                  } else {
-                    console.log('▶️ Starting recording...');
-                    startVoiceRecording();
-                  }
-                }}
-                disabled={uploadingVoiceNote}
-              >
-                <Text style={styles.voiceNoteRecordButtonText}>
-                  {isRecording ? '🛑 Tap to stop' : '🎤 Voice note'}
-                </Text>
-              </TouchableOpacity>
+            {/* Voice Note Section */}
+            {pendingVoiceNoteUri ? (
+              // Preview UI - after recording, before saving
+              <View style={styles.voiceNotePreviewContainer}>
+                <View style={styles.voiceNotePreviewRow}>
+                  <TouchableOpacity
+                    style={styles.voiceNotePlayButton}
+                    onPress={togglePreviewPlayback}
+                  >
+                    <Ionicons 
+                      name={isPlayingPreview ? 'pause' : 'play'} 
+                      size={20} 
+                      color="#7C3AED" 
+                    />
+                  </TouchableOpacity>
+                  <Text style={styles.voiceNotePreviewText}>
+                    {isPlayingPreview ? 'Playing...' : 'Voice note ready'}
+                  </Text>
+                </View>
+                <View style={styles.voiceNotePreviewActions}>
+                  <TouchableOpacity
+                    style={styles.voiceNoteDiscardButton}
+                    onPress={discardVoiceNote}
+                  >
+                    <Ionicons name="trash-outline" size={16} color="#DC2626" />
+                    <Text style={styles.voiceNoteDiscardText}>Discard</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.voiceNoteSaveButton,
+                      uploadingVoiceNote && { opacity: 0.6 },
+                    ]}
+                    onPress={confirmAndSaveVoiceNote}
+                    disabled={uploadingVoiceNote}
+                  >
+                    <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
+                    <Text style={styles.voiceNoteSaveText}>
+                      {uploadingVoiceNote ? 'Saving...' : 'Log Voice Note'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              // Recording UI
+              <View style={styles.voiceNoteRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.voiceNoteRecordButton,
+                    isRecording && styles.voiceNoteRecordButtonActive,
+                  ]}
+                  onPress={() => {
+                    if (isRecording) {
+                      stopRecordingForPreview();
+                    } else {
+                      startVoiceRecording();
+                    }
+                  }}
+                  disabled={uploadingVoiceNote}
+                >
+                  <Ionicons 
+                    name={isRecording ? 'stop-circle' : 'mic'} 
+                    size={18} 
+                    color="#FFFFFF" 
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={styles.voiceNoteRecordButtonText}>
+                    {isRecording ? 'Stop' : 'Voice Note'}
+                  </Text>
+                </TouchableOpacity>
 
-              <Text style={styles.voiceNoteHint}>
-                {isRecording
-                  ? 'Recording… tap to finish and log'
-                  : 'Optional: log a quick voice note'}
-              </Text>
-            </View>
+                <Text style={styles.voiceNoteHint}>
+                  {isRecording
+                    ? 'Recording… tap to stop'
+                    : 'Optional: log a quick voice note'}
+                </Text>
+              </View>
+            )}
             
             <Animated.View style={{ transform: [{ scale: logButtonScale }] }}>
               <TouchableOpacity
@@ -1605,7 +1803,8 @@ export function LeadDetailView({
                         {formatTime(activity.created_at)}
                       </Text>
                     </View>
-                    {propUserRole === 'super_admin' && (
+                    {/* Delete button: super_admin always, or LO for their own "My Lead" leads */}
+                    {(propUserRole === 'super_admin' || (!isMeta && (record as Lead).source === 'My Lead')) && (
                       <TouchableOpacity
                         onPress={() => handleDeleteActivity(activity.id)}
                         disabled={deletingActivityId === activity.id}

@@ -15,6 +15,8 @@ export type Lead = {
   down_payment?: number | null;
   credit_score?: number | null;
   message?: string | null;
+  source?: string | null; // e.g., 'My Lead', 'CTA Form', etc.
+  source_detail?: string | null; // Referral source for self-created leads
 };
 
 export type MetaLead = {

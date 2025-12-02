@@ -1,11 +1,11 @@
 # CloseWithMario Mobile - Codebase Summary
 
-**Last Updated:** November 29, 2025  
+**Last Updated:** December 1, 2025  
 **EAS Account:** mecerrato1  
-**Latest Build:** iOS Production Build 37+ (v1.1.22+, Nov 29, 2025)  
+**Latest Build:** iOS Production Build 37+ (v1.1.22+, Dec 1, 2025)  
 **Major Refactor:** November 26, 2025 - Modular architecture with separated screens and styles  
 **Security Update:** November 29, 2025 - Face ID/Touch ID biometric authentication  
-**Feature Update:** November 29, 2025 - Voice notes, unread indicators, document templates
+**Feature Update:** December 1, 2025 - "My Lead" self-created leads, voice note preview, LO activity deletion
 
 ---
 
@@ -132,7 +132,10 @@ type Lead = {
   down_payment?: number | null;
   credit_score?: number | null;
   message?: string | null;
-  realtor_id?: string | null;  // For RBAC filtering
+  source?: string | null;        // 'My Lead', 'CTA Form', 'Referral', etc.
+  source_detail?: string | null; // Referral source for self-created leads
+  lo_id?: string | null;         // For LO assignment
+  realtor_id?: string | null;    // For RBAC filtering
 };
 ```
 
@@ -620,11 +623,12 @@ npm start
 5. ✅ **Search & Filter:** COMPLETED - Search by name, email, phone + status/LO filters
 6. ✅ **Team Management:** COMPLETED - Manage loan officers and realtors
 7. ✅ **Bilingual Support:** COMPLETED - Spanish text templates
-8. **Pagination:** Load more leads as user scrolls (currently limited to 50)
-9. **Lead Creation/Editing:** Add forms to create and update leads
-10. **Fix Image Assets:** Create square logo for Android adaptive icon
-11. **Dependency Cleanup:** Resolve duplicate expo-constants packages
-12. **Push Notifications:** Implement actual notifications for callbacks
+8. ✅ **Lead Creation:** COMPLETED (Dec 1, 2025) - LOs can create "My Lead" leads with referral source
+9. **Pagination:** Load more leads as user scrolls (currently limited to 50)
+10. **Lead Editing:** Edit existing lead details (name, email, phone, etc.)
+11. **Fix Image Assets:** Create square logo for Android adaptive icon
+12. **Dependency Cleanup:** Resolve duplicate expo-constants packages
+13. **Push Notifications:** Implement actual notifications for callbacks
 
 ### Medium Priority
 13. **Real-time Updates:** Use Supabase subscriptions for live data
@@ -685,19 +689,24 @@ Dedicated authentication screen:
 - Keyboard-aware view
 - Session persistence with AsyncStorage
 
-### `src/screens/LeadDetailScreen.tsx` (~1540 lines) ✨ NEW
+### `src/screens/LeadDetailScreen.tsx` (~1700 lines) ✨ UPDATED
 Comprehensive lead detail view:
 - Sticky header with navigation (back, next/previous)
 - Sticky name bar (always visible when scrolling)
 - Status management with dropdown picker
 - LO assignment (admin only)
-- Contact buttons (Call, Text with templates, Email)
-- Activity logging section (Call, Text, Email, Note)
-- Activity history display
+- Contact buttons (Call, Text with templates, Email, Voice Note)
+- Activity logging section (Call, Text, Email, Note, Voice)
+- Voice note recording with preview flow (record → preview → save)
+- Activity history display with voice note playback
+- **"My Lead" badge** with green styling for self-created leads
+- **Delete button** for "My Lead" leads (red, with confirmation)
+- **Referral source display** when `source_detail` exists
 - Text template modal with bilingual support
 - Callback scheduling
 - Ad image viewer for Meta leads
 - Deep linking for phone/SMS/email
+- LO can delete activities on their own "My Lead" leads
 
 ### `src/screens/TeamManagementScreen.tsx` (~490 lines) ✨ NEW
 Team management interface (super admin only):
@@ -806,10 +815,13 @@ Environment variables for Supabase connection.
 
 ### Supabase Tables
 1. **`leads` table:**
-   - Columns: id, created_at, first_name, last_name, email, phone, status, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id
-   - Used for general lead management (website leads)
-   - RBAC: Filtered by realtor_id for non-admin users
+   - Columns: id, created_at, first_name, last_name, email, phone, status, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id, source, source_detail
+   - Used for general lead management (website leads + LO self-created leads)
+   - `source`: Origin of lead ('My Lead', 'CTA Form', 'Referral', 'Preapproval Wizard', etc.)
+   - `source_detail`: Referral info for self-created leads
+   - RBAC: Filtered by lo_id or realtor_id for non-admin users
    - LO assignment via lo_id foreign key
+   - **Delete RLS policy** requires `source = 'My Lead'` for LO deletion
 
 2. **`meta_ads` table:**
    - Columns: id, created_at, first_name, last_name, email, phone, status, platform, campaign_name, ad_id, ad_name, adset_id, adset_name, form_id, form_name, lo_id, realtor_id, preferred_language, subject_address, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes
@@ -938,7 +950,71 @@ The codebase underwent a massive refactoring to improve maintainability, readabi
 
 ---
 
-## 📅 Recent Changes (November 2025)
+## 📅 Recent Changes (November-December 2025)
+
+### December 1, 2025 - "My Lead" Self-Created Leads & Voice Note Preview
+
+#### 👤 "My Lead" Feature - LO Self-Created Leads
+1. **Add Lead Modal** - Loan officers can create their own leads
+   - First name, last name, phone, email fields
+   - Referral source field (optional) for tracking lead origin
+   - Loan purpose dropdown (inline picker, not modal)
+   - Message/notes field
+   - Leads created this way have `source: 'My Lead'`
+   - Auto-assigns to the creating LO's `lo_id`
+
+2. **"My Lead" Badge** - Visual indicator for self-created leads
+   - Green badge with person-add icon on lead cards
+   - Also appears in lead detail view
+   - Only shows when `source === 'My Lead'`
+
+3. **Swipe-to-Delete** - LOs can delete their own leads
+   - Red "Delete" swipe action on lead cards (only for "My Lead" leads)
+   - Confirmation alert before deletion
+   - Uses database RLS policy requiring `source = 'My Lead'`
+
+4. **Delete Button in Lead Detail** - Alternative to swipe delete
+   - Red "Delete" button next to "My Lead" badge
+   - Confirmation dialog before deletion
+   - Navigates back to lead list after successful deletion
+
+5. **Referral Source Display** - Shows referral info when available
+   - Green megaphone icon with referral text
+   - Only displays when `source_detail` exists
+   - Shows on both lead cards and detail view
+
+#### 🎙️ Voice Note Preview Flow
+6. **Record → Preview → Save** - Two-step voice note process
+   - Record button starts recording (red pulsing indicator)
+   - Stop recording shows preview with playback controls
+   - User can play preview before saving
+   - Cancel or Save buttons for final decision
+   - Prevents accidental saves of unintended recordings
+
+#### 🗑️ LO Activity Deletion
+7. **Delete Own Lead Activities** - LOs can manage their activity history
+   - Delete button appears on activities for "My Lead" leads
+   - Previously only super_admin could delete activities
+   - Still requires the lead to be owned by the LO
+
+#### 🧹 Dashboard UI Cleanup
+8. **Removed Redundant Elements**
+   - Removed "View All Leads" button (Total Leads tile does the same)
+   - Removed FAB "Add Lead" button from dashboard view
+   - Add Lead only accessible from leads list view now
+
+#### 🐛 Bug Fixes
+9. **Fixed `source` field overwrite issue**
+   - Dashboard and "All" tab were overwriting database `source` with table type
+   - Changed internal type indicator to `_tableType` field
+   - Now preserves original `source` values ("My Lead", "Referral", etc.)
+
+10. **Fixed loan purpose picker not working**
+    - Converted from nested modal to inline dropdown
+    - Updated `LOAN_PURPOSES` to match database check constraint
+    - Valid values: 'Home Buying', 'Home Selling', 'Mortgage Refinance', 'Investment Property', 'General Real Estate'
+
+---
 
 ### November 29, 2025 - Voice Notes, Unread Indicators & Document Templates (v1.1.22+)
 
@@ -1245,7 +1321,7 @@ npm start
 - `meta_ad_activities` - Meta lead interaction history
 - `lead_callbacks` - Scheduled callback reminders
 
-### Current State (Nov 29, 2025)
+### Current State (Dec 1, 2025)
 - ✅ Full CRUD for lead status and activities
 - ✅ RBAC with super_admin/loan_officer/realtor/buyer roles
 - ✅ Modern UI with brand colors
@@ -1255,18 +1331,23 @@ npm start
 - ✅ Session persistence with AsyncStorage
 - ✅ iOS Production Build 37+ deployed (v1.1.22+)
 - ✅ SMS text templates with bilingual support (10 templates, English/Spanish)
-- ✅ **Voice notes recording and playback (NEW)**
-- ✅ **Unread lead indicator - blue dot (NEW)**
-- ✅ **Document checklist templates with dynamic years (NEW)**
-- ✅ **UI micro-animations (NEW)**
+- ✅ Voice notes recording with preview and playback
+- ✅ Unread lead indicator - blue dot
+- ✅ Document checklist templates with dynamic years
+- ✅ UI micro-animations
 - ✅ Advanced filtering (status, LO, search)
 - ✅ Smart navigation (respects all filters, tab-aware)
 - ✅ Team management screen
 - ✅ Callback scheduling
 - ✅ Ad image viewer
 - ✅ Modular architecture (refactored from 6250 to 1500 lines)
+- ✅ **"My Lead" self-created leads with green badge (NEW)**
+- ✅ **LOs can delete their own leads (swipe + detail button) (NEW)**
+- ✅ **LOs can delete activities on their own leads (NEW)**
+- ✅ **Voice note preview before saving (NEW)**
+- ✅ **Referral source tracking and display (NEW)**
 - ⚠️ Need to fix: Square logo for Android, duplicate dependencies
-- 🔜 Next: Push notifications, pagination, lead creation
+- 🔜 Next: Push notifications, pagination
 
 ### Important Notes
 - Modular architecture with separated screens (~1500 line main file)
@@ -1277,6 +1358,9 @@ npm start
 - RBAC filters leads by `lo_id` or `realtor_id` for non-admin users
 - Activity logging writes to `lead_activities` or `meta_ad_activities` tables
 - Text templates in `src/lib/textTemplates.ts` with 10 bilingual messages
+- **"My Lead" leads** have `source: 'My Lead'` and can be deleted by the creating LO
+- **Loan purpose values** must match database constraint: 'Home Buying', 'Home Selling', 'Mortgage Refinance', 'Investment Property', 'General Real Estate'
+- **`_tableType`** field used internally to distinguish leads vs meta_ads (not `source`)
 - Templates auto-fill: {fname}, {loFullname}, {loFname}, {loPhone}, {loEmail}, {platform}, {recentYear}, {prevYear}
 - Voice notes stored in Supabase Storage bucket `activity-voice-notes`
 - Unread leads identified by `!last_contact_date && (status === 'new' || !status)`
