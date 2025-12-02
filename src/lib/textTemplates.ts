@@ -2,6 +2,8 @@ export type TextTemplate = {
   id: string;
   name: string;
   nameEs: string;
+  subject: string;
+  subjectEs: string;
   template: string;
   templateEs: string;
 };
@@ -11,6 +13,8 @@ export const TEXT_TEMPLATES: TextTemplate[] = [
     id: 'initial_contact',
     name: 'Initial Contact',
     nameEs: 'Contacto Inicial',
+    subject: 'Following up about your home financing inquiry',
+    subjectEs: 'Seguimiento sobre su consulta de financiamiento de vivienda',
     template: `Hi {fname} 👋
 
 This is {LO fullname} with loanDepot (2nd largest mortgage lender in the US).
@@ -32,6 +36,8 @@ Me comunico sobre el anuncio en el que hizo clic en {platform}. Intenté llamarl
     id: 'document_followup',
     name: 'Document Follow-up',
     nameEs: 'Seguimiento de Documentos',
+    subject: 'Documents needed for your preapproval',
+    subjectEs: 'Documentos necesarios para su preaprobación',
     template: `Hi {fname} 👋
 
 This is {LO fullname} with loanDepot.
@@ -55,6 +61,8 @@ Puede comunicarse conmigo en:
     id: 'preapproval_checkin',
     name: 'Pre-approval Check-in',
     nameEs: 'Verificación de Pre-aprobación',
+    subject: 'Checking in about your home loan preapproval',
+    subjectEs: 'Seguimiento sobre su preaprobación de hipoteca',
     template: `Hi {fname} 👋
 
 This is {LO fullname} with loanDepot.
@@ -78,6 +86,8 @@ No dude en llamarme o enviarme un mensaje:
     id: 'stop_paying_rent',
     name: 'Stop Paying Rent',
     nameEs: 'Deje de Pagar Alquiler',
+    subject: 'Let’s explore how to stop paying rent',
+    subjectEs: 'Veamos cómo puede dejar de pagar alquiler',
     template: `Hi {fname} 👋
 
 This is {LO fullname} with loanDepot.
@@ -101,6 +111,8 @@ Contácteme en:
     id: 'not_ready_general',
     name: 'Not Ready - General',
     nameEs: 'No Está Listo - General',
+    subject: 'Thank you for your time',
+    subjectEs: 'Gracias por su tiempo',
     template: `Hi {fname} 👋
 
 This is {LO fullname}, good speaking to you.
@@ -126,6 +138,8 @@ Entiendo que no está listo en este momento, pero no dude en contactarme cuando 
     id: 'not_ready_credit',
     name: 'Not Ready - Working on Credit',
     nameEs: 'No Está Listo - Trabajando en Crédito',
+    subject: 'Next steps once you’ve worked on your credit',
+    subjectEs: 'Próximos pasos después de trabajar en su crédito',
     template: `Hi {fname} 👋
 
 This is {LO fullname}, good speaking to you.
@@ -151,6 +165,8 @@ Entiendo que va a trabajar en su crédito. No dude en contactarme cuando esté l
     id: 'callback_confirmation',
     name: 'Callback Confirmation',
     nameEs: 'Confirmación de Llamada',
+    subject: 'Callback confirmation',
+    subjectEs: 'Confirmación de llamada',
     template: `Hi {fname} 👋
 
 This is {LO fullname}, good speaking to you.
@@ -172,6 +188,8 @@ Espero con ansias nuestra llamada
     id: 'hung_up',
     name: 'Hung Up on Me',
     nameEs: 'Colgó la Llamada',
+    subject: 'Following up on our recent call',
+    subjectEs: 'Seguimiento de nuestra llamada reciente',
     template: `Hi {fname} 👋
 
 This is {LO fullname} with loanDepot. I believe you just hung up the call thinking I was a spam call.
@@ -201,6 +219,8 @@ Esta llamada es para ver cómo podemos ayudarlo a convertirse en propietario de 
     id: 'variable_income_docs',
     name: 'Variable Income Docs',
     nameEs: 'Documentos de Ingresos Variables',
+    subject: 'Documents needed for your preapproval',
+    subjectEs: 'Documentos necesarios para su preaprobación',
     template: `Hi {fname} 👋
 
 Here's the list of documents needed for your preapproval:
@@ -236,6 +256,8 @@ Aquí está la lista de documentos necesarios para su pre-aprobación:
     id: 'self_employed_docs',
     name: 'Self-Employed Docs',
     nameEs: 'Documentos de Trabajador Independiente',
+    subject: 'Self-employed documents for your preapproval',
+    subjectEs: 'Documentos para su preaprobación como trabajador independiente',
     template: `Hi {fname} 👋
 
 Here's the list of documents needed for your preapproval:
@@ -325,6 +347,16 @@ export function formatPlatformName(platform: string): string {
  */
 export function getTemplateText(template: TextTemplate, useSpanish: boolean): string {
   return useSpanish ? template.templateEs : template.template;
+}
+
+/**
+ * Gets the appropriate subject line based on language preference
+ * @param template - The template object
+ * @param useSpanish - Whether to use Spanish version
+ * @returns The subject line in the appropriate language
+ */
+export function getTemplateSubject(template: TextTemplate, useSpanish: boolean): string {
+  return useSpanish ? template.subjectEs : template.subject;
 }
 
 /**

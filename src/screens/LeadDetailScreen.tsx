@@ -24,7 +24,7 @@ import type { Lead, MetaLead, SelectedLeadRef, Activity, LoanOfficer, Realtor } 
 import type { UserRole } from '../lib/roles';
 import { supabase } from '../lib/supabase';
 import { getUserRole, getUserTeamMemberId, canSeeAllLeads } from '../lib/roles';
-import { TEXT_TEMPLATES, fillTemplate, getTemplateText, getTemplateName, type TemplateVariables } from '../lib/textTemplates';
+import { TEXT_TEMPLATES, fillTemplate, getTemplateText, getTemplateName, getTemplateSubject, type TemplateVariables } from '../lib/textTemplates';
 import { STATUSES, STATUS_DISPLAY_MAP, STATUS_COLOR_MAP, getLeadAlert, formatStatus, getTimeAgo } from '../lib/leadsHelpers';
 import { scheduleLeadCallback } from '../lib/callbacks';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -91,6 +91,7 @@ export function LeadDetailView({
   const [savingCallback, setSavingCallback] = useState(false);
   const [useSpanishTemplates, setUseSpanishTemplates] = useState(false);
   const [deletingLead, setDeletingLead] = useState(false);
+  const [templateMode, setTemplateMode] = useState<'text' | 'email'>('text');
   
   // Voice notes state (expo-av)
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -342,6 +343,7 @@ export function LeadDetailView({
 
   const handleText = () => {
     if (!phone) return;
+    setTemplateMode('text');
     setShowTemplateModal(true);
   };
 
@@ -369,129 +371,131 @@ export function LeadDetailView({
     const messageBody = fillTemplate(templateText, variables);
     console.log('Final message body:', messageBody);
     
-    const encodedBody = encodeURIComponent(messageBody);
-    
     setShowTemplateModal(false);
-    
-    // Log the text activity automatically
-    try {
-      const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
-      const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
-      const leadTableName = isMeta ? 'meta_ads' : 'leads';
-      
-      const activityData = {
-        [foreignKeyColumn]: record.id,
-        activity_type: 'text',
-        notes: `Sent: "${template.name}"\n\n${messageBody}`,
-        created_by: session?.user?.id || null,
-        user_email: session?.user?.email || 'Mobile App User',
-      };
 
-      const { error } = await supabase
-        .from(tableName)
-        .insert([activityData]);
+    if (templateMode === 'text') {
+      const encodedBody = encodeURIComponent(messageBody);
 
-      if (error) {
-        console.error('Error logging text activity:', error);
-      } else {
-        // Update last_contact_date on the lead
-        const now = new Date().toISOString();
-        await supabase
-          .from(leadTableName)
-          .update({ last_contact_date: now })
-          .eq('id', record.id);
+      // Log the text activity automatically
+      try {
+        const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
+        const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
+        const leadTableName = isMeta ? 'meta_ads' : 'leads';
         
-        // Update the lead in parent component state
-        const updatedLead = { ...record, last_contact_date: now };
-        onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
-        
-        // Refresh activities to show the new log
-        const { data } = await supabase
+        const activityData = {
+          [foreignKeyColumn]: record.id,
+          activity_type: 'text',
+          notes: `Sent: "${template.name}"\n\n${messageBody}`,
+          created_by: session?.user?.id || null,
+          user_email: session?.user?.email || 'Mobile App User',
+        };
+
+        const { error } = await supabase
           .from(tableName)
-          .select('*')
-          .eq(foreignKeyColumn, record.id)
-          .order('created_at', { ascending: false });
-        
-        if (data) {
-          setActivities(data);
+          .insert([activityData]);
+
+        if (error) {
+          console.error('Error logging text activity:', error);
+        } else {
+          // Update last_contact_date on the lead
+          const now = new Date().toISOString();
+          await supabase
+            .from(leadTableName)
+            .update({ last_contact_date: now })
+            .eq('id', record.id);
+          
+          // Update the lead in parent component state
+          const updatedLead = { ...record, last_contact_date: now };
+          onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
+          
+          // Refresh activities to show the new log
+          const { data } = await supabase
+            .from(tableName)
+            .select('*')
+            .eq(foreignKeyColumn, record.id)
+            .order('created_at', { ascending: false });
+          
+          if (data) {
+            setActivities(data);
+          }
+        }
+      } catch (e) {
+        console.error('Error logging text activity:', e);
+      }
+      
+      // Open SMS app with pre-filled message
+      Linking.openURL(`sms:${phone}?body=${encodedBody}`);
+    } else if (templateMode === 'email') {
+      if (!email) return;
+
+      const subject = encodeURIComponent(getTemplateSubject(template, useSpanishTemplates));
+      const body = encodeURIComponent(messageBody);
+
+      try {
+        const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
+        const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
+        const leadTableName = isMeta ? 'meta_ads' : 'leads';
+
+        const activityData = {
+          [foreignKeyColumn]: record.id,
+          activity_type: 'email',
+          notes: `Sent email: "${template.name}"\n\n${messageBody}`,
+          created_by: session?.user?.id || null,
+          user_email: session?.user?.email || 'Mobile App User',
+        };
+
+        const { data, error } = await supabase
+          .from(tableName)
+          .insert([activityData])
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error logging email activity:', error);
+        } else if (data) {
+          // Update last_contact_date on the lead
+          const now = new Date().toISOString();
+          await supabase
+            .from(leadTableName)
+            .update({ last_contact_date: now })
+            .eq('id', record.id);
+          
+          // Update the lead in parent component state
+          const updatedLead = { ...record, last_contact_date: now };
+          onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
+          
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          setActivities([data, ...activities]);
+        }
+      } catch (e) {
+        console.error('Error logging email activity:', e);
+      }
+
+      const outlookUrl = `ms-outlook://compose?to=${email}&subject=${subject}&body=${body}`;
+      const mailtoUrl = `mailto:${email}?subject=${subject}&body=${body}`;
+
+      try {
+        const canOpenOutlook = await Linking.canOpenURL(outlookUrl);
+        if (canOpenOutlook) {
+          await Linking.openURL(outlookUrl);
+        } else {
+          await Linking.openURL(mailtoUrl);
+        }
+      } catch (error) {
+        console.error('Error opening email client:', error);
+        try {
+          await Linking.openURL(mailtoUrl);
+        } catch (e) {
+          console.error('Error opening mailto:', e);
         }
       }
-    } catch (e) {
-      console.error('Error logging text activity:', e);
     }
-    
-    // Open SMS app with pre-filled message
-    Linking.openURL(`sms:${phone}?body=${encodedBody}`);
   };
 
-  const handleEmail = async () => {
+  const handleEmail = () => {
     if (!email) return;
-    const firstName = record.first_name || 'there';
-    const subject = encodeURIComponent('Preapproval follow up');
-    const body = encodeURIComponent(
-      `Hi ${firstName},\n\nI wanted to follow up regarding your home financing options.`
-    );
-    
-    // Log email activity
-    try {
-      const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
-      const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
-      const leadTableName = isMeta ? 'meta_ads' : 'leads';
-
-      const newActivity = {
-        [foreignKeyColumn]: record.id,
-        activity_type: 'email',
-        notes: `Emailed ${email}`,
-        created_by: session?.user?.id || null,
-        user_email: session?.user?.email || 'Mobile App User',
-      };
-
-      const { data } = await supabase
-        .from(tableName)
-        .insert([newActivity])
-        .select()
-        .single();
-
-      if (data) {
-        // Update last_contact_date on the lead
-        const now = new Date().toISOString();
-        await supabase
-          .from(leadTableName)
-          .update({ last_contact_date: now })
-          .eq('id', record.id);
-        
-        // Update the lead in parent component state
-        const updatedLead = { ...record, last_contact_date: now };
-        onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
-        
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setActivities([data, ...activities]);
-      }
-    } catch (e) {
-      console.error('Error logging email activity:', e);
-    }
-    
-    // Try to open Outlook first, fallback to default mail client
-    const outlookUrl = `ms-outlook://compose?to=${email}&subject=${subject}&body=${body}`;
-    const mailtoUrl = `mailto:${email}?subject=${subject}&body=${body}`;
-    
-    try {
-      const canOpenOutlook = await Linking.canOpenURL(outlookUrl);
-      if (canOpenOutlook) {
-        await Linking.openURL(outlookUrl);
-      } else {
-        // Fallback to default mail client if Outlook not installed
-        await Linking.openURL(mailtoUrl);
-      }
-    } catch (error) {
-      console.error('Error opening email client:', error);
-      // Final fallback to mailto
-      try {
-        await Linking.openURL(mailtoUrl);
-      } catch (e) {
-        console.error('Error opening mailto:', e);
-      }
-    }
+    setTemplateMode('email');
+    setShowTemplateModal(true);
   };
 
   // Load current loan officer info
@@ -1894,7 +1898,9 @@ export function LeadDetailView({
           <View style={styles.templateModalContent}>
             <View style={styles.templateModalHeader}>
               <Text style={styles.templateModalTitle}>
-                {useSpanishTemplates ? 'Elegir Plantilla de Texto' : 'Choose a Text Template'}
+                {templateMode === 'text'
+                  ? (useSpanishTemplates ? 'Elegir Plantilla de Texto' : 'Choose a Text Template')
+                  : (useSpanishTemplates ? 'Elegir Plantilla de Correo' : 'Choose an Email Template')}
               </Text>
               <TouchableOpacity 
                 onPress={() => setShowTemplateModal(false)}
