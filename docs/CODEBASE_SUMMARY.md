@@ -1,11 +1,12 @@
 # CloseWithMario Mobile - Codebase Summary
 
-**Last Updated:** December 1, 2025  
+**Last Updated:** December 2, 2025  
 **EAS Account:** mecerrato1  
-**Latest Build:** iOS Production Build 37+ (v1.1.22+, Dec 1, 2025)  
+**Latest Build:** iOS Production Build 41 (v1.1.26, Dec 2, 2025)  
 **Major Refactor:** November 26, 2025 - Modular architecture with separated screens and styles  
 **Security Update:** November 29, 2025 - Face ID/Touch ID biometric authentication  
-**Feature Update:** December 1, 2025 - "My Lead" self-created leads, voice note preview, LO activity deletion
+**Feature Update:** December 1, 2025 - "My Lead" self-created leads, voice note preview, LO activity deletion  
+**UI/UX Update:** December 2, 2025 - Dashboard performance cards with emojis, callback templates with smart dates, platform name formatting, W2 Regular template
 
 ---
 
@@ -421,15 +422,19 @@ if (!canSeeAll) {
 - Loading state during authentication
 - Keyboard-aware view for iOS
 
-#### Dashboard Screen (NEW)
+#### Dashboard Screen (NEW) ✨ UPDATED Dec 2
 - **Purple gradient header** with "Dashboard" title
-- **Stats grid** (4 cards):
-  - Total Leads (green numbers)
-  - New Leads
-  - Qualified Leads
-  - Closed Leads
-- **"View All Leads" button** (purple, prominent)
-- **"How to Disposition Leads" guide** (4 steps with numbered circles)
+- **Stats grid** (3 cards):
+  - Meta Ads count
+  - My Leads count
+  - Total Leads count
+- **Performance section** (4 cards with emojis):
+  - ✨ New Leads
+  - 🎯 Qualified
+  - 🎉 Closed
+  - ⚠️ Needs Attention (filters leads requiring follow-up)
+- **"Needs Attention" filter** - Shows leads with attention badges (no response, stale, etc.)
+- Tapping performance cards filters the lead list by status
 - **Recent Leads section** (last 5 leads with time ago)
 - Tap any recent lead to jump directly to detail view
 
@@ -767,19 +772,24 @@ RBAC utilities:
 - `canSeeAllLeads()` - Check if user is admin
 - Type definitions for UserRole
 
-### `src/lib/textTemplates.ts` (~380 lines)
+### `src/lib/textTemplates.ts` (~417 lines) ✨ UPDATED Dec 2
 SMS text message templates with bilingual support:
-- **10 pre-written templates** (Initial Contact, Document Follow-up, Pre-approval Check-in, Stop Paying Rent, Not Ready - General, Not Ready - Credit, Callback Confirmation, Hung Up, Variable Income Docs, Self-Employed Docs)
+- **11 pre-written templates** (Initial Contact, Document Follow-up, Pre-approval Check-in, Stop Paying Rent, Not Ready - General, Not Ready - Credit, Callback Confirmation, Hung Up, Variable Income Docs, Self-Employed Docs, **W2 Regular**)
 - **Bilingual support:** English and Spanish versions for all templates
-- Variable replacement system: `{fname}`, `{loFullname}`, `{loFname}`, `{loPhone}`, `{loEmail}`, `{platform}`, `{recentYear}`, `{prevYear}`
+- Variable replacement system: `{fname}`, `{loFullname}`, `{loFname}`, `{loPhone}`, `{loEmail}`, `{platform}`, `{recentYear}`, `{prevYear}`, **`{callbackTime}`**
 - **Dynamic year calculation:** `{recentYear}` = current year - 1, `{prevYear}` = current year - 2
+- **Smart callback dates:** `{callbackTime}` shows "today at 6:00 PM", "tomorrow at 10:00 AM", or "12/05/2025 at 2:30 PM"
+  - Only fetches future callbacks (ignores past dates)
+  - Empty string if no callback scheduled
 - `formatPlatformName()` - Converts FB/IG to Facebook/Instagram (case-insensitive)
-- `fillTemplate()` - Replaces template variables with actual values including dynamic years
+- **Platform name formatting in detail view:** FB → Facebook, IG → Instagram (bold display)
+- `fillTemplate()` - Replaces template variables with actual values including dynamic years and callback times
 - `getTemplateText()` - Returns English or Spanish version based on preference
 - `getTemplateName()` - Returns template name in selected language
 - **Auto-detection:** Automatically uses Spanish if lead's `preferred_language` is 'spanish'
 - **Manual override:** Language toggle in template modal for manual selection
-- **Document Checklists:** Variable Income Docs and Self-Employed Docs templates with tax year placeholders
+- **Document Checklists:** Variable Income Docs, Self-Employed Docs, and **W2 Regular** templates with tax year placeholders
+- **W2 Regular template:** Simplified checklist for W2 employees (most recent paystub + 2 years W-2s + driver's license)
 - Templates include friendly emojis and proper formatting
 
 ### `src/lib/types/leads.ts` (~80 lines) ✨ EXPANDED
@@ -1190,6 +1200,51 @@ The codebase underwent a massive refactoring to improve maintainability, readabi
 - Proper TypeScript typing for all new features
 - Optimized re-renders with proper state management
 
+### December 2, 2025 Updates
+
+#### UI/UX Enhancements
+1. **Dashboard Performance Cards with Emojis**
+   - ✨ New Leads
+   - 🎯 Qualified
+   - 🎉 Closed
+   - ⚠️ Needs Attention
+   - Visual indicators make cards more engaging and easier to scan
+
+2. **"Needs Attention" Filter**
+   - New performance card that filters leads requiring follow-up
+   - Shows leads with attention badges (no response, stale, etc.)
+   - Integrates with existing attention badge system
+   - Filter persists when switching between tabs (Meta Ads, My Leads, Total)
+
+3. **Smart Callback Date Formatting**
+   - Callback confirmation template now includes dynamic date/time
+   - Shows "today at 6:00 PM" for same-day callbacks
+   - Shows "tomorrow at 10:00 AM" for next-day callbacks
+   - Shows full date "12/05/2025 at 2:30 PM" for future dates
+   - Only fetches future callbacks (ignores past dates)
+   - Gracefully handles missing callbacks (omits date if none scheduled)
+
+4. **Platform Name Formatting**
+   - Lead detail view now shows full platform names
+   - FB → **Facebook** (bold)
+   - IG → **Instagram** (bold)
+   - Messenger → **Messenger** (bold)
+   - WhatsApp → **WhatsApp** (bold)
+   - Case-insensitive matching
+
+5. **W2 Regular Document Template**
+   - New simplified template for W2 employees
+   - Checklist: Most recent paystub, 2 years W-2s, driver's license
+   - Bilingual support (English/Spanish)
+   - Complements existing Variable Income and Self-Employed templates
+
+#### Technical Implementation
+- Added `callbackTime` variable to template system
+- Smart date formatting function with relative dates
+- Query optimization to fetch only future callbacks
+- Platform name helper function with bold styling
+- Template variable expansion for callback dates
+
 ### Earlier November 2025 Updates
 
 #### Major Features Added
@@ -1237,11 +1292,11 @@ The codebase underwent a massive refactoring to improve maintainability, readabi
 - Corrected OAuth redirect URI configuration
 
 ### Build Information
-- **Latest iOS Build:** Build 36 (Production, Nov 29, 2025)
-- **App Version:** 1.1.21
-- **Build Status:** Successful
+- **Latest iOS Build:** Build 41 (Production, Dec 2, 2025)
+- **App Version:** 1.1.26
+- **Build Status:** Successful, submitted to TestFlight
 - **Distribution:** App Store ready
-- **New Features:** Face ID/Touch ID biometric authentication
+- **Latest Features:** Dashboard performance cards with emojis, smart callback dates, platform name formatting, W2 Regular template
 
 ---
 

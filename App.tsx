@@ -19,8 +19,6 @@ import {
   Alert,
   Image,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Path } from 'react-native-svg';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { Session } from '@supabase/supabase-js';
@@ -1289,12 +1287,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
         >
-          {/* Gradient Transition */}
-          <LinearGradient
-            colors={['#7c3aed', isDark ? '#1a1a1a' : '#f5f5f5']}
-            style={{ height: 40, marginTop: -20 }}
-          />
-
           {/* Performance Section */}
           <View style={[styles.performanceSection, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
             <View style={styles.sectionHeader}>
@@ -1600,13 +1592,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
       {!loading && !errorMessage && (hasLeads || hasMetaLeads) && (
         <>
-          {/* Thin Accent Divider */}
-          <View style={{
-            height: 3,
-            backgroundColor: '#a78bfa',
-            marginBottom: 12,
-          }} />
-
           {/* Filter Buttons Row */}
           <View style={styles.filterButtonContainer}>
             {/* Status Filter */}
