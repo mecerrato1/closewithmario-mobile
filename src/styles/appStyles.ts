@@ -102,14 +102,16 @@ export const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingVertical: 8,
     gap: 12,
   },
   statCard: {
     flex: 1,
     backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 16,
-    padding: 16,
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 20, // Increased bottom padding to lift text
     alignItems: 'center',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.3)',
@@ -124,7 +126,8 @@ export const styles = StyleSheet.create({
     elevation: 6,
   },
   statNumber: {
-    fontSize: 28,
+    fontSize: 26, // Reduced from 28
+    lineHeight: 32, // Explicit line height to prevent clipping
     fontWeight: '800',
     color: '#FFFFFF',
   },
@@ -135,7 +138,7 @@ export const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: 'rgba(255,255,255,0.9)',
-    marginTop: 4,
+    marginTop: 2, // Reduced margin since we have line height on number now
   },
   statLabelActive: {
     color: '#7C3AED',
@@ -1972,7 +1975,8 @@ export const styles = StyleSheet.create({
   },
   leadsSearchContainer: {
     backgroundColor: 'rgba(91, 33, 182, 0.45)',
-    marginTop: 16,
+    marginTop: 8,
+    marginBottom: 8,
     borderRadius: 24,
     flexDirection: 'row',
     alignItems: 'center',
@@ -2298,6 +2302,30 @@ export const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#4F46E5',
+  },
+  // Call Recording Button - More prominent style
+  callRecordingButton: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: '#7C3AED',
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  callRecordingButtonActive: {
+    backgroundColor: '#6D28D9',
+  },
+  callRecordingButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   // FAB (Floating Action Button) styles
   fab: {

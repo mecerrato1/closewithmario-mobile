@@ -1925,13 +1925,19 @@ export function LeadDetailView({
                     return (
                       <TouchableOpacity
                         style={[
-                          styles.voiceNoteButton,
-                          playingActivityId === activity.id && styles.voiceNoteButtonActive,
+                          styles.callRecordingButton,
+                          playingActivityId === activity.id && styles.callRecordingButtonActive,
                         ]}
                         onPress={() => handlePlayVoiceNote(activity, recordingUrl)}
                       >
-                        <Text style={styles.voiceNoteButtonText}>
-                          {playingActivityId === activity.id ? '▶ Playing…' : '🎧 Play call recording'}
+                        <Ionicons 
+                          name={playingActivityId === activity.id ? 'pause-circle' : 'play-circle'} 
+                          size={20} 
+                          color="#FFFFFF" 
+                          style={{ marginRight: 8 }}
+                        />
+                        <Text style={styles.callRecordingButtonText}>
+                          {playingActivityId === activity.id ? 'Playing Call Recording…' : 'Play Call Recording'}
                         </Text>
                       </TouchableOpacity>
                     );

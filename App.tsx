@@ -125,6 +125,83 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const listOpacity = useRef(new Animated.Value(1)).current;
   const listScale = useRef(new Animated.Value(1)).current;
 
+  // Collapsing header animation for leads view
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const HEADER_EXPANDED_HEIGHT = 280;
+  const HEADER_COLLAPSED_HEIGHT = 120;
+
+  const headerHeight = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [HEADER_EXPANDED_HEIGHT, HEADER_COLLAPSED_HEIGHT],
+    extrapolate: 'clamp',
+  });
+
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, 50],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+
+  const headerTitleScale = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [1, 0.85],
+    extrapolate: 'clamp',
+  });
+
+  const statsScale = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+
+  const statsHeight = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [80, 0], // Animate height to collapse/expand layout
+    extrapolate: 'clamp',
+  });
+
+  const statsOpacity = scrollY.interpolate({
+    inputRange: [0, 50],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+
+  // Collapsing header animation for dashboard view
+  const dashboardScrollY = useRef(new Animated.Value(0)).current;
+  const DASHBOARD_HEADER_EXPANDED = 420;
+  const DASHBOARD_HEADER_COLLAPSED = 180;
+  const HEADER_SCROLL_DISTANCE = DASHBOARD_HEADER_EXPANDED - DASHBOARD_HEADER_COLLAPSED; // 240
+
+  const dashboardHeaderTranslateY = dashboardScrollY.interpolate({
+    inputRange: [0, HEADER_SCROLL_DISTANCE],
+    outputRange: [0, -HEADER_SCROLL_DISTANCE],
+    extrapolate: 'clamp',
+  });
+
+  const dashboardUserInfoTranslateY = dashboardScrollY.interpolate({
+    inputRange: [0, HEADER_SCROLL_DISTANCE],
+    outputRange: [0, HEADER_SCROLL_DISTANCE], // Moves down to counter header moving up
+    extrapolate: 'clamp',
+  });
+
+  const dashboardContentOpacity = dashboardScrollY.interpolate({
+    inputRange: [0, 80],
+    outputRange: [1, 0],
+    extrapolate: 'clamp',
+  });
+
+  const dashboardStatsScale = dashboardScrollY.interpolate({
+    inputRange: [0, HEADER_SCROLL_DISTANCE],
+    outputRange: [1, 0.7],
+    extrapolate: 'clamp',
+  });
+
+  const dashboardStatsTranslateY = dashboardScrollY.interpolate({
+    inputRange: [0, HEADER_SCROLL_DISTANCE],
+    outputRange: [0, 25], // Reduced from 60 to 25 to lift chips up away from bottom edge
+    extrapolate: 'clamp',
+  });
+
   const triggerListAnimation = () => {
     // Small pulse + LayoutAnimation for item movement
     Animated.parallel([
@@ -149,8 +226,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       // Reset opacity so future animations look consistent
       listOpacity.setValue(1);
     });
-
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
   };
 
   const animatedListStyle = {
@@ -1199,57 +1274,84 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {/* Purple Gradient Header */}
-        <View style={[styles.newDashboardHeader, { backgroundColor: colors.headerBackground }]}>
-          {/* User Info Row */}
-          <View style={styles.newHeaderTop}>
-            <View style={styles.newUserInfo}>
-              {session?.user?.user_metadata?.avatar_url ? (
-                <Image 
-                  source={{ uri: session.user.user_metadata.avatar_url }}
-                  style={styles.newAvatar}
-                />
-              ) : (
-                <View style={styles.newAvatarPlaceholder}>
-                  <Text style={styles.newAvatarText}>
-                    {session?.user?.email?.[0]?.toUpperCase() || 'U'}
+        {/* Purple Gradient Header - Fixed height, moves up with scroll */}
+        <Animated.View style={[
+          styles.newDashboardHeader, 
+          { 
+            backgroundColor: colors.headerBackground,
+            height: DASHBOARD_HEADER_EXPANDED,
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 10,
+            overflow: 'hidden',
+            transform: [{ translateY: dashboardHeaderTranslateY }],
+          }
+        ]}>
+          {/* User Info Row - Counter-translates to appear fixed */}
+          <Animated.View style={{ transform: [{ translateY: dashboardUserInfoTranslateY }] }}>
+            <View style={styles.newHeaderTop}>
+              <View style={styles.newUserInfo}>
+                {session?.user?.user_metadata?.avatar_url ? (
+                  <Image 
+                    source={{ uri: session.user.user_metadata.avatar_url }}
+                    style={styles.newAvatar}
+                  />
+                ) : (
+                  <View style={styles.newAvatarPlaceholder}>
+                    <Text style={styles.newAvatarText}>
+                      {session?.user?.email?.[0]?.toUpperCase() || 'U'}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.newUserDetails}>
+                  <Text style={styles.newUserTitle}>Dashboard</Text>
+                  <Text style={styles.newUserEmail} numberOfLines={1}>
+                    {session?.user?.email || ''}
                   </Text>
                 </View>
-              )}
-              <View style={styles.newUserDetails}>
-                <Text style={styles.newUserTitle}>Dashboard</Text>
-                <Text style={styles.newUserEmail} numberOfLines={1}>
-                  {session?.user?.email || ''}
-                </Text>
+              </View>
+              <View style={styles.headerButtons}>
+                {userRole === 'super_admin' && (
+                  <TouchableOpacity 
+                    onPress={() => setShowTeamManagement(true)} 
+                    style={styles.newHeaderButton}
+                  >
+                    <Text style={styles.newHeaderButtonText}>👥</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={onSignOut} style={styles.newSignOutButton}>
+                  <Text style={styles.newSignOutText}>Sign Out</Text>
+                </TouchableOpacity>
               </View>
             </View>
-            <View style={styles.headerButtons}>
-              {userRole === 'super_admin' && (
-                <TouchableOpacity 
-                  onPress={() => setShowTeamManagement(true)} 
-                  style={styles.newHeaderButton}
-                >
-                  <Text style={styles.newHeaderButtonText}>👥</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity onPress={onSignOut} style={styles.newSignOutButton}>
-                <Text style={styles.newSignOutText}>Sign Out</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          </Animated.View>
 
-          {/* Greeting */}
-          <Text style={styles.newGreeting}>Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {userFirstName}!</Text>
-          <Text style={styles.newSubGreeting}>Here's your lead overview</Text>
+          {/* Greeting and Quote - Fades out */}
+          <Animated.View style={{ 
+            opacity: dashboardContentOpacity,
+          }}>
+            <Text style={styles.newGreeting}>Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {userFirstName}!</Text>
+            <Text style={styles.newSubGreeting}>Here's your lead overview</Text>
 
-          {/* Quote of the Day */}
-          <QuoteOfTheDay userKey={session?.user?.email} />
+            {/* Quote of the Day */}
+            <QuoteOfTheDay userKey={session?.user?.email} />
+          </Animated.View>
 
-          {/* Stats Grid in Header */}
-          <View style={styles.newHeaderStatsGrid}>
-            <View style={styles.newHeaderStatsRow}>
+          {/* Stats Grid in Header - Moves up and scales */}
+          <Animated.View style={[
+            styles.newHeaderStatsRow, 
+            { 
+              gap: 8,
+              transform: [
+                { scale: dashboardStatsScale },
+                { translateY: dashboardStatsTranslateY }
+              ],
+            }
+          ]}>
               <TouchableOpacity 
-                style={styles.newHeaderStatCard}
+                style={[styles.newHeaderStatCard, { flex: 1 }]}
                 onPress={() => {
                   triggerListAnimation();
                   setAttentionFilter(false);
@@ -1262,7 +1364,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 <Text style={styles.newHeaderStatLabel}>Meta Ads</Text>
               </TouchableOpacity>
               <TouchableOpacity 
-                style={styles.newHeaderStatCard}
+                style={[styles.newHeaderStatCard, { flex: 1 }]}
                 onPress={() => {
                   triggerListAnimation();
                   setAttentionFilter(false);
@@ -1274,29 +1376,40 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 <Text style={styles.newHeaderStatNumber}>{organicLeadsCount}</Text>
                 <Text style={styles.newHeaderStatLabel}>My Leads</Text>
               </TouchableOpacity>
-            </View>
-            <TouchableOpacity 
-              style={styles.newHeaderStatCardLarge}
-              onPress={() => {
-                triggerListAnimation();
-                setAttentionFilter(false);
-                setActiveTab('all');
-                setSelectedStatusFilter('all');
-                setShowDashboard(false);
-              }}
-            >
-              <Text style={styles.newHeaderStatNumberLarge}>{totalLeads}</Text>
-              <Text style={styles.newHeaderStatLabelLarge}>Total Leads</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+              <TouchableOpacity 
+                style={[styles.newHeaderStatCard, { flex: 1 }]}
+                onPress={() => {
+                  triggerListAnimation();
+                  setAttentionFilter(false);
+                  setActiveTab('all');
+                  setSelectedStatusFilter('all');
+                  setShowDashboard(false);
+                }}
+              >
+                <Text style={styles.newHeaderStatNumber}>{totalLeads}</Text>
+                <Text style={styles.newHeaderStatLabel}>Total</Text>
+              </TouchableOpacity>
+          </Animated.View>
+        </Animated.View>
 
-        <ScrollView 
-          contentContainerStyle={styles.newDashboardContent}
+        <Animated.ScrollView 
+          contentContainerStyle={[
+            styles.newDashboardContent,
+            { paddingTop: DASHBOARD_HEADER_EXPANDED + 16 } // Push content down + some spacing
+          ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={onRefresh}
+              progressViewOffset={DASHBOARD_HEADER_EXPANDED} // Ensure spinner shows below header
+            />
           }
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: dashboardScrollY } } }],
+            { useNativeDriver: true }
+          )}
+          scrollEventThrottle={1} // Maximize smoothness
         >
           {/* Performance Section */}
           <View style={[styles.performanceSection, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
@@ -1445,7 +1558,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               <Text style={styles.dashboardEmptyText}>No recent leads</Text>
             )}
           </View>
-        </ScrollView>
+        </Animated.ScrollView>
       </View>
     );
   }
@@ -1455,9 +1568,18 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Modern Purple Header with Stats and Search */}
-      <View style={[styles.leadsHeaderContainer, { backgroundColor: colors.headerBackground }]}>
-        <View style={styles.headerContent}>
+      {/* Modern Purple Header with Stats and Search - Animated Collapsing */}
+      <Animated.View style={[
+        styles.leadsHeaderContainer, 
+        { 
+          backgroundColor: colors.headerBackground,
+          height: headerHeight,
+        }
+      ]}>
+        <Animated.View style={[
+          styles.headerContent,
+          { transform: [{ scale: headerTitleScale }] }
+        ]}>
           <TouchableOpacity onPress={() => setShowDashboard(true)} style={styles.homeButton}>
             <Text style={styles.homeButtonText}>← Home</Text>
           </TouchableOpacity>
@@ -1468,10 +1590,17 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           <TouchableOpacity onPress={onSignOut} style={styles.signOutButton}>
             <Text style={styles.signOutText}>Sign Out</Text>
           </TouchableOpacity>
-        </View>
+        </Animated.View>
 
-        {/* Stats Row inside Purple Header */}
-        <View style={styles.statsRow}>
+        {/* Stats Row inside Purple Header - Fades out when scrolling */}
+        <Animated.View style={[
+          styles.statsRow, 
+          { 
+            height: statsHeight,
+            opacity: statsOpacity,
+            overflow: 'hidden', // Ensure content doesn't overflow when height shrinks
+          }
+        ]}>
         <TouchableOpacity 
           style={[
             styles.statCard,
@@ -1547,10 +1676,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             activeTab === 'all' && styles.statLabelActive,
           ]}>Total</Text>
         </TouchableOpacity>
-      </View>
+      </Animated.View>
 
-        {/* Search Bar inside Purple Header */}
-        <View style={styles.leadsSearchContainer}>
+        {/* Search Bar inside Purple Header - Fades out when scrolling */}
+        <Animated.View style={[styles.leadsSearchContainer, { opacity: headerOpacity }]}>
           <Text style={styles.leadsSearchIcon}>🔍</Text>
           <TextInput
             style={styles.leadsSearchInput}
@@ -1577,8 +1706,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               <Text style={styles.searchClearText}>✕</Text>
             </TouchableOpacity>
           )}
-        </View>
-      </View>
+        </Animated.View>
+      </Animated.View>
 
       {loading && (
         <View style={styles.centerContent}>
@@ -1823,7 +1952,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       {/* Lead Content - FlatLists for each tab */}
       {activeTab === 'leads' && hasLeads && (
         <Animated.View style={animatedListStyle}>
-          <FlatList
+          <Animated.FlatList
             data={leads.filter(lead => {
               const statusMatch = selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter;
               const searchMatch = matchesSearch(lead);
@@ -1850,13 +1979,18 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
             }
             showsVerticalScrollIndicator={false}
+            onScroll={Animated.event(
+              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+              { useNativeDriver: false }
+            )}
+            scrollEventThrottle={16}
           />
         </Animated.View>
       )}
 
       {activeTab === 'meta' && hasMetaLeads && (
         <Animated.View style={animatedListStyle}>
-          <FlatList
+          <Animated.FlatList
             data={metaLeads.filter(lead => {
               const statusMatch = selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter;
               const searchMatch = matchesSearch(lead);
@@ -1883,13 +2017,18 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
             }
             showsVerticalScrollIndicator={false}
+            onScroll={Animated.event(
+              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+              { useNativeDriver: false }
+            )}
+            scrollEventThrottle={16}
           />
         </Animated.View>
       )}
 
       {activeTab === 'all' && (hasLeads || hasMetaLeads) && (
         <Animated.View style={animatedListStyle}>
-          <FlatList
+          <Animated.FlatList
             data={(() => {
               const metaArr = metaLeads.filter(lead => {
                 const statusMatch = selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter;
@@ -1934,6 +2073,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
             }
             showsVerticalScrollIndicator={false}
+            onScroll={Animated.event(
+              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+              { useNativeDriver: false }
+            )}
+            scrollEventThrottle={16}
           />
         </Animated.View>
       )}
