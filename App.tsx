@@ -1392,6 +1392,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   setAttentionFilter(false);
                   setActiveTab('meta');
                   setSelectedStatusFilter('all');
+                  setSelectedSourceFilter('all');
+                  setSelectedLOFilter(null);
                   setShowDashboard(false);
                 }}
               >
@@ -1405,6 +1407,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   setAttentionFilter(false);
                   setActiveTab('leads');
                   setSelectedStatusFilter('all');
+                  setSelectedSourceFilter('all');
+                  setSelectedLOFilter(null);
                   setShowDashboard(false);
                 }}
               >
@@ -1418,6 +1422,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   setAttentionFilter(false);
                   setActiveTab('all');
                   setSelectedStatusFilter('all');
+                  setSelectedSourceFilter('all');
+                  setSelectedLOFilter(null);
                   setShowDashboard(false);
                 }}
               >
@@ -1458,6 +1464,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   setAttentionFilter(false);
                   setActiveTab('all');
                   setSelectedStatusFilter('new');
+                  setSelectedSourceFilter('all');
+                  setSelectedLOFilter(null);
                   setShowDashboard(false);
                 }}
               >
@@ -1470,6 +1478,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   setAttentionFilter(false);
                   setActiveTab('all');
                   setSelectedStatusFilter('qualified');
+                  setSelectedSourceFilter('all');
+                  setSelectedLOFilter(null);
                   setShowDashboard(false);
                 }}
               >
@@ -1482,6 +1492,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   setAttentionFilter(false);
                   setActiveTab('all');
                   setSelectedStatusFilter('closed');
+                  setSelectedSourceFilter('all');
+                  setSelectedLOFilter(null);
                   setShowDashboard(false);
                 }}
               >
@@ -1496,6 +1508,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   setAttentionFilter(true);
                   setActiveTab('all');
                   setSelectedStatusFilter('all');
+                  setSelectedSourceFilter('all');
+                  setSelectedLOFilter(null);
                   setShowDashboard(false);
                 }}
               >
@@ -1615,7 +1629,17 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           styles.headerContent,
           { transform: [{ scale: headerTitleScale }] }
         ]}>
-          <TouchableOpacity onPress={() => setShowDashboard(true)} style={styles.homeButton}>
+          <TouchableOpacity 
+            onPress={() => {
+              setShowDashboard(true);
+              setSelectedLOFilter(null);
+              setSelectedStatusFilter('all');
+              setSelectedSourceFilter('all');
+              setAttentionFilter(false);
+              setSearchQuery('');
+            }} 
+            style={styles.homeButton}
+          >
             <Text style={styles.homeButtonText}>← Home</Text>
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
@@ -1944,6 +1968,16 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                           styles.statusPickerItemText,
                           selectedLOFilter === null && styles.statusPickerItemTextActive,
                         ]}>All Loan Officers</Text>
+                        <Text style={[
+                          styles.statusPickerItemCount,
+                          selectedLOFilter === null && styles.statusPickerItemCountActive,
+                        ]}>({
+                          [...metaLeads, ...leads].filter(l => {
+                             const statusMatch = selectedStatusFilter === 'all' ? l.status !== 'unqualified' : l.status === selectedStatusFilter;
+                             const sourceMatch = matchesSourceFilter(l);
+                             return statusMatch && sourceMatch;
+                          }).length
+                        })</Text>
                       </View>
                       {selectedLOFilter === null && (
                         <Text style={styles.statusPickerCheck}>✓</Text>
@@ -1967,6 +2001,16 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                           styles.statusPickerItemText,
                           selectedLOFilter === 'unassigned' && styles.statusPickerItemTextActive,
                         ]}>Unassigned</Text>
+                        <Text style={[
+                          styles.statusPickerItemCount,
+                          selectedLOFilter === 'unassigned' && styles.statusPickerItemCountActive,
+                        ]}>({
+                          [...metaLeads, ...leads].filter(l => {
+                             const statusMatch = selectedStatusFilter === 'all' ? l.status !== 'unqualified' : l.status === selectedStatusFilter;
+                             const sourceMatch = matchesSourceFilter(l);
+                             return statusMatch && sourceMatch && !l.lo_id;
+                          }).length
+                        })</Text>
                       </View>
                       {selectedLOFilter === 'unassigned' && (
                         <Text style={styles.statusPickerCheck}>✓</Text>
@@ -1974,30 +2018,42 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                     </TouchableOpacity>
 
                     {/* Individual LOs */}
-                    {loanOfficers.map((lo) => (
-                      <TouchableOpacity
-                        key={lo.id}
-                        style={[
-                          styles.statusPickerItem,
-                          selectedLOFilter === lo.id && styles.statusPickerItemActive,
-                        ]}
-                        onPress={() => {
-                          triggerListAnimation();
-                          setSelectedLOFilter(lo.id);
-                          setShowLOPicker(false);
-                        }}
-                      >
-                        <View style={styles.statusPickerItemLeft}>
-                          <Text style={[
-                            styles.statusPickerItemText,
-                            selectedLOFilter === lo.id && styles.statusPickerItemTextActive,
-                          ]}>{lo.name}</Text>
-                        </View>
-                        {selectedLOFilter === lo.id && (
-                          <Text style={styles.statusPickerCheck}>✓</Text>
-                        )}
-                      </TouchableOpacity>
-                    ))}
+                    {loanOfficers.map((lo) => {
+                      const count = [...metaLeads, ...leads].filter(l => {
+                         const statusMatch = selectedStatusFilter === 'all' ? l.status !== 'unqualified' : l.status === selectedStatusFilter;
+                         const sourceMatch = matchesSourceFilter(l);
+                         return statusMatch && sourceMatch && l.lo_id === lo.id;
+                      }).length;
+
+                      return (
+                        <TouchableOpacity
+                          key={lo.id}
+                          style={[
+                            styles.statusPickerItem,
+                            selectedLOFilter === lo.id && styles.statusPickerItemActive,
+                          ]}
+                          onPress={() => {
+                            triggerListAnimation();
+                            setSelectedLOFilter(lo.id);
+                            setShowLOPicker(false);
+                          }}
+                        >
+                          <View style={styles.statusPickerItemLeft}>
+                            <Text style={[
+                              styles.statusPickerItemText,
+                              selectedLOFilter === lo.id && styles.statusPickerItemTextActive,
+                            ]}>{lo.name}</Text>
+                            <Text style={[
+                              styles.statusPickerItemCount,
+                              selectedLOFilter === lo.id && styles.statusPickerItemCountActive,
+                            ]}>({count})</Text>
+                          </View>
+                          {selectedLOFilter === lo.id && (
+                            <Text style={styles.statusPickerCheck}>✓</Text>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
                   </ScrollView>
                 </View>
               </TouchableOpacity>
@@ -2075,6 +2131,16 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                             triggerListAnimation();
                             setSelectedSourceFilter(source);
                             setShowSourcePicker(false);
+
+                            // Auto-switch tab based on source type
+                            const hasMeta = metaLeads.some(l => (l.ad_name || l.campaign_name) === source);
+                            const hasOrganic = leads.some(l => (l.source_detail || l.source) === source);
+
+                            if (hasMeta && !hasOrganic) {
+                              setActiveTab('meta');
+                            } else if (!hasMeta && hasOrganic) {
+                              setActiveTab('leads');
+                            }
                           }}
                         >
                           <View style={styles.statusPickerItemLeft}>

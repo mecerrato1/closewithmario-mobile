@@ -742,12 +742,15 @@ export function LeadDetailView({
       setRecording(recording);
       setIsRecording(true);
     } catch (error: any) {
-      console.error('Failed to start recording', error);
-      alert(
-        `Could not start recording: ${
-          error?.message || 'Please make sure the app is open and try again.'
-        }`
-      );
+      // Use log instead of error to prevent RedBox
+      console.log('Failed to start recording', error);
+
+      const errorMessage = error?.message || '';
+      if (errorMessage.includes('Session activation failed') || errorMessage.includes('561017449')) {
+        alert('Microphone is currently in use by another app (like a phone call). Please hang up and try again.');
+      } else {
+        alert('Could not start recording. Please check your microphone settings and try again.');
+      }
     }
   };
 
