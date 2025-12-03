@@ -103,6 +103,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [teamMemberId, setTeamMemberId] = useState<string | null>(null);
   const [selectedLOFilter, setSelectedLOFilter] = useState<string | null>(null); // null = all LOs
   const [showLOPicker, setShowLOPicker] = useState(false);
+  const [selectedSourceFilter, setSelectedSourceFilter] = useState<string>('all'); // 'all' = all sources
+  const [showSourcePicker, setShowSourcePicker] = useState(false);
   const [leadEligible, setLeadEligible] = useState<boolean>(true);
   
   // Add Lead Modal state
@@ -124,6 +126,24 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   // Micro animations for the lead list
   const listOpacity = useRef(new Animated.Value(1)).current;
   const listScale = useRef(new Animated.Value(1)).current;
+
+  // Calculate unique sources for the filter
+  const uniqueSources = React.useMemo(() => {
+    const sources = new Set<string>();
+    
+    // Add sources from meta leads (ad_name)
+    metaLeads.forEach(l => {
+      if (l.ad_name) sources.add(l.ad_name);
+      else if (l.campaign_name) sources.add(l.campaign_name);
+    });
+    
+    // Add sources from organic leads (source_detail)
+    leads.forEach(l => {
+      if (l.source_detail) sources.add(l.source_detail);
+    });
+    
+    return Array.from(sources).sort();
+  }, [leads, metaLeads]);
 
   // Collapsing header animation for leads view
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -168,9 +188,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   // Collapsing header animation for dashboard view
   const dashboardScrollY = useRef(new Animated.Value(0)).current;
-  const DASHBOARD_HEADER_EXPANDED = 420;
-  const DASHBOARD_HEADER_COLLAPSED = 180;
-  const HEADER_SCROLL_DISTANCE = DASHBOARD_HEADER_EXPANDED - DASHBOARD_HEADER_COLLAPSED; // 240
+  const DASHBOARD_HEADER_EXPANDED = 480;
+  const DASHBOARD_HEADER_COLLAPSED = 260;
+  const HEADER_SCROLL_DISTANCE = DASHBOARD_HEADER_EXPANDED - DASHBOARD_HEADER_COLLAPSED; // 220
 
   const dashboardHeaderTranslateY = dashboardScrollY.interpolate({
     inputRange: [0, HEADER_SCROLL_DISTANCE],
@@ -198,7 +218,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   const dashboardStatsTranslateY = dashboardScrollY.interpolate({
     inputRange: [0, HEADER_SCROLL_DISTANCE],
-    outputRange: [0, 25], // Reduced from 60 to 25 to lift chips up away from bottom edge
+    outputRange: [0, 20], // Push chips down further to clear taller super admin header content
     extrapolate: 'clamp',
   });
 
@@ -777,6 +797,21 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const matchesAttentionFilter = (lead: Lead | MetaLead) => {
     if (!attentionFilter) return true;
     return !!getLeadAlert(lead);
+  };
+
+  // Source filter (for super admins only)
+  const matchesSourceFilter = (lead: Lead | MetaLead) => {
+    // Only apply filter for super admins
+    if (userRole !== 'super_admin') return true;
+    
+    if (selectedSourceFilter === 'all') return true;
+    
+    const src = (lead as MetaLead).ad_name || 
+                (lead as Lead).source_detail || 
+                (lead as MetaLead).campaign_name || 
+                (lead as Lead).source;
+                
+    return src === selectedSourceFilter;
   };
 
   const renderLeadItem = ({ item }: { item: Lead }) => {
@@ -1617,8 +1652,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             activeTab === 'meta' && styles.statNumberActive,
           ]}>
             {selectedStatusFilter === 'all' 
-              ? metaLeads.filter(l => matchesLOFilter(l) && matchesAttentionFilter(l) && l.status !== 'unqualified').length 
-              : metaLeads.filter(l => l.status === selectedStatusFilter && matchesLOFilter(l) && matchesAttentionFilter(l)).length
+              ? metaLeads.filter(l => matchesLOFilter(l) && matchesAttentionFilter(l) && matchesSourceFilter(l) && l.status !== 'unqualified').length 
+              : metaLeads.filter(l => l.status === selectedStatusFilter && matchesLOFilter(l) && matchesAttentionFilter(l) && matchesSourceFilter(l)).length
             }
           </Text>
           <Text style={[
@@ -1642,8 +1677,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             activeTab === 'leads' && styles.statNumberActive,
           ]}>
             {selectedStatusFilter === 'all' 
-              ? leads.filter(l => matchesLOFilter(l) && matchesAttentionFilter(l) && l.status !== 'unqualified').length 
-              : leads.filter(l => l.status === selectedStatusFilter && matchesLOFilter(l) && matchesAttentionFilter(l)).length
+              ? leads.filter(l => matchesLOFilter(l) && matchesAttentionFilter(l) && matchesSourceFilter(l) && l.status !== 'unqualified').length 
+              : leads.filter(l => l.status === selectedStatusFilter && matchesLOFilter(l) && matchesAttentionFilter(l) && matchesSourceFilter(l)).length
             }
           </Text>
           <Text style={[
@@ -1667,8 +1702,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             activeTab === 'all' && styles.statNumberActive,
           ]}>
             {selectedStatusFilter === 'all' 
-              ? metaLeads.filter(l => matchesLOFilter(l) && matchesAttentionFilter(l) && l.status !== 'unqualified').length + leads.filter(l => matchesLOFilter(l) && matchesAttentionFilter(l) && l.status !== 'unqualified').length 
-              : [...metaLeads, ...leads].filter(l => l.status === selectedStatusFilter && matchesLOFilter(l) && matchesAttentionFilter(l)).length
+              ? metaLeads.filter(l => matchesLOFilter(l) && matchesAttentionFilter(l) && matchesSourceFilter(l) && l.status !== 'unqualified').length + leads.filter(l => matchesLOFilter(l) && matchesAttentionFilter(l) && matchesSourceFilter(l) && l.status !== 'unqualified').length 
+              : [...metaLeads, ...leads].filter(l => l.status === selectedStatusFilter && matchesLOFilter(l) && matchesAttentionFilter(l) && matchesSourceFilter(l)).length
             }
           </Text>
           <Text style={[
@@ -1733,10 +1768,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       {!loading && !errorMessage && (hasLeads || hasMetaLeads) && (
         <>
           {/* Filter Buttons Row */}
-          <View style={styles.filterButtonContainer}>
+          <View style={[styles.filterButtonContainer, { flexWrap: 'wrap' }]}>
             {/* Status Filter */}
             <TouchableOpacity
-              style={[styles.filterButton, userRole === 'super_admin' && styles.filterButtonHalf]}
+              style={[
+                styles.filterButton, 
+                userRole === 'super_admin' ? { width: '100%', marginBottom: 4 } : { flex: 1 }
+              ]}
               onPress={() => setShowStatusPicker(true)}
             >
               <Text style={styles.filterButtonLabel}>Status:</Text>
@@ -1751,21 +1789,40 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
             {/* LO Filter (Super Admin Only) */}
             {userRole === 'super_admin' && (
-              <TouchableOpacity
-                style={[styles.filterButton, styles.filterButtonHalf]}
-                onPress={() => setShowLOPicker(true)}
-              >
-                <Text style={styles.filterButtonLabel}>LO:</Text>
-                <Text style={styles.filterButtonValue}>
-                  {selectedLOFilter === null 
-                    ? 'All LOs' 
-                    : selectedLOFilter === 'unassigned'
-                    ? 'Unassigned'
-                    : loanOfficers.find(lo => lo.id === selectedLOFilter)?.name || 'Unknown'
-                  }
-                </Text>
-                <Text style={styles.filterButtonIcon}>▼</Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  style={[styles.filterButton, styles.filterButtonHalf]}
+                  onPress={() => setShowLOPicker(true)}
+                >
+                  <Text style={styles.filterButtonLabel}>LO:</Text>
+                  <Text style={styles.filterButtonValue}>
+                    {selectedLOFilter === null 
+                      ? 'All LOs' 
+                      : selectedLOFilter === 'unassigned'
+                      ? 'Unassigned'
+                      : loanOfficers.find(lo => lo.id === selectedLOFilter)?.name || 'Unknown'
+                    }
+                  </Text>
+                  <Text style={styles.filterButtonIcon}>▼</Text>
+                </TouchableOpacity>
+
+                {/* Source Filter (Super Admin Only) */}
+                <TouchableOpacity
+                  style={[styles.filterButton, styles.filterButtonHalf]}
+                  onPress={() => setShowSourcePicker(true)}
+                >
+                  <Text style={styles.filterButtonLabel}>Source:</Text>
+                  <Text style={styles.filterButtonValue} numberOfLines={1}>
+                    {selectedSourceFilter === 'all' 
+                      ? 'All Sources' 
+                      : selectedSourceFilter.length > 15 
+                        ? selectedSourceFilter.substring(0, 12) + '...' 
+                        : selectedSourceFilter
+                    }
+                  </Text>
+                  <Text style={styles.filterButtonIcon}>▼</Text>
+                </TouchableOpacity>
+              </>
             )}
           </View>
 
@@ -1946,6 +2003,101 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               </TouchableOpacity>
             </Modal>
           )}
+
+          {/* Source Picker Modal (Super Admin Only) */}
+          {userRole === 'super_admin' && (
+            <Modal
+              visible={showSourcePicker}
+              transparent={true}
+              animationType="fade"
+              onRequestClose={() => setShowSourcePicker(false)}
+            >
+              <TouchableOpacity 
+                style={styles.modalOverlay}
+                activeOpacity={1}
+                onPress={() => setShowSourcePicker(false)}
+              >
+                <View style={styles.statusPickerContainer}>
+                  <Text style={styles.statusPickerTitle}>Filter by Source</Text>
+                  <ScrollView style={styles.statusPickerScroll}>
+                    {/* All Sources Option */}
+                    <TouchableOpacity
+                      style={[
+                        styles.statusPickerItem,
+                        selectedSourceFilter === 'all' && styles.statusPickerItemActive,
+                      ]}
+                      onPress={() => {
+                        triggerListAnimation();
+                        setSelectedSourceFilter('all');
+                        setShowSourcePicker(false);
+                      }}
+                    >
+                      <View style={styles.statusPickerItemLeft}>
+                        <Text style={[
+                          styles.statusPickerItemText,
+                          selectedSourceFilter === 'all' && styles.statusPickerItemTextActive,
+                        ]}>All Sources</Text>
+                        <Text style={[
+                          styles.statusPickerItemCount,
+                          selectedSourceFilter === 'all' && styles.statusPickerItemCountActive,
+                        ]}>({metaLeads.length + leads.length})</Text>
+                      </View>
+                      {selectedSourceFilter === 'all' && (
+                        <Text style={styles.statusPickerCheck}>✓</Text>
+                      )}
+                    </TouchableOpacity>
+
+                    {/* Individual Sources */}
+                    {uniqueSources.map((source) => {
+                      // Calculate count for this source
+                      const count = [...metaLeads, ...leads].filter(l => {
+                         // Check if lead matches current status and LO filters
+                         const statusMatch = selectedStatusFilter === 'all' ? l.status !== 'unqualified' : l.status === selectedStatusFilter;
+                         const loMatch = matchesLOFilter(l);
+                         
+                         if (!statusMatch || !loMatch) return false;
+
+                         const src = (l as MetaLead).ad_name || 
+                                     (l as Lead).source_detail || 
+                                     (l as MetaLead).campaign_name || 
+                                     (l as Lead).source;
+                         return src === source;
+                      }).length;
+                      
+                      return (
+                        <TouchableOpacity
+                          key={source}
+                          style={[
+                            styles.statusPickerItem,
+                            selectedSourceFilter === source && styles.statusPickerItemActive,
+                          ]}
+                          onPress={() => {
+                            triggerListAnimation();
+                            setSelectedSourceFilter(source);
+                            setShowSourcePicker(false);
+                          }}
+                        >
+                          <View style={styles.statusPickerItemLeft}>
+                            <Text style={[
+                              styles.statusPickerItemText,
+                              selectedSourceFilter === source && styles.statusPickerItemTextActive,
+                            ]} numberOfLines={1}>{source}</Text>
+                            <Text style={[
+                              styles.statusPickerItemCount,
+                              selectedSourceFilter === source && styles.statusPickerItemCountActive,
+                            ]}>({count})</Text>
+                          </View>
+                          {selectedSourceFilter === source && (
+                            <Text style={styles.statusPickerCheck}>✓</Text>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              </TouchableOpacity>
+            </Modal>
+          )}
         </>
       )}
 
@@ -1958,6 +2110,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               const searchMatch = matchesSearch(lead);
               const loMatch = matchesLOFilter(lead);
               const attentionMatch = matchesAttentionFilter(lead);
+              const sourceMatch = matchesSourceFilter(lead);
               
               console.log('📋 Leads tab filter', {
                 leadId: lead.id,
@@ -1966,11 +2119,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 searchMatch,
                 loMatch,
                 attentionMatch,
+                sourceMatch,
                 selectedStatusFilter,
                 attentionFilter,
+                selectedSourceFilter,
               });
               
-              return statusMatch && searchMatch && loMatch && attentionMatch;
+              return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch;
             })}
             renderItem={renderLeadItem}
             keyExtractor={(item) => item.id}
@@ -1996,6 +2151,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               const searchMatch = matchesSearch(lead);
               const loMatch = matchesLOFilter(lead);
               const attentionMatch = matchesAttentionFilter(lead);
+              const sourceMatch = matchesSourceFilter(lead);
               
               console.log('📋 Meta tab filter', {
                 leadId: lead.id,
@@ -2004,11 +2160,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 searchMatch,
                 loMatch,
                 attentionMatch,
+                sourceMatch,
                 selectedStatusFilter,
                 attentionFilter,
+                selectedSourceFilter,
               });
               
-              return statusMatch && searchMatch && loMatch && attentionMatch;
+              return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch;
             })}
             renderItem={renderMetaLeadItem}
             keyExtractor={(item) => item.id}
@@ -2035,7 +2193,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 const searchMatch = matchesSearch(lead);
                 const loMatch = matchesLOFilter(lead);
                 const attentionMatch = matchesAttentionFilter(lead);
-                return statusMatch && searchMatch && loMatch && attentionMatch;
+                const sourceMatch = matchesSourceFilter(lead);
+                return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch;
               }).map(lead => ({ ...lead, _tableType: 'meta' as const }));
               
               const leadsArr = leads.filter(lead => {
@@ -2043,7 +2202,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 const searchMatch = matchesSearch(lead);
                 const loMatch = matchesLOFilter(lead);
                 const attentionMatch = matchesAttentionFilter(lead);
-                return statusMatch && searchMatch && loMatch && attentionMatch;
+                const sourceMatch = matchesSourceFilter(lead);
+                return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch;
               }).map(lead => ({ ...lead, _tableType: 'lead' as const }));
               
               const combined = [...metaArr, ...leadsArr].sort(

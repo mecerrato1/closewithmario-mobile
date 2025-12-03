@@ -404,6 +404,13 @@ export function LeadDetailView({
       }
     }
 
+    // Format ad created date (e.g. "Dec 3")
+    const formatAdDate = (dateStr: string) => {
+      if (!dateStr) return '';
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+
     const variables: TemplateVariables = {
       fname: record.first_name || 'there',
       loFullname: currentLOInfo 
@@ -414,6 +421,7 @@ export function LeadDetailView({
       loEmail: currentLOInfo?.email || '[Email]',
       platform: isMeta ? (record as MetaLead).platform || 'Facebook' : 'our website',
       callbackTime: callbackTime,
+      adDate: formatAdDate(record.created_at),
     };
 
     console.log('Template variables:', variables);

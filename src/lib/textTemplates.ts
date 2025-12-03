@@ -320,6 +320,33 @@ Aquí está la lista de documentos necesarios para su pre-aprobación:
 ☎️ Móvil {LO phone}
 📧 Email {LO email}`,
   },
+  {
+    id: 'no_response',
+    name: 'No Response',
+    nameEs: 'Sin Respuesta',
+    subject: 'Checking in on your pre-approval inquiry',
+    subjectEs: 'Seguimiento de su consulta de preaprobación',
+    template: `Hey {fname} 👋
+
+I’ve reached out a couple times about the pre-approval you inquired about on {platform} on {adDate}.
+
+Haven’t heard back, so I wanted to check in.
+
+Where do we go from here; are you still looking for help, or should I step back for now?
+
+☎️ Mobile {LO phone}
+📧 Email {LO email}`,
+    templateEs: `Hola {fname} 👋
+
+He intentado contactarlo un par de veces sobre la preaprobación por la que preguntó en {platform} el {adDate}.
+
+No he sabido nada de usted, así que quería ver cómo está todo.
+
+¿Cómo seguimos? ¿Todavía busca ayuda o prefiere que lo deje por ahora?
+
+☎️ Móvil {LO phone}
+📧 Email {LO email}`,
+  },
 ];
 
 export type TemplateVariables = {
@@ -332,6 +359,7 @@ export type TemplateVariables = {
   recentYear?: string;
   prevYear?: string;
   callbackTime?: string;
+  adDate?: string;
 };
 
 /**
@@ -444,6 +472,9 @@ export function fillTemplate(
 
   // Replace {callbackTime} with the formatted callback date/time
   result = result.replace(/{callbackTime}/g, variables.callbackTime || '');
+
+  // Replace {adDate} with the formatted ad clicked date
+  result = result.replace(/{adDate}/g, variables.adDate || 'recently');
 
   return result;
 }
