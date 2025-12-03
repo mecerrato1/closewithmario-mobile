@@ -31,6 +31,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { styles } from '../styles/appStyles';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../styles/theme';
+import { parseRecordingUrl } from '../utils/parseRecordingUrl';
 
 export type LeadDetailViewProps = {
   selected: SelectedLeadRef;
@@ -901,8 +902,10 @@ export function LeadDetailView({
     }
   };
 
-  const handlePlayVoiceNote = async (activity: Activity) => {
-    if (!activity.audio_url) return;
+  const handlePlayVoiceNote = async (activity: Activity, recordingUrl?: string) => {
+    // Support both audio_url (voice notes) and recording URLs (call recordings)
+    const audioUrl = recordingUrl || activity.audio_url;
+    if (!audioUrl) return;
 
     try {
       if (playingActivityId === activity.id && currentSound) {
@@ -919,7 +922,16 @@ export function LeadDetailView({
         setCurrentSound(null);
       }
 
-      const { sound } = await Audio.Sound.createAsync({ uri: activity.audio_url });
+      // Set audio mode to play through speaker (not receiver)
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        shouldDuckAndroid: true,
+        staysActiveInBackground: false,
+      });
+
+      const { sound } = await Audio.Sound.createAsync({ uri: audioUrl });
       setCurrentSound(sound);
       setPlayingActivityId(activity.id);
 
@@ -934,8 +946,8 @@ export function LeadDetailView({
 
       await sound.playAsync();
     } catch (error) {
-      console.error('Error playing voice note', error);
-      alert('Could not play voice note.');
+      console.error('Error playing audio', error);
+      alert('Could not play audio. The recording may not be available.');
       setPlayingActivityId(null);
     }
   };
@@ -1905,6 +1917,25 @@ export function LeadDetailView({
                       </Text>
                     </TouchableOpacity>
                   )}
+                  
+                  {/* Call recording playback button (parsed from notes) */}
+                  {!activity.audio_url && activity.activity_type === 'call' && (() => {
+                    const recordingUrl = parseRecordingUrl(activity.notes);
+                    if (!recordingUrl) return null;
+                    return (
+                      <TouchableOpacity
+                        style={[
+                          styles.voiceNoteButton,
+                          playingActivityId === activity.id && styles.voiceNoteButtonActive,
+                        ]}
+                        onPress={() => handlePlayVoiceNote(activity, recordingUrl)}
+                      >
+                        <Text style={styles.voiceNoteButtonText}>
+                          {playingActivityId === activity.id ? '▶ Playing…' : '🎧 Play call recording'}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })()}
                   
                   {activity.user_email && (
                     <Text style={styles.activityUserEmail}>by {activity.user_email}</Text>

@@ -232,15 +232,26 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             if (teamMemberId) {
               leadsQuery = leadsQuery.eq('lo_id', teamMemberId);
               metaQuery = metaQuery.eq('lo_id', teamMemberId);
+            } else {
+              // LO not linked to any team member - show no leads
+              leadsQuery = leadsQuery.eq('id', '00000000-0000-0000-0000-000000000000');
+              metaQuery = metaQuery.eq('id', '00000000-0000-0000-0000-000000000000');
             }
           } else if (role === 'realtor') {
             const teamMemberId = await getUserTeamMemberId(session.user.id, 'realtor');
             if (teamMemberId) {
               leadsQuery = leadsQuery.eq('realtor_id', teamMemberId);
               metaQuery = metaQuery.eq('realtor_id', teamMemberId);
+            } else {
+              // Realtor not linked to any team member - show no leads
+              leadsQuery = leadsQuery.eq('id', '00000000-0000-0000-0000-000000000000');
+              metaQuery = metaQuery.eq('id', '00000000-0000-0000-0000-000000000000');
             }
+          } else {
+            // Buyers and other roles see no leads - use impossible filter
+            leadsQuery = leadsQuery.eq('id', '00000000-0000-0000-0000-000000000000');
+            metaQuery = metaQuery.eq('id', '00000000-0000-0000-0000-000000000000');
           }
-          // Buyers see no leads (could show their own submitted leads in future)
         }
         // Admins and Super Admins see all leads (no filter)
 
