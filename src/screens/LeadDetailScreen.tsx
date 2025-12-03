@@ -1417,6 +1417,12 @@ export function LeadDetailView({
             Phone: {phone || 'N/A'}
           </Text>
 
+          {!isMeta && (record as Lead).source && (
+            <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
+              Source: {(record as Lead).source}
+            </Text>
+          )}
+
           {!isMeta && (
             <>
               {(record as Lead).source === 'My Lead' && (
