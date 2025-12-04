@@ -106,6 +106,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [selectedSourceFilter, setSelectedSourceFilter] = useState<string>('all'); // 'all' = all sources
   const [showSourcePicker, setShowSourcePicker] = useState(false);
   const [leadEligible, setLeadEligible] = useState<boolean>(true);
+  const [todayCallbacks, setTodayCallbacks] = useState<any[]>([]);
   
   // Add Lead Modal state
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
@@ -371,6 +372,28 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           `leads rows: ${safeLeads.length} · meta_ads rows: ${safeMeta.length}`
         );
 
+        // Fetch today's callbacks for the current user
+        if (session?.user?.id) {
+          const todayStart = new Date();
+          todayStart.setHours(0, 0, 0, 0);
+          const todayEnd = new Date();
+          todayEnd.setHours(23, 59, 59, 999);
+
+          const { data: callbacksData, error: callbacksError } = await supabase
+            .from('lead_callbacks')
+            .select('id, scheduled_for, title, notes, lead_id, meta_ad_id')
+            .gte('scheduled_for', todayStart.toISOString())
+            .lte('scheduled_for', todayEnd.toISOString())
+            .eq('created_by', session.user.id)
+            .order('scheduled_for', { ascending: true });
+
+          if (callbacksError) {
+            console.error('Error loading today callbacks:', callbacksError);
+          } else {
+            setTodayCallbacks(callbacksData || []);
+          }
+        }
+
         if (leadsError && metaError) {
           setErrorMessage(
             `Error reading both tables: leads(${leadsError.message}), meta_ads(${metaError.message})`
@@ -525,9 +548,34 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       const { data: leadsData } = await leadsQuery;
       const { data: metaData } = await metaQuery;
 
-      setLeads((leadsData || []) as Lead[]);
-      setMetaLeads((metaData || []) as MetaLead[]);
-      setDebugInfo(`leads rows: ${(leadsData || []).length} · meta_ads rows: ${(metaData || []).length}`);
+      const safeLeads = (leadsData || []) as Lead[];
+      const safeMeta = (metaData || []) as MetaLead[];
+
+      setLeads(safeLeads);
+      setMetaLeads(safeMeta);
+      setDebugInfo(`leads rows: ${safeLeads.length} · meta_ads rows: ${safeMeta.length}`);
+
+      // Refresh today's callbacks as well
+      if (session?.user?.id) {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayEnd = new Date();
+        todayEnd.setHours(23, 59, 59, 999);
+
+        const { data: callbacksData, error: callbacksError } = await supabase
+          .from('lead_callbacks')
+          .select('id, scheduled_for, title, notes, lead_id, meta_ad_id')
+          .gte('scheduled_for', todayStart.toISOString())
+          .lte('scheduled_for', todayEnd.toISOString())
+          .eq('created_by', session.user.id)
+          .order('scheduled_for', { ascending: true });
+
+        if (callbacksError) {
+          console.error('Error refreshing today callbacks:', callbacksError);
+        } else {
+          setTodayCallbacks(callbacksData || []);
+        }
+      }
     } catch (e) {
       console.error('Refresh error:', e);
     } finally {
@@ -724,9 +772,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     }
   };
 
-  // Delete My Lead function
   const deleteMyLead = async (leadId: string) => {
-    // Confirm deletion
     Alert.alert(
       'Delete Lead',
       'Are you sure you want to delete this lead? This action cannot be undone.',
@@ -740,19 +786,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               const { error } = await supabase
                 .from('leads')
                 .delete()
-                .eq('id', leadId)
-                .eq('source', 'My Lead'); // Extra safety check
+                .eq('id', leadId);
 
-              if (error) {
-                console.error('Error deleting lead:', error);
-                Alert.alert('Error', 'Failed to delete lead. Please try again.');
-                return;
-              }
+              if (error) throw error;
 
-              // Remove from local state with animation
-              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-              setLeads(prev => prev.filter(lead => lead.id !== leadId));
-              
+              // Remove from local state
+              setLeads(prev => prev.filter(l => l.id !== leadId));
               Alert.alert('Success', 'Lead deleted successfully.');
             } catch (e: any) {
               console.error('Unexpected error deleting lead:', e);
@@ -762,6 +801,63 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         },
       ]
     );
+  };
+
+  const deleteCallback = async (callbackId: string) => {
+    Alert.alert(
+      'Delete Callback',
+      'Are you sure you want to delete this callback?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('lead_callbacks')
+                .delete()
+                .eq('id', callbackId);
+
+              if (error) throw error;
+
+              // Remove from local state
+              setTodayCallbacks(prev => prev.filter(c => c.id !== callbackId));
+            } catch (error: any) {
+              console.error('Error deleting callback:', error);
+              Alert.alert('Error', 'Failed to delete callback');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const refreshTodayCallbacks = async () => {
+    if (!session?.user?.id) return;
+
+    try {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+
+      const { data: callbacksData, error: callbacksError } = await supabase
+        .from('lead_callbacks')
+        .select('id, scheduled_for, title, notes, lead_id, meta_ad_id')
+        .gte('scheduled_for', todayStart.toISOString())
+        .lte('scheduled_for', todayEnd.toISOString())
+        .eq('created_by', session.user.id)
+        .order('scheduled_for', { ascending: true });
+
+      if (callbacksError) {
+        console.error('Error refreshing today callbacks:', callbacksError);
+      } else {
+        setTodayCallbacks(callbacksData || []);
+      }
+    } catch (error) {
+      console.error('Error in refreshTodayCallbacks:', error);
+    }
   };
 
   // Search filter function
@@ -1202,12 +1298,34 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   }
 
   if (selectedLead) {
+    // Apply the same filters to leads/metaLeads that are used in the list view
+    const filteredLeads = leads.filter(lead => {
+      const statusMatch = selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter;
+      const searchMatch = matchesSearch(lead);
+      const loMatch = matchesLOFilter(lead);
+      const attentionMatch = matchesAttentionFilter(lead);
+      const sourceMatch = matchesSourceFilter(lead);
+      return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch;
+    });
+
+    const filteredMetaLeads = metaLeads.filter(lead => {
+      const statusMatch = selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter;
+      const searchMatch = matchesSearch(lead);
+      const loMatch = matchesLOFilter(lead);
+      const attentionMatch = matchesAttentionFilter(lead);
+      const sourceMatch = matchesSourceFilter(lead);
+      return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch;
+    });
+
     return (
       <LeadDetailView
         selected={selectedLead}
-        leads={leads}
-        metaLeads={metaLeads}
-        onBack={() => setSelectedLead(null)}
+        leads={filteredLeads}
+        metaLeads={filteredMetaLeads}
+        onBack={() => {
+          setSelectedLead(null);
+          refreshTodayCallbacks(); // Refresh callbacks when returning to dashboard
+        }}
         onNavigate={(leadRef) => setSelectedLead(leadRef)}
         onStatusChange={handleStatusChange}
         session={session}
@@ -1436,7 +1554,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         <Animated.ScrollView 
           contentContainerStyle={[
             styles.newDashboardContent,
-            { paddingTop: DASHBOARD_HEADER_EXPANDED + 16 } // Push content down + some spacing
+            { paddingTop: DASHBOARD_HEADER_EXPANDED } // Push content down to clear header
           ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -1452,6 +1570,82 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           )}
           scrollEventThrottle={1} // Maximize smoothness
         >
+          {/* Today's Callbacks Section */}
+          {todayCallbacks.length > 0 && (
+            <View style={[styles.recentLeadsSection, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>📅 Today's Callbacks</Text>
+              </View>
+              {todayCallbacks.map((cb) => {
+                const when = cb.scheduled_for ? new Date(cb.scheduled_for) : null;
+                const timeStr = when
+                  ? when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                  : '';
+                
+                // Resolve lead name directly here (no helper)
+                let name = cb.title || 'Lead';
+                if (cb.lead_id) {
+                  const lead = leads.find(l => l.id === cb.lead_id);
+                  if (lead) {
+                    name = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || name;
+                  }
+                } else if (cb.meta_ad_id) {
+                  const meta = metaLeads.find(m => m.id === cb.meta_ad_id);
+                  if (meta) {
+                    name = [meta.first_name, meta.last_name].filter(Boolean).join(' ') || name;
+                  }
+                }
+
+                // Swipe action for callbacks
+                const renderRightActions = () => (
+                  <View style={styles.swipeActionsContainer}>
+                    <TouchableOpacity
+                      style={[styles.swipeActionButton, styles.swipeActionDelete]}
+                      onPress={() => deleteCallback(cb.id)}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="trash-outline" size={18} color="#FFFFFF" />
+                      <Text style={styles.swipeActionText}>Delete</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+
+                return (
+                  <Swipeable
+                    key={cb.id}
+                    renderRightActions={renderRightActions}
+                    overshootRight={false}
+                  >
+                    <TouchableOpacity
+                      style={styles.newLeadCard}
+                      onPress={() => {
+                        if (cb.lead_id || cb.meta_ad_id) {
+                          setShowDashboard(false);
+                          setSelectedLead({
+                            source: cb.meta_ad_id ? 'meta' : 'lead',
+                            id: cb.meta_ad_id || cb.lead_id,
+                          });
+                        }
+                      }}
+                    >
+                      <View style={styles.newLeadHeader}>
+                        <Text style={styles.newLeadName}>{name}</Text>
+                        {timeStr ? (
+                          <Text style={styles.newLeadTime}>{timeStr}</Text>
+                        ) : null}
+                      </View>
+                      {cb.notes ? (
+                        <Text style={styles.newLeadMessage} numberOfLines={2}>
+                          {cb.notes}
+                        </Text>
+                      ) : null}
+                    </TouchableOpacity>
+                  </Swipeable>
+                );
+              })}
+            </View>
+          )}
+
           {/* Performance Section */}
           <View style={[styles.performanceSection, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
             <View style={styles.sectionHeader}>

@@ -382,22 +382,27 @@ export function LeadDetailView({
       }
     };
 
-    // Fetch the most recent callback for this lead if using callback_confirmation template
+    // Determine callback time for the callback_confirmation template
     let callbackTime = '';
     if (templateId === 'callback_confirmation') {
       try {
-        const now = new Date();
-        const { data: callbacks } = await supabase
-          .from('lead_callbacks')
-          .select('scheduled_for')
-          .or(isMeta ? `meta_ad_id.eq.${record.id}` : `lead_id.eq.${record.id}`)
-          .gte('scheduled_for', now.toISOString()) // Only get future callbacks
-          .order('scheduled_for', { ascending: true }) // Get the soonest upcoming callback
-          .limit(1);
-        
-        if (callbacks && callbacks.length > 0) {
-          const scheduledDate = new Date(callbacks[0].scheduled_for);
-          callbackTime = ` ${formatCallbackDateTime(scheduledDate)}`; // Add space before the time
+        // Prefer the currently selected callbackDate from state if available
+        if (callbackDate) {
+          callbackTime = ` ${formatCallbackDateTime(callbackDate)}`;
+        } else {
+          const now = new Date();
+          const { data: callbacks } = await supabase
+            .from('lead_callbacks')
+            .select('scheduled_for')
+            .or(isMeta ? `meta_ad_id.eq.${record.id}` : `lead_id.eq.${record.id}`)
+            .gte('scheduled_for', now.toISOString()) // Only get future callbacks
+            .order('scheduled_for', { ascending: true }) // Get the soonest upcoming callback
+            .limit(1);
+          
+          if (callbacks && callbacks.length > 0) {
+            const scheduledDate = new Date(callbacks[0].scheduled_for);
+            callbackTime = ` ${formatCallbackDateTime(scheduledDate)}`; // Add space before the time
+          }
         }
       } catch (error) {
         console.error('Error fetching callback:', error);
@@ -2146,6 +2151,29 @@ export function LeadDetailView({
                 if (!callbackDate) return;
                 try {
                   setSavingCallback(true);
+
+                  const leadDetailsForOutlook = {
+                    Name: fullName,
+                    Email: email,
+                    Phone: phone,
+                    Status: status,
+                    Source: isMeta ? 'Meta Ad' : 'Organic',
+                    'Lead ID': record.id,
+                    'Created At': record.created_at,
+                  };
+
+                  const taskHistoryForOutlook = activities
+                    .map((activity) => {
+                      const createdAt = activity.created_at
+                        ? new Date(activity.created_at).toLocaleString()
+                        : '';
+                      const type = activity.activity_type || 'activity';
+                      const notes = activity.notes || '';
+                      return `${createdAt} [${type}] ${notes}`.trim();
+                    })
+                    .filter(Boolean)
+                    .join('\n');
+
                   await scheduleLeadCallback({
                     leadId: record.id,
                     leadName: fullName,
@@ -2153,6 +2181,9 @@ export function LeadDetailView({
                     createdByUserId: session?.user?.id,
                     note: callbackNote,
                     leadSource: isMeta ? 'meta' : 'lead',
+                    leadDetailsForOutlook,
+                    taskHistoryForOutlook,
+                    leadPhoneForOutlook: phone,
                   });
 
                   // Log callback as a note activity in Activity History

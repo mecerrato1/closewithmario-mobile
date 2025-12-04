@@ -1932,6 +1932,12 @@ export const styles = StyleSheet.create({
     fontSize: 11,
     color: '#9CA3AF',
   },
+  newLeadMessage: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 4,
+    lineHeight: 18,
+  },
   newLeadBadges: {
     gap: 6,
     alignItems: 'flex-end',
