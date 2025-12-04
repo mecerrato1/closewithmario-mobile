@@ -2,7 +2,7 @@
   "expo": {
     "name": "closewithmario-mobile",
     "slug": "closewithmario-mobile",
-    "version": "1.1.33",
+    "version": "1.1.34",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.closewithmario.mobile",
-      "buildNumber": "48",
+      "buildNumber": "49",
       "associatedDomains": [
         "applinks:hxpvcaspgdgsehrehbhl.supabase.co"
       ],
@@ -24,6 +24,7 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSUserNotificationUsageDescription": "We use notifications to remind you to follow up with your leads.",
         "NSMicrophoneUsageDescription": "We need access to your microphone to record voice notes for lead activities.",
+        "NSContactsUsageDescription": "We need access to your contacts to save leads directly to your phone's contact list.",
         "LSApplicationQueriesSchemes": [
           "ms-outlook"
         ]
@@ -76,6 +77,12 @@
         "expo-av",
         {
           "microphonePermission": "Close With Mario uses your microphone to record voice notes on leads."
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow Close With Mario to save leads to your contacts."
         }
       ]
     ]

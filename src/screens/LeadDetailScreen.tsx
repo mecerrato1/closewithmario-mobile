@@ -32,6 +32,7 @@ import { styles } from '../styles/appStyles';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../styles/theme';
 import { parseRecordingUrl } from '../utils/parseRecordingUrl';
+import { saveContact } from '../utils/vcard';
 
 export type LeadDetailViewProps = {
   selected: SelectedLeadRef;
@@ -1331,6 +1332,72 @@ export function LeadDetailView({
             >
               <Text style={styles.contactButtonIcon}>✉</Text>
               <Text style={styles.contactButtonText}>Email</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.contactButton,
+                (!phone && !email) && styles.contactButtonDisabled,
+              ]}
+              onPress={async () => {
+                try {
+                  // Determine company name: "Mortgage Meta" for meta leads, "Mortgage" for others
+                  const company = isMeta ? 'Mortgage Meta' : 'Mortgage';
+                  
+                  // Build notes from lead details
+                  const notesLines: string[] = [];
+                  
+                  // Add source
+                  if (!isMeta && (record as any).source) {
+                    notesLines.push(`Source: ${(record as any).source}`);
+                  }
+                  
+                  // Add meta-specific fields
+                  if (isMeta) {
+                    const metaRecord = record as any;
+                    if (metaRecord.ad_name) notesLines.push(`Ad: ${metaRecord.ad_name}`);
+                    if (metaRecord.subject_address) notesLines.push(`Address: ${metaRecord.subject_address}`);
+                    if (metaRecord.price_range) notesLines.push(`Price Range: ${metaRecord.price_range}`);
+                    if (metaRecord.credit_range) notesLines.push(`Credit: ${metaRecord.credit_range}`);
+                    if (metaRecord.purchase_timeline) notesLines.push(`Timeline: ${metaRecord.purchase_timeline}`);
+                    if (metaRecord.down_payment_saved) notesLines.push(`Down Payment: ${metaRecord.down_payment_saved}`);
+                    if (metaRecord.monthly_income) notesLines.push(`Income: ${metaRecord.monthly_income}`);
+                    if (metaRecord.meta_ad_notes) notesLines.push(`Notes: ${metaRecord.meta_ad_notes}`);
+                  } else {
+                    // Add regular lead fields
+                    const leadRecord = record as any;
+                    if (leadRecord.loan_purpose) notesLines.push(`Loan Purpose: ${leadRecord.loan_purpose}`);
+                    if (leadRecord.price) notesLines.push(`Price: $${leadRecord.price.toLocaleString()}`);
+                    if (leadRecord.down_payment) notesLines.push(`Down Payment: $${leadRecord.down_payment.toLocaleString()}`);
+                    if (leadRecord.credit_score) notesLines.push(`Credit Score: ${leadRecord.credit_score}`);
+                    if (leadRecord.message) notesLines.push(`Message: ${leadRecord.message}`);
+                  }
+                  
+                  // Add created date
+                  const createdDate = new Date(record.created_at).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                  });
+                  notesLines.push(`Lead Date: ${createdDate}`);
+                  
+                  const notes = notesLines.join('\n');
+                  
+                  await saveContact({
+                    firstName: record.first_name || 'Lead',
+                    lastName: record.last_name || '',
+                    phone: phone,
+                    email: email,
+                    company: company,
+                    notes: notes,
+                  });
+                } catch (error) {
+                  console.error('Failed to save contact:', error);
+                }
+              }}
+              disabled={!phone && !email}
+            >
+              <Text style={styles.contactButtonIcon}>👤</Text>
+              <Text style={styles.contactButtonText}>Save</Text>
             </TouchableOpacity>
           </View>
 

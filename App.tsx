@@ -189,9 +189,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   // Collapsing header animation for dashboard view
   const dashboardScrollY = useRef(new Animated.Value(0)).current;
-  const DASHBOARD_HEADER_EXPANDED = 480;
-  const DASHBOARD_HEADER_COLLAPSED = 260;
-  const HEADER_SCROLL_DISTANCE = DASHBOARD_HEADER_EXPANDED - DASHBOARD_HEADER_COLLAPSED; // 220
+  const DASHBOARD_HEADER_EXPANDED = userRole === 'super_admin' ? 420 : 430;
+  const DASHBOARD_HEADER_COLLAPSED = 200;
+  const HEADER_SCROLL_DISTANCE = DASHBOARD_HEADER_EXPANDED - DASHBOARD_HEADER_COLLAPSED;
 
   const dashboardHeaderTranslateY = dashboardScrollY.interpolate({
     inputRange: [0, HEADER_SCROLL_DISTANCE],
@@ -1574,7 +1574,26 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           {todayCallbacks.length > 0 && (
             <View style={[styles.recentLeadsSection, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
               <View style={styles.sectionHeader}>
-                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>📅 Today's Callbacks</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <View style={{
+                    width: 32,
+                    height: 32,
+                    backgroundColor: '#EF4444',
+                    borderRadius: 6,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.2,
+                    shadowRadius: 2,
+                    elevation: 2,
+                  }}>
+                    <Text style={{ fontSize: 18, fontWeight: '700', color: '#FFFFFF' }}>
+                      {new Date().getDate()}
+                    </Text>
+                  </View>
+                  <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Today's Call Schedule</Text>
+                </View>
               </View>
               {todayCallbacks.map((cb) => {
                 const when = cb.scheduled_for ? new Date(cb.scheduled_for) : null;
