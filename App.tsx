@@ -107,6 +107,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [showSourcePicker, setShowSourcePicker] = useState(false);
   const [leadEligible, setLeadEligible] = useState<boolean>(true);
   const [todayCallbacks, setTodayCallbacks] = useState<any[]>([]);
+  const [showCallbackHistory, setShowCallbackHistory] = useState(false);
+  const [callbackHistory, setCallbackHistory] = useState<any[]>([]);
   
   // Add Lead Modal state
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
@@ -249,6 +251,47 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     });
   };
 
+  const completeCallback = async (callbackId: string) => {
+    try {
+      const { error } = await supabase
+        .from('lead_callbacks')
+        .update({ completed_at: new Date().toISOString() })
+        .eq('id', callbackId);
+
+      if (error) throw error;
+
+      // Remove from local state so it disappears from today's list
+      setTodayCallbacks(prev => prev.filter(c => c.id !== callbackId));
+    } catch (error: any) {
+      console.error('Error completing callback:', error);
+      Alert.alert('Error', 'Failed to mark callback as done');
+    }
+  };
+
+  const loadCallbackHistory = async () => {
+    if (!session?.user?.id) return;
+
+    try {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const { data, error } = await supabase
+        .from('lead_callbacks')
+        .select('id, scheduled_for, title, notes, lead_id, meta_ad_id, completed_at')
+        .eq('created_by', session.user.id)
+        .gte('completed_at', thirtyDaysAgo.toISOString())
+        .order('completed_at', { ascending: false });
+
+      if (error) {
+        console.error('Error loading callback history:', error);
+      } else {
+        setCallbackHistory((data || []).filter(cb => cb.completed_at));
+      }
+    } catch (error) {
+      console.error('Unexpected error loading callback history:', error);
+    }
+  };
+
   const animatedListStyle = {
     flex: 1,
     opacity: listOpacity,
@@ -372,7 +415,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           `leads rows: ${safeLeads.length} · meta_ads rows: ${safeMeta.length}`
         );
 
-        // Fetch today's callbacks for the current user
+        // Fetch today's callbacks for the current user (only incomplete)
         if (session?.user?.id) {
           const todayStart = new Date();
           todayStart.setHours(0, 0, 0, 0);
@@ -381,10 +424,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
           const { data: callbacksData, error: callbacksError } = await supabase
             .from('lead_callbacks')
-            .select('id, scheduled_for, title, notes, lead_id, meta_ad_id')
+            .select('id, scheduled_for, title, notes, lead_id, meta_ad_id, completed_at')
             .gte('scheduled_for', todayStart.toISOString())
             .lte('scheduled_for', todayEnd.toISOString())
             .eq('created_by', session.user.id)
+            .is('completed_at', null)
             .order('scheduled_for', { ascending: true });
 
           if (callbacksError) {
@@ -844,10 +888,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
       const { data: callbacksData, error: callbacksError } = await supabase
         .from('lead_callbacks')
-        .select('id, scheduled_for, title, notes, lead_id, meta_ad_id')
+        .select('id, scheduled_for, title, notes, lead_id, meta_ad_id, completed_at')
         .gte('scheduled_for', todayStart.toISOString())
         .lte('scheduled_for', todayEnd.toISOString())
         .eq('created_by', session.user.id)
+        .is('completed_at', null)
         .order('scheduled_for', { ascending: true });
 
       if (callbacksError) {
@@ -1570,8 +1615,75 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           )}
           scrollEventThrottle={1} // Maximize smoothness
         >
+          {/* Callback History View */}
+          {showCallbackHistory && (
+            <View style={[styles.recentLeadsSection, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+              <View style={styles.sectionHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Callback History</Text>
+                </View>
+                <TouchableOpacity onPress={() => setShowCallbackHistory(false)}>
+                  <Text style={{ color: '#6366F1', fontWeight: '600' }}>Back to Today</Text>
+                </TouchableOpacity>
+              </View>
+              {callbackHistory.length === 0 ? (
+                <Text style={styles.dashboardEmptyText}>No completed callbacks yet.</Text>
+              ) : (
+                callbackHistory.map((cb) => {
+                  const when = cb.scheduled_for ? new Date(cb.scheduled_for) : null;
+                  const completed = cb.completed_at ? new Date(cb.completed_at) : null;
+                  const timeStr = when
+                    ? when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                    : '';
+                  const completedStr = completed
+                    ? completed.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                    : '';
+
+                  let name = cb.title || 'Lead';
+                  if (cb.lead_id) {
+                    const lead = leads.find(l => l.id === cb.lead_id);
+                    if (lead) {
+                      name = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || name;
+                    }
+                  } else if (cb.meta_ad_id) {
+                    const meta = metaLeads.find(m => m.id === cb.meta_ad_id);
+                    if (meta) {
+                      name = [meta.first_name, meta.last_name].filter(Boolean).join(' ') || name;
+                    }
+                  }
+
+                  return (
+                    <TouchableOpacity
+                      key={cb.id}
+                      style={[styles.newLeadCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
+                      onPress={() => {
+                        if (cb.lead_id || cb.meta_ad_id) {
+                          setShowDashboard(false);
+                          setSelectedLead({
+                            source: cb.meta_ad_id ? 'meta' : 'lead',
+                            id: cb.meta_ad_id || cb.lead_id,
+                          });
+                        }
+                      }}
+                    >
+                      <View style={styles.newLeadHeader}>
+                        <View style={styles.newLeadLeft}>
+                          <Text style={[styles.newLeadName, { color: colors.textPrimary }]}>{name}</Text>
+                          <Text style={[styles.newLeadSource, { color: colors.textSecondary }]} numberOfLines={1}>
+                            Scheduled: {timeStr || 'N/A'}
+                          </Text>
+                          <Text style={[styles.newLeadTime, { color: colors.textSecondary }]}>Done: {completedStr || 'N/A'}</Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </View>
+          )}
+
           {/* Today's Callbacks Section */}
-          {todayCallbacks.length > 0 && (
+          {!showCallbackHistory && todayCallbacks.length > 0 && (
             <View style={[styles.recentLeadsSection, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
               <View style={styles.sectionHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -1594,6 +1706,14 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   </View>
                   <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Today's Call Schedule</Text>
                 </View>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowCallbackHistory(true);
+                    loadCallbackHistory();
+                  }}
+                >
+                  <Text style={{ color: '#6366F1', fontWeight: '600' }}>View 30 day history</Text>
+                </TouchableOpacity>
               </View>
               {todayCallbacks.map((cb) => {
                 const when = cb.scheduled_for ? new Date(cb.scheduled_for) : null;
@@ -1615,9 +1735,17 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   }
                 }
 
-                // Swipe action for callbacks
+                // Swipe actions for callbacks: Done (non-destructive) + Delete
                 const renderRightActions = () => (
                   <View style={styles.swipeActionsContainer}>
+                    <TouchableOpacity
+                      style={[styles.swipeActionButton, styles.swipeActionContacted]}
+                      onPress={() => completeCallback(cb.id)}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="checkmark-done-outline" size={18} color="#FFFFFF" />
+                      <Text style={styles.swipeActionText}>Done</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.swipeActionButton, styles.swipeActionDelete]}
                       onPress={() => deleteCallback(cb.id)}
