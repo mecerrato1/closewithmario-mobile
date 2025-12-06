@@ -11,70 +11,93 @@ export interface ContactInfo {
 }
 
 /**
- * Save contact to phone's contacts with native UI
- * iOS & Android: Opens native contact form for user to review and save
+ * Save contact to phone's contacts with native UI.
+ * iOS & Android: Opens native contact form for user to review and save.
  */
-export async function saveContact(contact: ContactInfo): Promise<void> {
+export async function saveContact(info: ContactInfo): Promise<void> {
+  // Guard against platforms that don't support native contacts
+  if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
+    console.log('[Contacts] saveContact called on unsupported platform:', Platform.OS);
+    Alert.alert(
+      'Not supported',
+      'Saving contacts is only available on iOS and Android devices.'
+    );
+    return;
+  }
+
   try {
-    // Request permission to access contacts
+    console.log('[Contacts] Requesting contacts permission…');
     const { status } = await Contacts.requestPermissionsAsync();
-    
-    if (status !== 'granted') {
+
+    if (status !== Contacts.PermissionStatus.GRANTED) {
+      console.warn('[Contacts] Permission not granted:', status);
       Alert.alert(
-        'Permission Required',
-        'Please grant contacts permission to save this lead as a contact.',
-        [{ text: 'OK' }]
+        'Permission required',
+        'Please allow access to your contacts to save this lead.'
       );
       return;
     }
 
-    // Prepare contact data
-    const newContact: Partial<Contacts.Contact> = {
+    // Normalize all incoming fields so we never pass undefined / null
+    const firstName = (info.firstName || '').trim() || 'Lead';
+    const lastName = (info.lastName || '').trim();
+    const phone = (info.phone || '').trim();
+    const email = (info.email || '').trim();
+    const company = (info.company || '').trim();
+    const notes = (info.notes || '').trim();
+
+    if (!phone && !email) {
+      console.warn('[Contacts] No phone or email provided, skipping save');
+      Alert.alert(
+        'Missing contact info',
+        'This lead has no phone number or email to save.'
+      );
+      return;
+    }
+
+    // Build the Contacts.Contact object in a very defensive way
+    // Use legacy structure with name field to help iOS prioritize name over company
+    const contact: Partial<Contacts.Contact> = {
       contactType: Contacts.ContactTypes.Person,
-      name: `${contact.firstName} ${contact.lastName}`,
-      firstName: contact.firstName,
-      lastName: contact.lastName,
-      company: contact.company || '',
+      name: `${firstName} ${lastName}`.trim(),
+      firstName: firstName,
+      lastName: lastName,
     };
 
-    // Add phone number if available
-    if (contact.phone) {
-      const cleanPhone = contact.phone.replace(/\D/g, '');
-      newContact.phoneNumbers = [
-        {
-          label: 'mobile',
-          number: cleanPhone,
-        },
+    if (company) {
+      (contact as any).company = company;
+    }
+
+    if (phone) {
+      (contact as any)[Contacts.Fields.PhoneNumbers] = [
+        { label: 'mobile', number: phone } as Contacts.PhoneNumber,
       ];
     }
 
-    // Add email if available
-    if (contact.email) {
-      newContact.emails = [
-        {
-          label: 'home',
-          email: contact.email,
-        },
+    if (email) {
+      (contact as any)[Contacts.Fields.Emails] = [
+        { label: 'home', email } as any,
       ];
     }
 
-    // Add notes if available
-    if (contact.notes) {
-      newContact.note = contact.notes;
+    if (notes) {
+      (contact as any)[Contacts.Fields.Note] = notes;
     }
+
+    console.log('[Contacts] Presenting contact form with contact:', contact);
 
     // Present native contact form for user to review and save
-    await Contacts.presentFormAsync(null, newContact as Contacts.Contact);
-    
-    // Note: presentFormAsync doesn't return a result, so we can't show a success message
-    // The user will see the native contact form and can save or cancel themselves
+    const result = await Contacts.presentFormAsync(null, contact as Contacts.Contact);
+
+    // presentFormAsync returns the contactId if the user saved it, or undefined if canceled
+    console.log('[Contacts] presentFormAsync result:', result);
   } catch (error: any) {
-    console.error('Error presenting contact form:', error);
+    console.error('[Contacts] Error presenting contact form:', error);
     Alert.alert(
       'Error',
-      'Failed to open contact form. Please try again.',
+      'Failed to open the contact form. Please try again.',
       [{ text: 'OK' }]
     );
-    throw error;
+    // Do not rethrow – we want a soft failure, not a fatal crash
   }
 }

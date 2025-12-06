@@ -907,7 +907,7 @@ export function LeadDetailView({
       onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
 
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setActivities([inserted, ...activities]);
+      setActivities((prev) => [inserted, ...prev]);
       setTaskNote('');
       setPendingVoiceNoteUri(null);
       console.log('✅ Voice note saved successfully');
@@ -1121,92 +1121,6 @@ export function LeadDetailView({
       alert('Failed to update LO assignment. Please try again.');
     } finally {
       setUpdatingLO(false);
-    }
-  };
-
-  const handleSaveContact = async () => {
-    if (!phone && !email) {
-      console.log('[Contacts] No phone or email, skipping save');
-      return;
-    }
-
-    try {
-      console.log('[Contacts] Save contact pressed', {
-        leadId: record.id,
-        isMeta,
-        hasPhone: !!phone,
-        hasEmail: !!email,
-      });
-
-      const company = isMeta ? 'Mortgage Meta' : 'Mortgage';
-      const notesLines: string[] = [];
-
-      if (!isMeta && (record as any).source) {
-        notesLines.push(`Source: ${(record as any).source}`);
-      }
-
-      if (isMeta) {
-        const metaRecord = record as any;
-        if (metaRecord.ad_name) notesLines.push(`Ad: ${metaRecord.ad_name}`);
-        if (metaRecord.subject_address) notesLines.push(`Address: ${metaRecord.subject_address}`);
-        if (metaRecord.price_range) notesLines.push(`Price Range: ${metaRecord.price_range}`);
-        if (metaRecord.credit_range) notesLines.push(`Credit: ${metaRecord.credit_range}`);
-        if (metaRecord.purchase_timeline) notesLines.push(`Timeline: ${metaRecord.purchase_timeline}`);
-        if (metaRecord.down_payment_saved) notesLines.push(`Down Payment: ${metaRecord.down_payment_saved}`);
-        if (metaRecord.monthly_income) notesLines.push(`Income: ${metaRecord.monthly_income}`);
-        if (metaRecord.meta_ad_notes) notesLines.push(`Notes: ${metaRecord.meta_ad_notes}`);
-      } else {
-        const leadRecord = record as any;
-
-        if (leadRecord.loan_purpose) {
-          notesLines.push(`Loan Purpose: ${leadRecord.loan_purpose}`);
-        }
-
-        const priceNum = leadRecord.price != null ? Number(leadRecord.price) : null;
-        if (!Number.isNaN(priceNum) && priceNum != null) {
-          notesLines.push(`Price: $${priceNum.toLocaleString()}`);
-        }
-
-        const dpNum = leadRecord.down_payment != null ? Number(leadRecord.down_payment) : null;
-        if (!Number.isNaN(dpNum) && dpNum != null) {
-          notesLines.push(`Down Payment: $${dpNum.toLocaleString()}`);
-        }
-
-        if (leadRecord.credit_score != null) {
-          notesLines.push(`Credit Score: ${leadRecord.credit_score}`);
-        }
-
-        if (leadRecord.message) {
-          notesLines.push(`Message: ${leadRecord.message}`);
-        }
-      }
-
-      const createdDate = new Date(record.created_at).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
-      notesLines.push(`Lead Date: ${createdDate}`);
-
-      const notes = notesLines.join('\n');
-
-      const payload = {
-        firstName: record.first_name || 'Lead',
-        lastName: record.last_name || '',
-        phone: phone || '',
-        email: email || '',
-        company,
-        notes,
-      };
-
-      console.log('[Contacts] Calling saveContact with payload:', payload);
-
-      await saveContact(payload);
-
-      console.log('[Contacts] saveContact completed successfully');
-    } catch (error) {
-      console.error('[Contacts] Failed to save contact:', error);
-      Alert.alert('Error', 'Could not save contact. Please try again.');
     }
   };
 
@@ -1424,7 +1338,62 @@ export function LeadDetailView({
                 styles.contactButton,
                 (!phone && !email) && styles.contactButtonDisabled,
               ]}
-              onPress={handleSaveContact}
+              onPress={async () => {
+                try {
+                  // Determine company name: "Mortgage Meta" for meta leads, "Mortgage" for others
+                  const company = isMeta ? 'Mortgage Meta' : 'Mortgage';
+                  
+                  // Build notes from lead details
+                  const notesLines: string[] = [];
+                  
+                  // Add source
+                  if (!isMeta && (record as any).source) {
+                    notesLines.push(`Source: ${(record as any).source}`);
+                  }
+                  
+                  // Add meta-specific fields
+                  if (isMeta) {
+                    const metaRecord = record as any;
+                    if (metaRecord.ad_name) notesLines.push(`Ad: ${metaRecord.ad_name}`);
+                    if (metaRecord.subject_address) notesLines.push(`Address: ${metaRecord.subject_address}`);
+                    if (metaRecord.price_range) notesLines.push(`Price Range: ${metaRecord.price_range}`);
+                    if (metaRecord.credit_range) notesLines.push(`Credit: ${metaRecord.credit_range}`);
+                    if (metaRecord.purchase_timeline) notesLines.push(`Timeline: ${metaRecord.purchase_timeline}`);
+                    if (metaRecord.down_payment_saved) notesLines.push(`Down Payment: ${metaRecord.down_payment_saved}`);
+                    if (metaRecord.monthly_income) notesLines.push(`Income: ${metaRecord.monthly_income}`);
+                    if (metaRecord.meta_ad_notes) notesLines.push(`Notes: ${metaRecord.meta_ad_notes}`);
+                  } else {
+                    // Add regular lead fields
+                    const leadRecord = record as any;
+                    if (leadRecord.loan_purpose) notesLines.push(`Loan Purpose: ${leadRecord.loan_purpose}`);
+                    if (leadRecord.price) notesLines.push(`Price: $${leadRecord.price.toLocaleString()}`);
+                    if (leadRecord.down_payment) notesLines.push(`Down Payment: $${leadRecord.down_payment.toLocaleString()}`);
+                    if (leadRecord.credit_score) notesLines.push(`Credit Score: ${leadRecord.credit_score}`);
+                    if (leadRecord.message) notesLines.push(`Message: ${leadRecord.message}`);
+                  }
+                  
+                  // Add created date
+                  const createdDate = new Date(record.created_at).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                  });
+                  notesLines.push(`Lead Date: ${createdDate}`);
+                  
+                  const notes = notesLines.join('\n');
+                  
+                  await saveContact({
+                    firstName: record.first_name || 'Lead',
+                    lastName: record.last_name || '',
+                    phone: phone,
+                    email: email,
+                    company: company,
+                    notes: notes,
+                  });
+                } catch (error) {
+                  console.error('Failed to save contact:', error);
+                }
+              }}
               disabled={!phone && !email}
             >
               <Text style={styles.contactButtonIcon}>👤</Text>

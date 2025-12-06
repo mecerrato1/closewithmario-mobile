@@ -268,19 +268,22 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     }
   };
 
-  const loadCallbackHistory = async () => {
+  const loadCallbackHistory = async (days: 30 | 45 | 'all' = 30) => {
     if (!session?.user?.id) return;
 
     try {
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-      const { data, error } = await supabase
+      let query = supabase
         .from('lead_callbacks')
         .select('id, scheduled_for, title, notes, lead_id, meta_ad_id, completed_at')
-        .eq('created_by', session.user.id)
-        .gte('completed_at', thirtyDaysAgo.toISOString())
-        .order('completed_at', { ascending: false });
+        .eq('created_by', session.user.id);
+
+      if (days !== 'all') {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - days);
+        query = query.gte('completed_at', cutoff.toISOString());
+      }
+
+      const { data, error } = await query.order('completed_at', { ascending: false });
 
       if (error) {
         console.error('Error loading callback history:', error);
@@ -1682,45 +1685,73 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             </View>
           )}
 
-          {/* Today's Callbacks Section */}
-          {!showCallbackHistory && todayCallbacks.length > 0 && (
+          {/* Today's Callbacks Section (always show header, even if empty) */}
+          {!showCallbackHistory && (
             <View style={[styles.recentLeadsSection, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
               <View style={styles.sectionHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <View style={{
                     width: 32,
                     height: 32,
-                    backgroundColor: '#EF4444',
+                    backgroundColor: '#E5E7EB', // neutral gray instead of red
                     borderRadius: 6,
                     justifyContent: 'center',
                     alignItems: 'center',
                     shadowColor: '#000',
                     shadowOffset: { width: 0, height: 1 },
-                    shadowOpacity: 0.2,
+                    shadowOpacity: 0.1,
                     shadowRadius: 2,
-                    elevation: 2,
+                    elevation: 1,
                   }}>
-                    <Text style={{ fontSize: 18, fontWeight: '700', color: '#FFFFFF' }}>
-                      {new Date().getDate()}
-                    </Text>
+                    <Ionicons name="calendar-outline" size={18} color="#4B5563" />
                   </View>
                   <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Today's Call Schedule</Text>
                 </View>
                 <TouchableOpacity
                   onPress={() => {
-                    setShowCallbackHistory(true);
-                    loadCallbackHistory();
+                    Alert.alert(
+                      'Callback History',
+                      'How far back would you like to see?',
+                      [
+                        {
+                          text: '30 days',
+                          onPress: () => {
+                            setShowCallbackHistory(true);
+                            loadCallbackHistory(30);
+                          },
+                        },
+                        {
+                          text: '45 days',
+                          onPress: () => {
+                            setShowCallbackHistory(true);
+                            loadCallbackHistory(45);
+                          },
+                        },
+                        {
+                          text: 'All time',
+                          onPress: () => {
+                            setShowCallbackHistory(true);
+                            loadCallbackHistory('all');
+                          },
+                        },
+                        { text: 'Cancel', style: 'cancel' },
+                      ]
+                    );
                   }}
                 >
-                  <Text style={{ color: '#6366F1', fontWeight: '600' }}>View 30 day history</Text>
+                  <Text style={{ color: '#6366F1', fontWeight: '600' }}>View history</Text>
                 </TouchableOpacity>
               </View>
-              {todayCallbacks.map((cb) => {
+              {todayCallbacks.length === 0 && (
+                <Text style={styles.dashboardEmptyText}>No callbacks scheduled for today.</Text>
+              )}
+
+              {todayCallbacks.length > 0 && todayCallbacks.map((cb) => {
                 const when = cb.scheduled_for ? new Date(cb.scheduled_for) : null;
                 const timeStr = when
                   ? when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
                   : '';
-                
+
                 // Resolve lead name directly here (no helper)
                 let name = cb.title || 'Lead';
                 if (cb.lead_id) {

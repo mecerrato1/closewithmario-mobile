@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -17,6 +17,7 @@ import { supabase } from '../lib/supabase';
 import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // This must match:
 // - app.json: "scheme": "com.closewithmario.mobile"
@@ -30,6 +31,8 @@ export type AuthScreenProps = {
   onAuth: (session: Session) => void;
 };
 
+const SAVED_EMAIL_KEY = '@auth_saved_email';
+
 export default function AuthScreen({ onAuth }: AuthScreenProps) {
   const { colors, isDark } = useThemeColors();
   const [mode, setMode] = useState<'signIn' | 'signUp'>('signIn');
@@ -37,6 +40,30 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
   const [password, setPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+
+  // Load saved email on mount
+  useEffect(() => {
+    loadSavedEmail();
+  }, []);
+
+  const loadSavedEmail = async () => {
+    try {
+      const savedEmail = await AsyncStorage.getItem(SAVED_EMAIL_KEY);
+      if (savedEmail) {
+        setEmail(savedEmail);
+      }
+    } catch (error) {
+      console.log('[Auth] Failed to load saved email:', error);
+    }
+  };
+
+  const saveEmail = async (emailToSave: string) => {
+    try {
+      await AsyncStorage.setItem(SAVED_EMAIL_KEY, emailToSave);
+    } catch (error) {
+      console.log('[Auth] Failed to save email:', error);
+    }
+  };
 
   const handleEmailPasswordAuth = async () => {
     setAuthError(null);
@@ -52,6 +79,8 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
         if (error) {
           setAuthError(error.message);
         } else if (data.session) {
+          // Save email for next time
+          await saveEmail(email);
           onAuth(data.session);
         }
       } else {
@@ -63,8 +92,12 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
         if (error) {
           setAuthError(error.message);
         } else if (data.session) {
+          // Save email for next time
+          await saveEmail(email);
           onAuth(data.session);
         } else {
+          // Save email even on sign up
+          await saveEmail(email);
           setAuthError(
             'Sign up successful. If email confirmation is required, confirm then sign in.'
           );
@@ -201,6 +234,8 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
             placeholderTextColor={colors.textSecondary}
             autoCapitalize="none"
             keyboardType="email-address"
+            textContentType="username"
+            autoComplete="email"
             value={email}
             onChangeText={setEmail}
           />
@@ -211,6 +246,8 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
             placeholderTextColor={colors.textSecondary}
             secureTextEntry
             autoCapitalize="none"
+            textContentType="password"
+            autoComplete="password"
             value={password}
             onChangeText={setPassword}
           />
