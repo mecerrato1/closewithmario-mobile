@@ -40,6 +40,13 @@ import LockScreen from './src/screens/LockScreen';
 import QuoteOfTheDay from './src/components/dashboard/QuoteOfTheDay';
 import { styles } from './src/styles/appStyles';
 import { useThemeColors } from './src/styles/theme';
+import { 
+  requestMediaLibraryPermission, 
+  pickProfileImage, 
+  uploadProfilePicture, 
+  removeCustomProfilePicture,
+  getAvatarUrl 
+} from './src/utils/profilePicture';
 
 import * as WebBrowser from 'expo-web-browser';
 
@@ -103,6 +110,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [showTeamManagement, setShowTeamManagement] = useState(false);
   const [showMortgageCalculator, setShowMortgageCalculator] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [uploadingPicture, setUploadingPicture] = useState(false);
   const [teamMemberId, setTeamMemberId] = useState<string | null>(null);
   const [selectedLOFilter, setSelectedLOFilter] = useState<string | null>(null); // null = all LOs
   const [showLOPicker, setShowLOPicker] = useState(false);
@@ -128,6 +136,87 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   });
   const [showLoanPurposePicker, setShowLoanPurposePicker] = useState(false);
   const LOAN_PURPOSES = ['Home Buying', 'Home Selling', 'Mortgage Refinance', 'Investment Property', 'General Real Estate'];
+
+  // Profile picture upload handlers
+  const handleUploadProfilePicture = async () => {
+    try {
+      setShowProfileMenu(false);
+      
+      // Request permission
+      const hasPermission = await requestMediaLibraryPermission();
+      if (!hasPermission) {
+        Alert.alert(
+          'Permission Required',
+          'Please allow access to your photo library to upload a profile picture.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      // Pick image
+      const result = await pickProfileImage();
+      if (!result || result.canceled) {
+        return;
+      }
+
+      setUploadingPicture(true);
+
+      // Upload to Supabase
+      const uploadResult = await uploadProfilePicture(
+        session?.user?.id || '',
+        result.assets[0].uri
+      );
+
+      setUploadingPicture(false);
+
+      if (uploadResult.success) {
+        Alert.alert('Success', 'Profile picture updated!', [{ text: 'OK' }]);
+        // Force a re-render by toggling a state
+        setUploadingPicture(false);
+        setUploadingPicture(true);
+        setUploadingPicture(false);
+      } else {
+        Alert.alert('Error', uploadResult.error || 'Failed to upload picture', [{ text: 'OK' }]);
+      }
+    } catch (error) {
+      setUploadingPicture(false);
+      Alert.alert('Error', 'An unexpected error occurred', [{ text: 'OK' }]);
+    }
+  };
+
+  const handleRemoveProfilePicture = async () => {
+    try {
+      setShowProfileMenu(false);
+      
+      Alert.alert(
+        'Remove Profile Picture',
+        'Are you sure you want to remove your custom profile picture?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Remove',
+            style: 'destructive',
+            onPress: async () => {
+              setUploadingPicture(true);
+              
+              const result = await removeCustomProfilePicture(session?.user?.id || '');
+              
+              setUploadingPicture(false);
+              
+              if (result.success) {
+                Alert.alert('Success', 'Profile picture removed', [{ text: 'OK' }]);
+              } else {
+                Alert.alert('Error', result.error || 'Failed to remove picture', [{ text: 'OK' }]);
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      setUploadingPicture(false);
+      Alert.alert('Error', 'An unexpected error occurred', [{ text: 'OK' }]);
+    }
+  };
 
   // Micro animations for the lead list
   const listOpacity = useRef(new Animated.Value(1)).current;
@@ -1528,6 +1617,30 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               
               <TouchableOpacity
                 style={styles.profileMenuItem}
+                onPress={handleUploadProfilePicture}
+                disabled={uploadingPicture}
+              >
+                <Text style={styles.profileMenuIcon}>📷</Text>
+                <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>
+                  {uploadingPicture ? 'Uploading...' : 'Change Profile Picture'}
+                </Text>
+              </TouchableOpacity>
+              
+              {session?.user?.user_metadata?.custom_avatar_url && (
+                <TouchableOpacity
+                  style={styles.profileMenuItem}
+                  onPress={handleRemoveProfilePicture}
+                  disabled={uploadingPicture}
+                >
+                  <Text style={styles.profileMenuIcon}>🗑️</Text>
+                  <Text style={[styles.profileMenuText, { color: colors.textSecondary }]}>Remove Custom Picture</Text>
+                </TouchableOpacity>
+              )}
+              
+              <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
+              
+              <TouchableOpacity
+                style={styles.profileMenuItem}
                 onPress={() => {
                   setShowProfileMenu(false);
                   onSignOut();
@@ -1570,9 +1683,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 onPress={() => setShowProfileMenu(true)}
                 style={styles.profileButton}
               >
-                {session?.user?.user_metadata?.avatar_url ? (
+                {getAvatarUrl(session?.user?.user_metadata) ? (
                   <Image 
-                    source={{ uri: session.user.user_metadata.avatar_url }}
+                    source={{ uri: getAvatarUrl(session?.user?.user_metadata) || '' }}
                     style={styles.profileButtonAvatar}
                   />
                 ) : (
