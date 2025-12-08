@@ -2530,4 +2530,65 @@ export const styles = StyleSheet.create({
     color: '#16A34A',
     marginLeft: 4,
   },
+  // Profile button and menu styles
+  profileButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  profileButtonAvatar: {
+    width: '100%',
+    height: '100%',
+  },
+  profileButtonPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileButtonText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  profileMenuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+    paddingTop: Platform.OS === 'ios' ? 100 : 80,
+    paddingRight: 16,
+  },
+  profileMenuContent: {
+    borderRadius: 16,
+    paddingVertical: 8,
+    minWidth: 240,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  profileMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+  },
+  profileMenuIcon: {
+    fontSize: 20,
+    marginRight: 12,
+  },
+  profileMenuText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  profileMenuDivider: {
+    height: 1,
+    marginVertical: 8,
+  },
 });

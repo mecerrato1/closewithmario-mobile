@@ -10,6 +10,7 @@ import {
   Modal,
   Platform,
   KeyboardAvoidingView,
+  PanResponder,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -40,7 +41,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
   // Input states
   const [price, setPrice] = useState('450000');
   const [loanType, setLoanType] = useState<LoanType>('Conventional');
-  const [downPct, setDownPct] = useState(3);
+  const [downPct, setDownPct] = useState('3');
   const [termYears, setTermYears] = useState(30);
   const [creditBand, setCreditBand] = useState<CreditBand>('740-759');
   const [county, setCounty] = useState('Broward');
@@ -105,7 +106,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
         const data = JSON.parse(saved);
         if (data.price) setPrice(formatNumberWithCommas(data.price));
         if (data.loanType) setLoanType(data.loanType);
-        if (data.downPct !== undefined) setDownPct(data.downPct);
+        if (data.downPct !== undefined) setDownPct(data.downPct.toString());
         if (data.termYears) setTermYears(data.termYears);
         if (data.creditBand) setCreditBand(data.creditBand);
         if (data.county) setCounty(data.county);
@@ -147,7 +148,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
     const inputs: MortgageInputs = {
       price: parseFloat(price.replace(/[^0-9.]/g, '')) || 0,
       loanType,
-      downPct,
+      downPct: parseFloat(downPct) || MIN_DOWN_BY_LOAN[loanType],
       termYears,
       creditBand,
       county,
@@ -234,18 +235,24 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       marginBottom: 24,
     },
     sectionTitle: {
-      fontSize: 18,
-      fontWeight: '700',
+      fontSize: 22,
+      fontWeight: '800',
       color: colors.textPrimary,
-      marginBottom: 12,
+      marginBottom: 16,
+      letterSpacing: -0.5,
     },
     card: {
       backgroundColor: colors.cardBackground,
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: 16,
+      padding: 18,
+      marginBottom: 14,
       borderWidth: 1,
       borderColor: colors.border,
-      marginBottom: 12,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 8,
+      elevation: 2,
     },
     inputLabel: {
       fontSize: 14,
@@ -391,39 +398,54 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
     },
     resultCard: {
       backgroundColor: '#7C3AED',
-      borderRadius: 16,
-      padding: 20,
-      marginBottom: 16,
+      borderRadius: 20,
+      padding: 24,
+      marginBottom: 20,
+      shadowColor: '#7C3AED',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.3,
+      shadowRadius: 16,
+      elevation: 12,
     },
     resultLabel: {
       fontSize: 14,
-      color: '#E9D5FF',
+      color: '#FFFFFF',
+      opacity: 0.85,
       marginBottom: 4,
+      fontWeight: '500',
+      letterSpacing: 0.5,
+      textTransform: 'uppercase',
     },
     resultValue: {
-      fontSize: 32,
-      fontWeight: '700',
+      fontSize: 52,
+      fontWeight: '800',
       color: '#FFFFFF',
-      marginBottom: 16,
+      marginBottom: 24,
+      letterSpacing: -1,
     },
     resultBreakdown: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      paddingTop: 16,
-      borderTopWidth: 1,
-      borderTopColor: 'rgba(255, 255, 255, 0.2)',
+      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+      borderRadius: 12,
+      padding: 16,
+      gap: 12,
     },
     resultBreakdownItem: {
       flex: 1,
+      alignItems: 'center',
     },
     resultBreakdownLabel: {
-      fontSize: 12,
-      color: '#E9D5FF',
-      marginBottom: 4,
+      fontSize: 11,
+      color: '#FFFFFF',
+      opacity: 0.75,
+      marginBottom: 6,
+      fontWeight: '600',
+      letterSpacing: 0.5,
     },
     resultBreakdownValue: {
-      fontSize: 16,
-      fontWeight: '600',
+      fontSize: 18,
+      fontWeight: '700',
       color: '#FFFFFF',
     },
     detailRow: {
@@ -517,7 +539,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
         {/* Results Card */}
         <View style={styles.resultCard}>
           <Text style={styles.resultLabel}>Monthly Payment</Text>
-          <Text style={styles.resultValue}>{formatCurrency(results.monthlyTotal)}</Text>
+          <Text style={styles.resultValue}>{formatCurrencyDetailed(results.monthlyTotal)}</Text>
           
           <View style={styles.resultBreakdown}>
             <View style={styles.resultBreakdownItem}>
@@ -534,7 +556,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
             </View>
             {results.monthlyMI > 0 && (
               <View style={styles.resultBreakdownItem}>
-                <Text style={styles.resultBreakdownLabel}>MI</Text>
+                <Text style={styles.resultBreakdownLabel}>MI ({results.miRatePct.toFixed(2)}%)</Text>
                 <Text style={styles.resultBreakdownValue}>{formatCurrency(results.monthlyMI)}</Text>
               </View>
             )}
@@ -569,7 +591,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               Total Cash to Close
             </Text>
             <Text style={[styles.detailValue, { fontSize: 18, color: '#7C3AED' }]}>
-              {formatCurrency(results.cashToClose)}
+              {formatCurrencyDetailed(results.cashToClose)}
             </Text>
           </View>
 
@@ -673,7 +695,9 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
           {results.financedFee > 0 && (
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>
-                {loanType === 'VA' ? 'VA Funding Fee' : 'FHA UFMIP'}
+                {loanType === 'VA' 
+                  ? `VA Funding Fee (${(results.feeRate * 100).toFixed(2)}%)`
+                  : 'FHA UFMIP (1.75%)'}
               </Text>
               <Text style={styles.detailValue}>{formatCurrency(results.financedFee)}</Text>
             </View>
@@ -685,6 +709,17 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
           <Text style={styles.sectionTitle}>Property Details</Text>
           
           <View style={styles.card}>
+            <Text style={styles.inputLabel}>County</Text>
+            <TouchableOpacity
+              style={styles.pickerButton}
+              onPress={() => setShowCountyPicker(true)}
+            >
+              <Text style={styles.pickerButtonText}>{county}</Text>
+              <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.card}>
             <Text style={styles.inputLabel}>Purchase Price</Text>
             <TextInput
               style={styles.input}
@@ -694,17 +729,6 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               placeholder="450,000"
               placeholderTextColor={colors.textSecondary}
             />
-          </View>
-
-          <View style={styles.card}>
-            <Text style={styles.inputLabel}>County</Text>
-            <TouchableOpacity
-              style={styles.pickerButton}
-              onPress={() => setShowCountyPicker(true)}
-            >
-              <Text style={styles.pickerButtonText}>{county}</Text>
-              <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
-            </TouchableOpacity>
           </View>
 
           <View style={styles.card}>
@@ -748,7 +772,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
                   ]}
                   onPress={() => {
                     setLoanType(type);
-                    setDownPct(MIN_DOWN_BY_LOAN[type]);
+                    setDownPct(MIN_DOWN_BY_LOAN[type].toString());
                   }}
                 >
                   <Text
@@ -791,14 +815,69 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
 
           <View style={styles.card}>
             <Text style={styles.inputLabel}>Down Payment</Text>
-            <Text style={styles.sliderValue}>{downPct}%</Text>
-            <View style={styles.sliderTrack}>
-              <View style={[styles.sliderFill, { width: `${(downPct / 30) * 100}%` }]} />
+            
+            {/* Editable Percentage Input */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+              <TextInput
+                style={[styles.sliderValue, { 
+                  minWidth: 80, 
+                  textAlign: 'center',
+                  backgroundColor: isDark ? '#1F2937' : '#F8FAFC',
+                  borderRadius: 8,
+                  paddingHorizontal: 12,
+                  paddingVertical: 4,
+                }]}
+                value={downPct}
+                onChangeText={(text) => {
+                  setDownPct(text);
+                }}
+                onBlur={() => {
+                  const num = parseFloat(downPct.replace(/[^0-9.]/g, '')) || MIN_DOWN_BY_LOAN[loanType];
+                  const clamped = Math.max(MIN_DOWN_BY_LOAN[loanType], Math.min(30, num));
+                  setDownPct((Math.round(clamped * 10) / 10).toString());
+                }}
+                keyboardType="decimal-pad"
+                maxLength={4}
+              />
+              <Text style={[styles.sliderValue, { marginLeft: 4 }]}>%</Text>
             </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+            
+            {/* Interactive Slider Track */}
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={(e) => {
+                const { locationX } = e.nativeEvent;
+                const trackWidth = 300; // Approximate width
+                const percentage = Math.max(MIN_DOWN_BY_LOAN[loanType], Math.min(30, Math.round((locationX / trackWidth) * 30)));
+                setDownPct(percentage.toString());
+              }}
+            >
+              <View style={styles.sliderTrack}>
+                <View style={[styles.sliderFill, { width: `${(parseFloat(downPct) / 30) * 100}%` }]} />
+                <View style={[styles.sliderThumb, { left: `${(parseFloat(downPct) / 30) * 100}%`, marginLeft: -12 }]} />
+              </View>
+            </TouchableOpacity>
+            
+            {/* Quick Select Buttons */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 }}>
               {[MIN_DOWN_BY_LOAN[loanType], 5, 10, 15, 20, 25, 30].map((pct) => (
-                <TouchableOpacity key={pct} onPress={() => setDownPct(pct)}>
-                  <Text style={{ fontSize: 12, color: colors.textSecondary }}>{pct}%</Text>
+                <TouchableOpacity 
+                  key={pct} 
+                  onPress={() => setDownPct(pct.toString())}
+                  style={{
+                    paddingVertical: 6,
+                    paddingHorizontal: 8,
+                    borderRadius: 6,
+                    backgroundColor: parseFloat(downPct) === pct ? '#7C3AED' : 'transparent',
+                  }}
+                >
+                  <Text style={{ 
+                    fontSize: 12, 
+                    fontWeight: parseFloat(downPct) === pct ? '700' : '400',
+                    color: parseFloat(downPct) === pct ? '#FFFFFF' : colors.textSecondary 
+                  }}>
+                    {pct}%
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -934,6 +1013,19 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               <Text style={styles.checkboxLabel}>Buyer pays seller transfer tax</Text>
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* Disclaimer */}
+        <View style={[styles.card, { marginTop: 24, marginBottom: 32 }]}>
+          <Text style={[styles.sectionTitle, { fontSize: 18, marginBottom: 12 }]}>Disclaimer</Text>
+          <Text style={{ 
+            fontSize: 13, 
+            color: colors.textSecondary, 
+            lineHeight: 20,
+            textAlign: 'justify',
+          }}>
+            The results provided by this calculator are intended for comparative and educational purposes only and do not constitute a Loan Estimate as defined under the Truth in Lending Act. The accuracy of calculations cannot be guaranteed. This calculator cannot pre-qualify you. Loan qualification may require additional documentation including credit scores and financial reserves not collected by this calculator. All figures shown, including interest rates, taxes, insurance, and PMI calculations, are estimates only and are subject to change without notice. Additional costs such as HOA fees may not be reflected in the total. For an accurate assessment of your loan terms and costs, please request an official Loan Estimate from your loan officer.
+          </Text>
         </View>
       </ScrollView>
 

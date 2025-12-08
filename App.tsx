@@ -102,6 +102,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [searchQuery, setSearchQuery] = useState('');
   const [showTeamManagement, setShowTeamManagement] = useState(false);
   const [showMortgageCalculator, setShowMortgageCalculator] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [teamMemberId, setTeamMemberId] = useState<string | null>(null);
   const [selectedLOFilter, setSelectedLOFilter] = useState<string | null>(null); // null = all LOs
   const [showLOPicker, setShowLOPicker] = useState(false);
@@ -1486,6 +1487,59 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
+        {/* Profile Menu Modal */}
+        <Modal
+          visible={showProfileMenu}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowProfileMenu(false)}
+        >
+          <TouchableOpacity 
+            style={styles.profileMenuOverlay}
+            activeOpacity={1}
+            onPress={() => setShowProfileMenu(false)}
+          >
+            <View style={[styles.profileMenuContent, { backgroundColor: colors.cardBackground }]}>
+              <TouchableOpacity
+                style={styles.profileMenuItem}
+                onPress={() => {
+                  setShowProfileMenu(false);
+                  setShowMortgageCalculator(true);
+                }}
+              >
+                <Text style={styles.profileMenuIcon}>🏠</Text>
+                <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Payment Calculator</Text>
+              </TouchableOpacity>
+              
+              {userRole === 'super_admin' && (
+                <TouchableOpacity
+                  style={styles.profileMenuItem}
+                  onPress={() => {
+                    setShowProfileMenu(false);
+                    setShowTeamManagement(true);
+                  }}
+                >
+                  <Text style={styles.profileMenuIcon}>👥</Text>
+                  <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Team Management</Text>
+                </TouchableOpacity>
+              )}
+              
+              <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
+              
+              <TouchableOpacity
+                style={styles.profileMenuItem}
+                onPress={() => {
+                  setShowProfileMenu(false);
+                  onSignOut();
+                }}
+              >
+                <Text style={styles.profileMenuIcon}>🚪</Text>
+                <Text style={[styles.profileMenuText, { color: '#EF4444' }]}>Sign Out</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
+
         {/* Purple Gradient Header - Fixed height, moves up with scroll */}
         <Animated.View style={[
           styles.newDashboardHeader, 
@@ -1505,18 +1559,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           <Animated.View style={{ transform: [{ translateY: dashboardUserInfoTranslateY }] }}>
             <View style={styles.newHeaderTop}>
               <View style={styles.newUserInfo}>
-                {session?.user?.user_metadata?.avatar_url ? (
-                  <Image 
-                    source={{ uri: session.user.user_metadata.avatar_url }}
-                    style={styles.newAvatar}
-                  />
-                ) : (
-                  <View style={styles.newAvatarPlaceholder}>
-                    <Text style={styles.newAvatarText}>
-                      {session?.user?.email?.[0]?.toUpperCase() || 'U'}
-                    </Text>
-                  </View>
-                )}
                 <View style={styles.newUserDetails}>
                   <Text style={styles.newUserTitle}>Dashboard</Text>
                   <Text style={styles.newUserEmail} numberOfLines={1}>
@@ -1524,25 +1566,23 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   </Text>
                 </View>
               </View>
-              <View style={styles.headerButtons}>
-                <TouchableOpacity 
-                  onPress={() => setShowMortgageCalculator(true)} 
-                  style={styles.newHeaderButton}
-                >
-                  <Text style={styles.newHeaderButtonText}>🏠</Text>
-                </TouchableOpacity>
-                {userRole === 'super_admin' && (
-                  <TouchableOpacity 
-                    onPress={() => setShowTeamManagement(true)} 
-                    style={styles.newHeaderButton}
-                  >
-                    <Text style={styles.newHeaderButtonText}>👥</Text>
-                  </TouchableOpacity>
+              <TouchableOpacity 
+                onPress={() => setShowProfileMenu(true)}
+                style={styles.profileButton}
+              >
+                {session?.user?.user_metadata?.avatar_url ? (
+                  <Image 
+                    source={{ uri: session.user.user_metadata.avatar_url }}
+                    style={styles.profileButtonAvatar}
+                  />
+                ) : (
+                  <View style={styles.profileButtonPlaceholder}>
+                    <Text style={styles.profileButtonText}>
+                      {session?.user?.email?.[0]?.toUpperCase() || 'U'}
+                    </Text>
+                  </View>
                 )}
-                <TouchableOpacity onPress={onSignOut} style={styles.newSignOutButton}>
-                  <Text style={styles.newSignOutText}>Sign Out</Text>
-                </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
             </View>
           </Animated.View>
 
