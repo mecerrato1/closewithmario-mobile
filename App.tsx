@@ -34,6 +34,7 @@ import { scheduleLeadCallback } from './src/lib/callbacks';
 import AuthScreen from './src/screens/AuthScreen';
 import { LeadDetailView } from './src/screens/LeadDetailScreen';
 import TeamManagementScreen from './src/screens/TeamManagementScreen';
+import MortgageCalculatorScreen from './src/screens/MortgageCalculatorScreen';
 import { AppLockProvider, useAppLock } from './src/contexts/AppLockContext';
 import LockScreen from './src/screens/LockScreen';
 import QuoteOfTheDay from './src/components/dashboard/QuoteOfTheDay';
@@ -100,6 +101,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [userRole, setUserRole] = useState<UserRole>('buyer');
   const [searchQuery, setSearchQuery] = useState('');
   const [showTeamManagement, setShowTeamManagement] = useState(false);
+  const [showMortgageCalculator, setShowMortgageCalculator] = useState(false);
   const [teamMemberId, setTeamMemberId] = useState<string | null>(null);
   const [selectedLOFilter, setSelectedLOFilter] = useState<string | null>(null); // null = all LOs
   const [showLOPicker, setShowLOPicker] = useState(false);
@@ -150,7 +152,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   // Collapsing header animation for leads view
   const scrollY = useRef(new Animated.Value(0)).current;
-  const HEADER_EXPANDED_HEIGHT = 280;
+  const HEADER_EXPANDED_HEIGHT = 310;
   const HEADER_COLLAPSED_HEIGHT = 120;
 
   const headerHeight = scrollY.interpolate({
@@ -191,8 +193,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   // Collapsing header animation for dashboard view
   const dashboardScrollY = useRef(new Animated.Value(0)).current;
-  const DASHBOARD_HEADER_EXPANDED = userRole === 'super_admin' ? 420 : 430;
-  const DASHBOARD_HEADER_COLLAPSED = 200;
+  const DASHBOARD_HEADER_EXPANDED = userRole === 'super_admin' ? 420 : 460;
+  const DASHBOARD_HEADER_COLLAPSED = 230;
   const HEADER_SCROLL_DISTANCE = DASHBOARD_HEADER_EXPANDED - DASHBOARD_HEADER_COLLAPSED;
 
   const dashboardHeaderTranslateY = dashboardScrollY.interpolate({
@@ -1345,6 +1347,15 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     );
   }
 
+  // Show Mortgage Calculator
+  if (showMortgageCalculator) {
+    return (
+      <MortgageCalculatorScreen
+        onClose={() => setShowMortgageCalculator(false)}
+      />
+    );
+  }
+
   if (selectedLead) {
     // Apply the same filters to leads/metaLeads that are used in the list view
     const filteredLeads = leads.filter(lead => {
@@ -1514,6 +1525,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 </View>
               </View>
               <View style={styles.headerButtons}>
+                <TouchableOpacity 
+                  onPress={() => setShowMortgageCalculator(true)} 
+                  style={styles.newHeaderButton}
+                >
+                  <Text style={styles.newHeaderButtonText}>🏠</Text>
+                </TouchableOpacity>
                 {userRole === 'super_admin' && (
                   <TouchableOpacity 
                     onPress={() => setShowTeamManagement(true)} 

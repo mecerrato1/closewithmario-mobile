@@ -1,0 +1,1044 @@
+// src/screens/MortgageCalculatorScreen.tsx
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  Modal,
+  Platform,
+  KeyboardAvoidingView,
+} from 'react-native';
+import { Picker } from '@react-native-picker/picker';
+import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useThemeColors } from '../styles/theme';
+import {
+  calculateMortgage,
+  MortgageInputs,
+  MortgageResults,
+  LoanType,
+  CreditBand,
+  VALoanUsage,
+  MIN_DOWN_BY_LOAN,
+  DEFAULT_FEES,
+} from '../utils/mortgageCalculations';
+import { FLORIDA_COUNTIES } from '../utils/floridaCounties';
+import { fetchRates, getRateForLoanType, type RateData } from '../utils/rateService';
+
+const STORAGE_KEY = '@mortgage_calculator_inputs';
+
+interface MortgageCalculatorScreenProps {
+  onClose: () => void;
+}
+
+export default function MortgageCalculatorScreen({ onClose }: MortgageCalculatorScreenProps) {
+  const { colors, isDark } = useThemeColors();
+
+  // Input states
+  const [price, setPrice] = useState('450000');
+  const [loanType, setLoanType] = useState<LoanType>('Conventional');
+  const [downPct, setDownPct] = useState(3);
+  const [termYears, setTermYears] = useState(30);
+  const [creditBand, setCreditBand] = useState<CreditBand>('740-759');
+  const [county, setCounty] = useState('Broward');
+  const [annualTax, setAnnualTax] = useState('6000');
+  const [annualIns, setAnnualIns] = useState('2400');
+  const [buyerPaysSellerTransfer, setBuyerPaysSellerTransfer] = useState(false);
+  const [vaLoanUsage, setVaLoanUsage] = useState<VALoanUsage>('firstUse');
+  const [sellerCredit, setSellerCredit] = useState('0');
+  const [sellerCreditType, setSellerCreditType] = useState<'percentage' | 'dollar'>('percentage');
+  const [customRate, setCustomRate] = useState('');
+  
+  // Rate fetching state
+  const [rates, setRates] = useState<RateData | null>(null);
+  const [loadingRates, setLoadingRates] = useState(true);
+
+  // UI states
+  const [showLoanTypePicker, setShowLoanTypePicker] = useState(false);
+  const [showCountyPicker, setShowCountyPicker] = useState(false);
+  const [showCreditPicker, setShowCreditPicker] = useState(false);
+  const [showVAPicker, setShowVAPicker] = useState(false);
+  const [showClosingBreakdown, setShowClosingBreakdown] = useState(false);
+  const [showPrepaidsBreakdown, setShowPrepaidsBreakdown] = useState(false);
+
+  // Fetch rates on mount
+  useEffect(() => {
+    const loadRates = async () => {
+      try {
+        setLoadingRates(true);
+        const rateData = await fetchRates();
+        setRates(rateData);
+      } catch (error) {
+        console.error('Failed to fetch rates:', error);
+      } finally {
+        setLoadingRates(false);
+      }
+    };
+    loadRates();
+  }, []);
+
+  // Clear custom rate when loan type changes (so it uses the live rate for the new loan type)
+  useEffect(() => {
+    if (customRate) {
+      setCustomRate('');
+    }
+  }, [loanType]);
+
+  // Load saved inputs on mount
+  useEffect(() => {
+    loadSavedInputs();
+  }, []);
+
+  // Save inputs whenever they change
+  useEffect(() => {
+    saveInputs();
+  }, [price, loanType, downPct, termYears, creditBand, county, annualTax, annualIns, 
+      buyerPaysSellerTransfer, vaLoanUsage, sellerCredit, sellerCreditType, customRate]);
+
+  const loadSavedInputs = async () => {
+    try {
+      const saved = await AsyncStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const data = JSON.parse(saved);
+        if (data.price) setPrice(formatNumberWithCommas(data.price));
+        if (data.loanType) setLoanType(data.loanType);
+        if (data.downPct !== undefined) setDownPct(data.downPct);
+        if (data.termYears) setTermYears(data.termYears);
+        if (data.creditBand) setCreditBand(data.creditBand);
+        if (data.county) setCounty(data.county);
+        if (data.annualTax) setAnnualTax(formatNumberWithCommas(data.annualTax));
+        if (data.annualIns) setAnnualIns(formatNumberWithCommas(data.annualIns));
+        if (data.buyerPaysSellerTransfer !== undefined) setBuyerPaysSellerTransfer(data.buyerPaysSellerTransfer);
+        if (data.vaLoanUsage) setVaLoanUsage(data.vaLoanUsage);
+        if (data.sellerCredit) setSellerCredit(formatNumberWithCommas(data.sellerCredit));
+        if (data.sellerCreditType) setSellerCreditType(data.sellerCreditType);
+        if (data.customRate) setCustomRate(data.customRate);
+      }
+    } catch (error) {
+      console.error('Failed to load saved inputs:', error);
+    }
+  };
+
+  const saveInputs = async () => {
+    try {
+      const data = {
+        price, loanType, downPct, termYears, creditBand, county, annualTax, annualIns,
+        buyerPaysSellerTransfer, vaLoanUsage, sellerCredit, sellerCreditType, customRate
+      };
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (error) {
+      console.error('Failed to save inputs:', error);
+    }
+  };
+
+  // Calculate results
+  const results: MortgageResults = useMemo(() => {
+    // Determine which rate to use: custom rate if entered, otherwise live rate from API
+    let rateToUse: number | undefined;
+    if (customRate) {
+      rateToUse = parseFloat(customRate.replace(/[^0-9.]/g, ''));
+    } else if (rates) {
+      rateToUse = getRateForLoanType(rates, loanType);
+    }
+
+    const inputs: MortgageInputs = {
+      price: parseFloat(price.replace(/[^0-9.]/g, '')) || 0,
+      loanType,
+      downPct,
+      termYears,
+      creditBand,
+      county,
+      annualTax: parseFloat(annualTax.replace(/[^0-9.]/g, '')) || 0,
+      annualIns: parseFloat(annualIns.replace(/[^0-9.]/g, '')) || 0,
+      buyerPaysSellerTransfer,
+      vaLoanUsage,
+      sellerCredit: parseFloat(sellerCredit.replace(/[^0-9.]/g, '')) || 0,
+      sellerCreditType,
+      customRate: rateToUse,
+    };
+    return calculateMortgage(inputs, DEFAULT_FEES);
+  }, [price, loanType, downPct, termYears, creditBand, county, annualTax, annualIns, 
+      buyerPaysSellerTransfer, vaLoanUsage, sellerCredit, sellerCreditType, customRate, rates]);
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
+
+  const formatCurrencyDetailed = (value: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  };
+
+  // Format number with commas for display
+  const formatNumberWithCommas = (value: string) => {
+    // Remove all non-numeric characters except decimal point
+    const numericValue = value.replace(/[^0-9.]/g, '');
+    
+    // Split into integer and decimal parts
+    const parts = numericValue.split('.');
+    
+    // Add commas to integer part
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    
+    // Rejoin with decimal if it exists
+    return parts.join('.');
+  };
+
+  // Remove commas for calculation
+  const removeCommas = (value: string) => {
+    return value.replace(/,/g, '');
+  };
+
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingTop: Platform.OS === 'ios' ? 60 : 16,
+      paddingBottom: 16,
+      backgroundColor: colors.headerBackground,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    headerTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: '#FFFFFF',
+      flex: 1,
+      textAlign: 'center',
+    },
+    closeButton: {
+      padding: 8,
+    },
+    scrollContent: {
+      padding: 16,
+    },
+    section: {
+      marginBottom: 24,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginBottom: 12,
+    },
+    card: {
+      backgroundColor: colors.cardBackground,
+      borderRadius: 12,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      marginBottom: 12,
+    },
+    inputLabel: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.textSecondary,
+      marginBottom: 8,
+    },
+    input: {
+      backgroundColor: isDark ? '#1F2937' : '#F8FAFC',
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      padding: 12,
+      fontSize: 16,
+      color: colors.textPrimary,
+    },
+    pickerButton: {
+      backgroundColor: isDark ? '#1F2937' : '#F8FAFC',
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      padding: 12,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    pickerButtonText: {
+      fontSize: 16,
+      color: colors.textPrimary,
+    },
+    loanTypeRow: {
+      flexDirection: 'row',
+      gap: 8,
+      marginBottom: 16,
+    },
+    loanTypeButton: {
+      flex: 1,
+      paddingVertical: 12,
+      paddingHorizontal: 8,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'center',
+    },
+    loanTypeButtonActive: {
+      backgroundColor: '#7C3AED',
+      borderColor: '#7C3AED',
+    },
+    loanTypeButtonText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    loanTypeButtonTextActive: {
+      color: '#FFFFFF',
+    },
+    termRow: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    termButton: {
+      flex: 1,
+      paddingVertical: 12,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'center',
+    },
+    termButtonActive: {
+      backgroundColor: '#7C3AED',
+      borderColor: '#7C3AED',
+    },
+    termButtonText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    termButtonTextActive: {
+      color: '#FFFFFF',
+    },
+    sliderContainer: {
+      marginTop: 8,
+    },
+    sliderLabel: {
+      fontSize: 14,
+      color: colors.textSecondary,
+      marginBottom: 8,
+    },
+    sliderValue: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: '#7C3AED',
+      textAlign: 'center',
+      marginBottom: 8,
+    },
+    sliderTrack: {
+      height: 40,
+      backgroundColor: isDark ? '#1F2937' : '#F8FAFC',
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      justifyContent: 'center',
+      paddingHorizontal: 12,
+    },
+    sliderFill: {
+      height: '100%',
+      backgroundColor: '#7C3AED',
+      borderRadius: 7,
+      opacity: 0.3,
+    },
+    sliderThumb: {
+      position: 'absolute',
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: '#7C3AED',
+      borderWidth: 3,
+      borderColor: '#FFFFFF',
+    },
+    checkboxRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 12,
+    },
+    checkbox: {
+      width: 24,
+      height: 24,
+      borderRadius: 6,
+      borderWidth: 2,
+      borderColor: colors.border,
+      marginRight: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    checkboxChecked: {
+      backgroundColor: '#7C3AED',
+      borderColor: '#7C3AED',
+    },
+    checkboxLabel: {
+      fontSize: 14,
+      color: colors.textPrimary,
+      flex: 1,
+    },
+    resultCard: {
+      backgroundColor: '#7C3AED',
+      borderRadius: 16,
+      padding: 20,
+      marginBottom: 16,
+    },
+    resultLabel: {
+      fontSize: 14,
+      color: '#E9D5FF',
+      marginBottom: 4,
+    },
+    resultValue: {
+      fontSize: 32,
+      fontWeight: '700',
+      color: '#FFFFFF',
+      marginBottom: 16,
+    },
+    resultBreakdown: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingTop: 16,
+      borderTopWidth: 1,
+      borderTopColor: 'rgba(255, 255, 255, 0.2)',
+    },
+    resultBreakdownItem: {
+      flex: 1,
+    },
+    resultBreakdownLabel: {
+      fontSize: 12,
+      color: '#E9D5FF',
+      marginBottom: 4,
+    },
+    resultBreakdownValue: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: '#FFFFFF',
+    },
+    detailRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingVertical: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    detailLabel: {
+      fontSize: 14,
+      color: colors.textSecondary,
+    },
+    detailValue: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: colors.textPrimary,
+    },
+    expandButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      backgroundColor: isDark ? '#1F2937' : '#F8FAFC',
+      borderRadius: 8,
+      marginTop: 8,
+    },
+    expandButtonText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#7C3AED',
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'flex-end',
+    },
+    modalContent: {
+      backgroundColor: colors.cardBackground,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      paddingTop: 20,
+      paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+      maxHeight: '70%',
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingBottom: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    modalTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    pickerItem: {
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    pickerItemText: {
+      fontSize: 16,
+      color: colors.textPrimary,
+    },
+    pickerItemSelected: {
+      backgroundColor: isDark ? '#1F2937' : '#F8FAFC',
+    },
+  });
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={{ width: 40 }} />
+        <Text style={styles.headerTitle}>Mortgage Calculator</Text>
+        <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+          <Ionicons name="close" size={28} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+        {/* Results Card */}
+        <View style={styles.resultCard}>
+          <Text style={styles.resultLabel}>Monthly Payment</Text>
+          <Text style={styles.resultValue}>{formatCurrency(results.monthlyTotal)}</Text>
+          
+          <View style={styles.resultBreakdown}>
+            <View style={styles.resultBreakdownItem}>
+              <Text style={styles.resultBreakdownLabel}>P&I</Text>
+              <Text style={styles.resultBreakdownValue}>{formatCurrency(results.monthlyPI)}</Text>
+            </View>
+            <View style={styles.resultBreakdownItem}>
+              <Text style={styles.resultBreakdownLabel}>Taxes</Text>
+              <Text style={styles.resultBreakdownValue}>{formatCurrency(results.monthlyTax)}</Text>
+            </View>
+            <View style={styles.resultBreakdownItem}>
+              <Text style={styles.resultBreakdownLabel}>Insurance</Text>
+              <Text style={styles.resultBreakdownValue}>{formatCurrency(results.monthlyIns)}</Text>
+            </View>
+            {results.monthlyMI > 0 && (
+              <View style={styles.resultBreakdownItem}>
+                <Text style={styles.resultBreakdownLabel}>MI</Text>
+                <Text style={styles.resultBreakdownValue}>{formatCurrency(results.monthlyMI)}</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* Cash to Close Card */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Cash to Close</Text>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Down Payment</Text>
+            <Text style={styles.detailValue}>{formatCurrency(results.actualDownPayment)}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Closing Costs</Text>
+            <Text style={styles.detailValue}>{formatCurrency(results.closingCosts)}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Prepaids</Text>
+            <Text style={styles.detailValue}>{formatCurrency(results.prepaids)}</Text>
+          </View>
+          {results.sellerCreditAmount > 0 && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Seller Credit</Text>
+              <Text style={[styles.detailValue, { color: '#10B981' }]}>
+                -{formatCurrency(results.sellerCreditAmount)}
+              </Text>
+            </View>
+          )}
+          <View style={[styles.detailRow, { borderBottomWidth: 0, paddingTop: 12 }]}>
+            <Text style={[styles.detailLabel, { fontSize: 16, fontWeight: '700', color: colors.textPrimary }]}>
+              Total Cash to Close
+            </Text>
+            <Text style={[styles.detailValue, { fontSize: 18, color: '#7C3AED' }]}>
+              {formatCurrency(results.cashToClose)}
+            </Text>
+          </View>
+
+          {/* Expandable Breakdowns */}
+          <TouchableOpacity
+            style={styles.expandButton}
+            onPress={() => setShowClosingBreakdown(!showClosingBreakdown)}
+          >
+            <Text style={styles.expandButtonText}>Closing Costs Breakdown</Text>
+            <Ionicons
+              name={showClosingBreakdown ? 'chevron-up' : 'chevron-down'}
+              size={20}
+              color="#7C3AED"
+            />
+          </TouchableOpacity>
+          
+          {showClosingBreakdown && (
+            <View style={{ marginTop: 12 }}>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Underwriting Fee</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(DEFAULT_FEES.underwritingFee)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Processing Fee</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(DEFAULT_FEES.processingFee)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Appraisal Fee</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(DEFAULT_FEES.appraisalFee)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Lender's Title</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(results.lendersTitle)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Intangible Tax</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(results.intangible)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Doc Stamps</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(results.deed)}</Text>
+              </View>
+              {results.ownersTitleBuyerSide > 0 && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Owner's Title</Text>
+                  <Text style={styles.detailValue}>{formatCurrencyDetailed(results.ownersTitleBuyerSide)}</Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={styles.expandButton}
+            onPress={() => setShowPrepaidsBreakdown(!showPrepaidsBreakdown)}
+          >
+            <Text style={styles.expandButtonText}>Prepaids Breakdown</Text>
+            <Ionicons
+              name={showPrepaidsBreakdown ? 'chevron-up' : 'chevron-down'}
+              size={20}
+              color="#7C3AED"
+            />
+          </TouchableOpacity>
+
+          {showPrepaidsBreakdown && (
+            <View style={{ marginTop: 12 }}>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Property Taxes (3 months)</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(results.prepaidTaxes)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Insurance (15 months)</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(results.prepaidInsurance)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Interest (15 days)</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(results.prepaidInterest)}</Text>
+              </View>
+            </View>
+          )}
+        </View>
+
+        {/* Loan Details */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Loan Details</Text>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Loan Amount</Text>
+            <Text style={styles.detailValue}>{formatCurrency(results.baseLoan)}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Interest Rate</Text>
+            <Text style={styles.detailValue}>{results.noteRate.toFixed(3)}%</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>APR</Text>
+            <Text style={styles.detailValue}>{results.apr.toFixed(3)}%</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>LTV</Text>
+            <Text style={styles.detailValue}>{results.ltv.toFixed(2)}%</Text>
+          </View>
+          {results.financedFee > 0 && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>
+                {loanType === 'VA' ? 'VA Funding Fee' : 'FHA UFMIP'}
+              </Text>
+              <Text style={styles.detailValue}>{formatCurrency(results.financedFee)}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Input Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Property Details</Text>
+          
+          <View style={styles.card}>
+            <Text style={styles.inputLabel}>Purchase Price</Text>
+            <TextInput
+              style={styles.input}
+              value={price}
+              onChangeText={(text) => setPrice(formatNumberWithCommas(text))}
+              keyboardType="numeric"
+              placeholder="450,000"
+              placeholderTextColor={colors.textSecondary}
+            />
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.inputLabel}>County</Text>
+            <TouchableOpacity
+              style={styles.pickerButton}
+              onPress={() => setShowCountyPicker(true)}
+            >
+              <Text style={styles.pickerButtonText}>{county}</Text>
+              <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.inputLabel}>Annual Property Tax</Text>
+            <TextInput
+              style={styles.input}
+              value={annualTax}
+              onChangeText={(text) => setAnnualTax(formatNumberWithCommas(text))}
+              keyboardType="numeric"
+              placeholder="6,000"
+              placeholderTextColor={colors.textSecondary}
+            />
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.inputLabel}>Annual Insurance</Text>
+            <TextInput
+              style={styles.input}
+              value={annualIns}
+              onChangeText={(text) => setAnnualIns(formatNumberWithCommas(text))}
+              keyboardType="numeric"
+              placeholder="2,400"
+              placeholderTextColor={colors.textSecondary}
+            />
+          </View>
+        </View>
+
+        {/* Loan Configuration */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Loan Configuration</Text>
+          
+          <View style={styles.card}>
+            <Text style={styles.inputLabel}>Loan Type</Text>
+            <View style={styles.loanTypeRow}>
+              {(['Conventional', 'FHA', 'VA'] as LoanType[]).map((type) => (
+                <TouchableOpacity
+                  key={type}
+                  style={[
+                    styles.loanTypeButton,
+                    loanType === type && styles.loanTypeButtonActive,
+                  ]}
+                  onPress={() => {
+                    setLoanType(type);
+                    setDownPct(MIN_DOWN_BY_LOAN[type]);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.loanTypeButtonText,
+                      loanType === type && styles.loanTypeButtonTextActive,
+                    ]}
+                  >
+                    {type}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.inputLabel}>Term</Text>
+            <View style={styles.termRow}>
+              {[30, 20, 15].map((term) => (
+                <TouchableOpacity
+                  key={term}
+                  style={[
+                    styles.termButton,
+                    termYears === term && styles.termButtonActive,
+                  ]}
+                  onPress={() => setTermYears(term)}
+                >
+                  <Text
+                    style={[
+                      styles.termButtonText,
+                      termYears === term && styles.termButtonTextActive,
+                    ]}
+                  >
+                    {term} years
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.inputLabel}>Down Payment</Text>
+            <Text style={styles.sliderValue}>{downPct}%</Text>
+            <View style={styles.sliderTrack}>
+              <View style={[styles.sliderFill, { width: `${(downPct / 30) * 100}%` }]} />
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+              {[MIN_DOWN_BY_LOAN[loanType], 5, 10, 15, 20, 25, 30].map((pct) => (
+                <TouchableOpacity key={pct} onPress={() => setDownPct(pct)}>
+                  <Text style={{ fontSize: 12, color: colors.textSecondary }}>{pct}%</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.inputLabel}>Credit Score</Text>
+            <TouchableOpacity
+              style={styles.pickerButton}
+              onPress={() => setShowCreditPicker(true)}
+            >
+              <Text style={styles.pickerButtonText}>{creditBand}</Text>
+              <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.card}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <Text style={styles.inputLabel}>Interest Rate (%)</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {customRate && (
+                  <TouchableOpacity 
+                    onPress={() => setCustomRate('')}
+                    style={{ paddingHorizontal: 8, paddingVertical: 4 }}
+                  >
+                    <Text style={{ fontSize: 12, color: '#7C3AED', fontWeight: '600' }}>
+                      Reset to Live
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                {!customRate && !loadingRates && rates && (
+                  <Text style={{ fontSize: 12, color: '#10B981' }}>
+                    Live rate
+                  </Text>
+                )}
+                {loadingRates && (
+                  <Text style={{ fontSize: 12, color: colors.textSecondary }}>
+                    Loading...
+                  </Text>
+                )}
+              </View>
+            </View>
+            <TextInput
+              style={styles.input}
+              value={customRate}
+              onChangeText={setCustomRate}
+              keyboardType="decimal-pad"
+              placeholder={rates ? getRateForLoanType(rates, loanType).toFixed(3) : '7.5'}
+              placeholderTextColor={colors.textSecondary}
+            />
+            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
+              {customRate ? 'Custom rate - edit as needed' : 'Live market rate - tap to customize'}
+            </Text>
+          </View>
+
+          {loanType === 'VA' && (
+            <View style={styles.card}>
+              <Text style={styles.inputLabel}>VA Loan Usage</Text>
+              <TouchableOpacity
+                style={styles.pickerButton}
+                onPress={() => setShowVAPicker(true)}
+              >
+                <Text style={styles.pickerButtonText}>
+                  {vaLoanUsage === 'firstUse' ? 'First Use' : 
+                   vaLoanUsage === 'subsequentUse' ? 'Subsequent Use' : 'Exempt'}
+                </Text>
+                <Ionicons name="chevron-down" size={20} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {/* Seller Credit */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Seller Credit (Optional)</Text>
+          
+          <View style={styles.card}>
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+              <TouchableOpacity
+                style={[
+                  styles.termButton,
+                  sellerCreditType === 'percentage' && styles.termButtonActive,
+                ]}
+                onPress={() => setSellerCreditType('percentage')}
+              >
+                <Text
+                  style={[
+                    styles.termButtonText,
+                    sellerCreditType === 'percentage' && styles.termButtonTextActive,
+                  ]}
+                >
+                  Percentage
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.termButton,
+                  sellerCreditType === 'dollar' && styles.termButtonActive,
+                ]}
+                onPress={() => setSellerCreditType('dollar')}
+              >
+                <Text
+                  style={[
+                    styles.termButtonText,
+                    sellerCreditType === 'dollar' && styles.termButtonTextActive,
+                  ]}
+                >
+                  Dollar Amount
+                </Text>
+              </TouchableOpacity>
+            </View>
+            
+            <TextInput
+              style={styles.input}
+              value={sellerCredit}
+              onChangeText={(text) => setSellerCredit(formatNumberWithCommas(text))}
+              keyboardType="numeric"
+              placeholder={sellerCreditType === 'percentage' ? '3' : '5,000'}
+              placeholderTextColor={colors.textSecondary}
+            />
+          </View>
+
+          <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.checkboxRow}
+              onPress={() => setBuyerPaysSellerTransfer(!buyerPaysSellerTransfer)}
+            >
+              <View style={[styles.checkbox, buyerPaysSellerTransfer && styles.checkboxChecked]}>
+                {buyerPaysSellerTransfer && (
+                  <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                )}
+              </View>
+              <Text style={styles.checkboxLabel}>Buyer pays seller transfer tax</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
+
+      {/* County Picker Modal */}
+      <Modal
+        visible={showCountyPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCountyPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select County</Text>
+              <TouchableOpacity onPress={() => setShowCountyPicker(false)}>
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {FLORIDA_COUNTIES.map((c) => (
+                <TouchableOpacity
+                  key={c}
+                  style={[styles.pickerItem, county === c && styles.pickerItemSelected]}
+                  onPress={() => {
+                    setCounty(c);
+                    setShowCountyPicker(false);
+                  }}
+                >
+                  <Text style={styles.pickerItemText}>{c}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Credit Score Picker Modal */}
+      <Modal
+        visible={showCreditPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCreditPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Credit Score</Text>
+              <TouchableOpacity onPress={() => setShowCreditPicker(false)}>
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {(['760+', '740-759', '720-739', '700-719', '680-699', '660-679', '640-659', 'Below 620'] as CreditBand[]).map((band) => (
+                <TouchableOpacity
+                  key={band}
+                  style={[styles.pickerItem, creditBand === band && styles.pickerItemSelected]}
+                  onPress={() => {
+                    setCreditBand(band);
+                    setShowCreditPicker(false);
+                  }}
+                >
+                  <Text style={styles.pickerItemText}>{band}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* VA Loan Usage Picker Modal */}
+      <Modal
+        visible={showVAPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowVAPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>VA Loan Usage</Text>
+              <TouchableOpacity onPress={() => setShowVAPicker(false)}>
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {[
+                { value: 'firstUse' as VALoanUsage, label: 'First Use' },
+                { value: 'subsequentUse' as VALoanUsage, label: 'Subsequent Use' },
+                { value: 'exempt' as VALoanUsage, label: 'Exempt (Disabled Veteran)' },
+              ].map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[styles.pickerItem, vaLoanUsage === option.value && styles.pickerItemSelected]}
+                  onPress={() => {
+                    setVaLoanUsage(option.value);
+                    setShowVAPicker(false);
+                  }}
+                >
+                  <Text style={styles.pickerItemText}>{option.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </KeyboardAvoidingView>
+  );
+}
