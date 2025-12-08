@@ -1596,7 +1596,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   setShowMortgageCalculator(true);
                 }}
               >
-                <Text style={styles.profileMenuIcon}>🏠</Text>
+                <View style={styles.profileMenuIconContainer}>
+                  <Ionicons name="calculator" size={20} color="#7C3AED" />
+                </View>
                 <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Payment Calculator</Text>
               </TouchableOpacity>
               
@@ -1608,7 +1610,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                     setShowTeamManagement(true);
                   }}
                 >
-                  <Text style={styles.profileMenuIcon}>👥</Text>
+                  <View style={styles.profileMenuIconContainer}>
+                    <Ionicons name="people" size={20} color="#7C3AED" />
+                  </View>
                   <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Team Management</Text>
                 </TouchableOpacity>
               )}
@@ -1620,7 +1624,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 onPress={handleUploadProfilePicture}
                 disabled={uploadingPicture}
               >
-                <Text style={styles.profileMenuIcon}>📷</Text>
+                <View style={styles.profileMenuIconContainer}>
+                  <Ionicons name="camera" size={20} color={colors.textPrimary} />
+                </View>
                 <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>
                   {uploadingPicture ? 'Uploading...' : 'Change Profile Picture'}
                 </Text>
@@ -1632,7 +1638,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   onPress={handleRemoveProfilePicture}
                   disabled={uploadingPicture}
                 >
-                  <Text style={styles.profileMenuIcon}>🗑️</Text>
+                  <View style={styles.profileMenuIconContainer}>
+                    <Ionicons name="trash-outline" size={20} color={colors.textSecondary} />
+                  </View>
                   <Text style={[styles.profileMenuText, { color: colors.textSecondary }]}>Remove Custom Picture</Text>
                 </TouchableOpacity>
               )}
@@ -1646,7 +1654,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   onSignOut();
                 }}
               >
-                <Text style={styles.profileMenuIcon}>🚪</Text>
+                <View style={styles.profileMenuIconContainer}>
+                  <Ionicons name="log-out-outline" size={20} color="#EF4444" />
+                </View>
                 <Text style={[styles.profileMenuText, { color: '#EF4444' }]}>Sign Out</Text>
               </TouchableOpacity>
             </View>
