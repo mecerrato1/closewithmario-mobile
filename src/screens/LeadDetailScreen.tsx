@@ -18,6 +18,7 @@ import {
   Alert,
   Keyboard,
   TouchableWithoutFeedback,
+  StyleSheet,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Session } from '@supabase/supabase-js';
@@ -35,6 +36,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../styles/theme';
 import { parseRecordingUrl } from '../utils/parseRecordingUrl';
 import { saveContact } from '../utils/vcard';
+import { SmsMessaging } from '../components/SmsMessaging';
 
 export type LeadDetailViewProps = {
   selected: SelectedLeadRef;
@@ -76,6 +78,7 @@ export function LeadDetailView({
   activeTab,
 }: LeadDetailViewProps) {
   const { colors, isDark } = useThemeColors();
+  const [activeDetailTab, setActiveDetailTab] = useState<'details' | 'messages'>('details');
   const [taskNote, setTaskNote] = useState('');
   const [activities, setActivities] = useState<Activity[]>([]);
   const [selectedActivityType, setSelectedActivityType] = useState<'call' | 'text' | 'email' | 'note'>('call');
@@ -748,6 +751,11 @@ export function LeadDetailView({
     }
   }, [record?.id, fullName]);
 
+  // Reset to Details tab when navigating to a different lead
+  useEffect(() => {
+    setActiveDetailTab('details');
+  }, [record?.id]);
+
   // Set language preference based on lead's preferred_language
   useEffect(() => {
     if (record && isMeta) {
@@ -1350,14 +1358,73 @@ export function LeadDetailView({
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 32, backgroundColor: colors.background }} showsVerticalScrollIndicator={false}>
-        <View style={[styles.detailCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+      {/* Tab Bar - Details / Messages (only for Meta leads) */}
+      {phone && isMeta && (
+        <View style={detailTabStyles.tabBar}>
+          <TouchableOpacity
+            style={[
+              detailTabStyles.tab,
+              activeDetailTab === 'details' && detailTabStyles.tabActive,
+            ]}
+            onPress={() => setActiveDetailTab('details')}
+          >
+            <Ionicons
+              name="information-circle-outline"
+              size={18}
+              color={activeDetailTab === 'details' ? '#7C3AED' : '#64748B'}
+            />
+            <Text
+              style={[
+                detailTabStyles.tabText,
+                activeDetailTab === 'details' && detailTabStyles.tabTextActive,
+              ]}
+            >
+              Details
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              detailTabStyles.tab,
+              activeDetailTab === 'messages' && detailTabStyles.tabActive,
+            ]}
+            onPress={() => setActiveDetailTab('messages')}
+          >
+            <Ionicons
+              name="chatbubbles-outline"
+              size={18}
+              color={activeDetailTab === 'messages' ? '#7C3AED' : '#64748B'}
+            />
+            <Text
+              style={[
+                detailTabStyles.tabText,
+                activeDetailTab === 'messages' && detailTabStyles.tabTextActive,
+              ]}
+            >
+              Messages
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
-          {/* Divider */}
-          <View style={styles.sectionDivider} />
+      {/* Messages Tab Content (only for Meta leads) */}
+      {activeDetailTab === 'messages' && phone && isMeta ? (
+        <View style={{ flex: 1 }}>
+          <SmsMessaging
+            leadId={record.id}
+            leadPhone={phone}
+            leadName={fullName}
+          />
+        </View>
+      ) : (
+        /* Details Tab Content */
+        <ScrollView contentContainerStyle={{ paddingBottom: 32, backgroundColor: colors.background }} showsVerticalScrollIndicator={false}>
+          <View style={[styles.detailCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
 
-          {/* Status Dropdown */}
-          {attentionBadge && (
+            {/* Divider */}
+            <View style={styles.sectionDivider} />
+
+            {/* Status Dropdown */}
+            {attentionBadge && (
             <View style={styles.attentionBadgeContainer}>
               <View style={[styles.detailAttentionBadge, { backgroundColor: attentionBadge.color }]}>
                 <Text style={styles.detailAttentionBadgeText}>⚠️ {attentionBadge.label}</Text>
@@ -2151,6 +2218,7 @@ export function LeadDetailView({
           )}
         </View>
       </ScrollView>
+      )}
 
       {/* Ad Image Modal */}
       {adImage && (
@@ -2509,3 +2577,35 @@ export function LeadDetailView({
     </View>
   );
 }
+
+// Styles for the Detail/Messages tab bar
+const detailTabStyles = StyleSheet.create({
+  tabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    paddingHorizontal: 16,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    gap: 6,
+  },
+  tabActive: {
+    borderBottomWidth: 2,
+    borderBottomColor: '#7C3AED',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#64748B',
+  },
+  tabTextActive: {
+    color: '#7C3AED',
+    fontWeight: '600',
+  },
+});
