@@ -2,7 +2,7 @@
   "expo": {
     "name": "closewithmario-mobile",
     "slug": "closewithmario-mobile",
-    "version": "1.1.40",
+    "version": "1.1.41",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.closewithmario.mobile",
-      "buildNumber": "56",
+      "buildNumber": "57",
       "associatedDomains": [
         "applinks:hxpvcaspgdgsehrehbhl.supabase.co",
         "webcredentials:closewithmario.com"
@@ -26,6 +26,8 @@
         "NSUserNotificationUsageDescription": "We use notifications to remind you to follow up with your leads.",
         "NSMicrophoneUsageDescription": "We need access to your microphone to record voice notes for lead activities.",
         "NSContactsUsageDescription": "We need access to your contacts to save leads directly to your phone's contact list.",
+        "NSPhotoLibraryUsageDescription": "Allow Close With Mario to access your photos to upload a profile picture.",
+        "NSCameraUsageDescription": "Allow Close With Mario to use your camera to take a profile picture.",
         "LSApplicationQueriesSchemes": [
           "ms-outlook"
         ]
@@ -84,6 +86,13 @@
         "expo-contacts",
         {
           "contactsPermission": "Allow Close With Mario to save leads to your contacts."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Close With Mario to access your photos to upload a profile picture.",
+          "cameraPermission": "Allow Close With Mario to use your camera to take a profile picture."
         }
       ]
     ]

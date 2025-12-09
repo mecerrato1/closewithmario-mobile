@@ -16,6 +16,8 @@ import {
   Animated,
   LayoutAnimation,
   Alert,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Session } from '@supabase/supabase-js';
@@ -94,6 +96,8 @@ export function LeadDetailView({
   const [useSpanishTemplates, setUseSpanishTemplates] = useState(false);
   const [deletingLead, setDeletingLead] = useState(false);
   const [templateMode, setTemplateMode] = useState<'text' | 'email'>('text');
+  const [showCustomMessage, setShowCustomMessage] = useState(false);
+  const [customMessageText, setCustomMessageText] = useState('');
   
   // Voice notes state (expo-av)
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -554,6 +558,73 @@ export function LeadDetailView({
         } catch (e) {
           console.error('Error opening mailto:', e);
         }
+      }
+    }
+  };
+
+  const handleCustomMessageSend = async () => {
+    if (!customMessageText.trim()) return;
+
+    const fname = record.first_name || 'there';
+    const loPhone = currentLOInfo?.phone || '[Phone]';
+    const loEmail = currentLOInfo?.email || '[Email]';
+
+    // Build the message with greeting, custom text, and signature
+    const messageBody = `Hi ${fname} 👋\n\n${customMessageText.trim()}\n\nYou can reach me at:\n📞 ${loPhone}\n📧 ${loEmail}`;
+    
+    setShowTemplateModal(false);
+    setShowCustomMessage(false);
+    setCustomMessageText('');
+
+    if (templateMode === 'text') {
+      const encodedBody = encodeURIComponent(messageBody);
+
+      // Log the text activity automatically
+      try {
+        const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
+        const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
+        const leadTableName = isMeta ? 'meta_ads' : 'leads';
+        
+        const activityData = {
+          [foreignKeyColumn]: record.id,
+          activity_type: 'text',
+          notes: `Sent text: Custom Message\n\n${messageBody}`,
+          created_by: session?.user?.id || null,
+          user_email: session?.user?.email || 'Mobile App User',
+        };
+
+        const { data, error } = await supabase
+          .from(tableName)
+          .insert([activityData])
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error logging text activity:', error);
+        } else if (data) {
+          // Update last_contact_date on the lead
+          const now = new Date().toISOString();
+          await supabase
+            .from(leadTableName)
+            .update({ last_contact_date: now })
+            .eq('id', record.id);
+          
+          // Update the lead in parent component state
+          const updatedLead = { ...record, last_contact_date: now };
+          onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
+          
+          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+          setActivities([data, ...activities]);
+        }
+      } catch (e) {
+        console.error('Error logging text activity:', e);
+      }
+
+      const smsUrl = `sms:${phone}${Platform.OS === 'ios' ? '&' : '?'}body=${encodedBody}`;
+      try {
+        await Linking.openURL(smsUrl);
+      } catch (error) {
+        console.error('Error opening SMS:', error);
       }
     }
   };
@@ -1057,8 +1128,14 @@ export function LeadDetailView({
   };
 
   const handleDeleteActivity = async (activityId: string) => {
-    if (!propUserRole || propUserRole !== 'super_admin') {
-      alert('Only super admins can delete activities.');
+    // Check permissions:
+    // 1. Super admins can delete any activity
+    // 2. LOs can delete activities on their own "My Lead" organic leads (not meta leads)
+    const isSuperAdmin = propUserRole === 'super_admin';
+    const isMyLead = !isMeta && (record as Lead).source === 'My Lead';
+    
+    if (!isSuperAdmin && !isMyLead) {
+      alert('You can only delete activities on your own leads.');
       return;
     }
 
@@ -2109,83 +2186,152 @@ export function LeadDetailView({
         visible={showTemplateModal}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setShowTemplateModal(false)}
+        onRequestClose={() => {
+          setShowTemplateModal(false);
+          setShowCustomMessage(false);
+          setCustomMessageText('');
+        }}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.templateModalContent}>
-            <View style={styles.templateModalHeader}>
-              <Text style={styles.templateModalTitle}>
-                {templateMode === 'text'
-                  ? (useSpanishTemplates ? 'Elegir Plantilla de Texto' : 'Choose a Text Template')
-                  : (useSpanishTemplates ? 'Elegir Plantilla de Correo' : 'Choose an Email Template')}
-              </Text>
-              <TouchableOpacity 
-                onPress={() => setShowTemplateModal(false)}
-                style={styles.templateModalClose}
-              >
-                <Text style={styles.templateModalCloseText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Language Toggle */}
-            <View style={styles.languageToggleContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.languageToggleButton,
-                  !useSpanishTemplates && styles.languageToggleButtonActive
-                ]}
-                onPress={() => setUseSpanishTemplates(false)}
-              >
-                <Text style={[
-                  styles.languageToggleText,
-                  !useSpanishTemplates && styles.languageToggleTextActive
-                ]}>🇺🇸 English</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.languageToggleButton,
-                  useSpanishTemplates && styles.languageToggleButtonActive
-                ]}
-                onPress={() => setUseSpanishTemplates(true)}
-              >
-                <Text style={[
-                  styles.languageToggleText,
-                  useSpanishTemplates && styles.languageToggleTextActive
-                ]}>🇪🇸 Español</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <ScrollView style={styles.templateList} showsVerticalScrollIndicator={false}>
-              {TEXT_TEMPLATES.map((template) => {
-                const variables: TemplateVariables = {
-                  fname: record.first_name || 'there',
-                  loFullname: currentLOInfo 
-                    ? `${currentLOInfo.firstName} ${currentLOInfo.lastName}`.trim() 
-                    : 'Mario',
-                  loFname: currentLOInfo?.firstName || 'Mario',
-                  loPhone: currentLOInfo?.phone || '[Phone]',
-                  loEmail: currentLOInfo?.email || '[Email]',
-                  platform: isMeta ? (record as MetaLead).platform || 'Facebook' : 'our website',
-                };
-                const templateText = getTemplateText(template, useSpanishTemplates);
-                const preview = fillTemplate(templateText, variables);
-
-                return (
-                  <TouchableOpacity
-                    key={template.id}
-                    style={styles.templateItem}
-                    onPress={() => handleTemplateSelect(template.id)}
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View style={styles.templateModalContent}>
+                <View style={styles.templateModalHeader}>
+                  <Text style={styles.templateModalTitle}>
+                    {showCustomMessage
+                      ? 'Write Custom Message'
+                      : templateMode === 'text'
+                        ? (useSpanishTemplates ? 'Elegir Plantilla de Texto' : 'Choose a Text Template')
+                        : (useSpanishTemplates ? 'Elegir Plantilla de Correo' : 'Choose an Email Template')}
+                  </Text>
+                  <TouchableOpacity 
+                    onPress={() => {
+                      setShowTemplateModal(false);
+                      setShowCustomMessage(false);
+                      setCustomMessageText('');
+                    }}
+                    style={styles.templateModalClose}
                   >
-                    <Text style={styles.templateName}>{getTemplateName(template, useSpanishTemplates)}</Text>
-                    <Text style={styles.templatePreview} numberOfLines={8}>
-                      {preview}
-                    </Text>
+                    <Text style={styles.templateModalCloseText}>✕</Text>
                   </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+                </View>
+
+            {!showCustomMessage ? (
+              <>
+                {/* Custom Message Button */}
+                <TouchableOpacity
+                  style={styles.customMessageButton}
+                  onPress={() => setShowCustomMessage(true)}
+                >
+                  <Text style={styles.customMessageButtonText}>✏️ Write Custom Message</Text>
+                </TouchableOpacity>
+
+                {/* Language Toggle */}
+                <View style={styles.languageToggleContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.languageToggleButton,
+                      !useSpanishTemplates && styles.languageToggleButtonActive
+                    ]}
+                    onPress={() => setUseSpanishTemplates(false)}
+                  >
+                    <Text style={[
+                      styles.languageToggleText,
+                      !useSpanishTemplates && styles.languageToggleTextActive
+                    ]}>🇺🇸 English</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.languageToggleButton,
+                      useSpanishTemplates && styles.languageToggleButtonActive
+                    ]}
+                    onPress={() => setUseSpanishTemplates(true)}
+                  >
+                    <Text style={[
+                      styles.languageToggleText,
+                      useSpanishTemplates && styles.languageToggleTextActive
+                    ]}>🇪🇸 Español</Text>
+                  </TouchableOpacity>
+                </View>
+                
+                <ScrollView style={styles.templateList} showsVerticalScrollIndicator={false}>
+                  {TEXT_TEMPLATES.map((template) => {
+                    const variables: TemplateVariables = {
+                      fname: record.first_name || 'there',
+                      loFullname: currentLOInfo 
+                        ? `${currentLOInfo.firstName} ${currentLOInfo.lastName}`.trim() 
+                        : 'Mario',
+                      loFname: currentLOInfo?.firstName || 'Mario',
+                      loPhone: currentLOInfo?.phone || '[Phone]',
+                      loEmail: currentLOInfo?.email || '[Email]',
+                      platform: isMeta ? (record as MetaLead).platform || 'Facebook' : 'our website',
+                    };
+                    const templateText = getTemplateText(template, useSpanishTemplates);
+                    const preview = fillTemplate(templateText, variables);
+
+                    return (
+                      <TouchableOpacity
+                        key={template.id}
+                        style={styles.templateItem}
+                        onPress={() => handleTemplateSelect(template.id)}
+                      >
+                        <Text style={styles.templateName}>{getTemplateName(template, useSpanishTemplates)}</Text>
+                        <Text style={styles.templatePreview} numberOfLines={8}>
+                          {preview}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </>
+            ) : (
+              <ScrollView style={{ maxHeight: 500 }} contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
+                <TouchableOpacity
+                  style={styles.backToTemplatesButton}
+                  onPress={() => {
+                    setShowCustomMessage(false);
+                    setCustomMessageText('');
+                  }}
+                >
+                  <Text style={styles.backToTemplatesButtonText}>← Back to Templates</Text>
+                </TouchableOpacity>
+
+                <Text style={styles.customMessagePreview}>
+                  Hi {record.first_name || 'there'} 👋{'\n\n'}
+                </Text>
+
+                <TextInput
+                  style={styles.customMessageInput}
+                  placeholder="Type your message here..."
+                  placeholderTextColor="#999"
+                  value={customMessageText}
+                  onChangeText={setCustomMessageText}
+                  multiline
+                  autoFocus
+                />
+
+                <Text style={styles.customMessagePreview}>
+                  {'\n'}You can reach me at:{'\n'}
+                  📞 {currentLOInfo?.phone || '[Phone]'}{'\n'}
+                  📧 {currentLOInfo?.email || '[Email]'}
+                </Text>
+
+                <TouchableOpacity
+                  style={[
+                    styles.sendCustomMessageButton,
+                    !customMessageText.trim() && styles.sendCustomMessageButtonDisabled
+                  ]}
+                  onPress={handleCustomMessageSend}
+                  disabled={!customMessageText.trim()}
+                >
+                  <Text style={styles.sendCustomMessageButtonText}>Send</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            )}
+              </View>
+            </TouchableWithoutFeedback>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
 
       {/* Callback Reminder Modal */}
@@ -2195,49 +2341,51 @@ export function LeadDetailView({
         animationType="slide"
         onRequestClose={() => setShowCallbackModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.callbackModalContent}>
-            <View style={styles.templateModalHeader}>
-              <Text style={styles.templateModalTitle}>Schedule Callback</Text>
-              <TouchableOpacity
-                onPress={() => setShowCallbackModal(false)}
-                style={styles.templateModalClose}
-              >
-                <Text style={styles.templateModalCloseText}>✕</Text>
-              </TouchableOpacity>
-            </View>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View style={styles.callbackModalContent}>
+                <View style={styles.templateModalHeader}>
+                  <Text style={styles.templateModalTitle}>Schedule Callback</Text>
+                  <TouchableOpacity
+                    onPress={() => setShowCallbackModal(false)}
+                    style={styles.templateModalClose}
+                  >
+                    <Text style={styles.templateModalCloseText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
 
-            <Text style={styles.callbackLeadName}>
-              Lead: {fullName}
-            </Text>
+                <Text style={styles.callbackLeadName}>
+                  Lead: {fullName}
+                </Text>
 
-            {callbackDate && (
-              <View style={styles.callbackPickerWrapper}>
-                <DateTimePicker
-                  value={callbackDate}
-                  mode="datetime"
-                  display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                  onChange={(_event, date) => {
-                    if (date) setCallbackDate(date);
-                  }}
+                {callbackDate && (
+                  <View style={styles.callbackPickerWrapper}>
+                    <DateTimePicker
+                      value={callbackDate}
+                      mode="datetime"
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      onChange={(_event, date) => {
+                        if (date) setCallbackDate(date);
+                      }}
+                    />
+                  </View>
+                )}
+
+                {isMeta && 'platform' in record && 'ad_name' in record && record.platform && record.ad_name && (
+                  <Text style={styles.callbackMetaInfo}>
+                    ({record.platform}) {record.ad_name}
+                  </Text>
+                )}
+
+                <TextInput
+                  style={styles.callbackNoteInput}
+                  placeholder="Notes (optional)"
+                  placeholderTextColor="#999"
+                  value={callbackNote}
+                  onChangeText={setCallbackNote}
+                  multiline
                 />
-              </View>
-            )}
-
-            {isMeta && 'platform' in record && 'ad_name' in record && record.platform && record.ad_name && (
-              <Text style={styles.callbackMetaInfo}>
-                ({record.platform}) {record.ad_name}
-              </Text>
-            )}
-
-            <TextInput
-              style={styles.callbackNoteInput}
-              placeholder="Notes (optional)"
-              placeholderTextColor="#999"
-              value={callbackNote}
-              onChangeText={setCallbackNote}
-              multiline
-            />
 
             <TouchableOpacity
               style={[
@@ -2353,10 +2501,11 @@ export function LeadDetailView({
                 {savingCallback ? 'Saving…' : 'Save & Schedule Reminder'}
               </Text>
             </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </Modal>
     </View>
   );
 }
-
