@@ -58,6 +58,9 @@ export type LeadDetailViewProps = {
   searchQuery: string;
   selectedLOFilter: string | null;
   activeTab: 'leads' | 'meta' | 'all';
+  openToMessages?: boolean;
+  onMessagesOpened?: () => void;
+  onMarkMessagesRead?: (leadId: string) => void;
 };
 
 export function LeadDetailView({
@@ -76,6 +79,9 @@ export function LeadDetailView({
   searchQuery,
   selectedLOFilter,
   activeTab,
+  openToMessages,
+  onMessagesOpened,
+  onMarkMessagesRead,
 }: LeadDetailViewProps) {
   const { colors, isDark } = useThemeColors();
   const [activeDetailTab, setActiveDetailTab] = useState<'details' | 'messages'>('details');
@@ -114,6 +120,17 @@ export function LeadDetailView({
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
   // Micro animation for "Log Activity" button
   const logButtonScale = useRef(new Animated.Value(1)).current;
+
+  // Open to messages tab if coming from notification
+  useEffect(() => {
+    console.log('📱 LeadDetailView openToMessages effect:', { openToMessages, source: selected.source, id: selected.id });
+    if (openToMessages && selected.source === 'meta') {
+      console.log('📱 Switching to messages tab');
+      setActiveDetailTab('messages');
+      onMarkMessagesRead?.(selected.id);
+      onMessagesOpened?.();
+    }
+  }, [openToMessages, selected.id]);
 
   const animateLogButton = () => {
     Animated.sequence([
@@ -751,9 +768,11 @@ export function LeadDetailView({
     }
   }, [record?.id, fullName]);
 
-  // Reset to Details tab when navigating to a different lead
+  // Reset to Details tab when navigating to a different lead (unless coming from notification)
   useEffect(() => {
-    setActiveDetailTab('details');
+    if (!openToMessages) {
+      setActiveDetailTab('details');
+    }
   }, [record?.id]);
 
   // Set language preference based on lead's preferred_language
@@ -1387,7 +1406,10 @@ export function LeadDetailView({
               detailTabStyles.tab,
               activeDetailTab === 'messages' && detailTabStyles.tabActive,
             ]}
-            onPress={() => setActiveDetailTab('messages')}
+            onPress={() => {
+              setActiveDetailTab('messages');
+              onMarkMessagesRead?.(selected.id);
+            }}
           >
             <Ionicons
               name="chatbubbles-outline"

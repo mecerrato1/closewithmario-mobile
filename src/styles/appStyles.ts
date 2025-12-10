@@ -245,7 +245,7 @@ export const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#3B82F6', // blue dot
+    backgroundColor: '#EF4444', // red dot
     marginLeft: 6,
   },
   attentionBadgeText: {

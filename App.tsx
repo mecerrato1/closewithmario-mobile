@@ -38,6 +38,7 @@ import MortgageCalculatorScreen from './src/screens/MortgageCalculatorScreen';
 import { AppLockProvider, useAppLock } from './src/contexts/AppLockContext';
 import LockScreen from './src/screens/LockScreen';
 import QuoteOfTheDay from './src/components/dashboard/QuoteOfTheDay';
+import { registerForPushNotifications } from './src/lib/notifications';
 import { styles } from './src/styles/appStyles';
 import { useThemeColors } from './src/styles/theme';
 import { 
@@ -82,7 +83,7 @@ Notifications.setNotificationHandler({
 type LeadsScreenProps = {
   onSignOut: () => void;
   session: Session | null;
-  notificationLead?: { id: string; source: 'lead' | 'meta' } | null;
+  notificationLead?: { id: string; source: 'lead' | 'meta'; openToMessages?: boolean } | null;
   onNotificationHandled?: () => void;
 };
 
@@ -120,6 +121,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [todayCallbacks, setTodayCallbacks] = useState<any[]>([]);
   const [showCallbackHistory, setShowCallbackHistory] = useState(false);
   const [callbackHistory, setCallbackHistory] = useState<any[]>([]);
+  const [unreadMessageCounts, setUnreadMessageCounts] = useState<Record<string, number>>({});
   
   // Add Lead Modal state
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
@@ -533,6 +535,32 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           }
         }
 
+        // Fetch unread message counts for meta leads
+        if (safeMeta.length > 0) {
+          const leadIds = safeMeta.map(l => l.id);
+          const { data: unreadData, error: unreadError } = await supabase
+            .from('sms_messages')
+            .select('lead_id')
+            .in('lead_id', leadIds)
+            .eq('direction', 'inbound')
+            .is('read_at', null);
+          
+          console.log('📬 Unread messages query:', { unreadData, unreadError, leadIds: leadIds.length });
+          
+          if (!unreadError && unreadData) {
+            const counts: Record<string, number> = {};
+            unreadData.forEach(msg => {
+              if (msg.lead_id) {
+                counts[msg.lead_id] = (counts[msg.lead_id] || 0) + 1;
+              }
+            });
+            console.log('📬 Unread counts:', counts);
+            setUnreadMessageCounts(counts);
+          } else if (unreadError) {
+            console.error('📬 Unread messages error:', unreadError);
+          }
+        }
+
         if (leadsError && metaError) {
           setErrorMessage(
             `Error reading both tables: leads(${leadsError.message}), meta_ads(${metaError.message})`
@@ -609,12 +637,48 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     };
   }, [session?.user?.id, teamMemberId, userRole, leadEligible]);
 
+  // State for opening directly to messages tab (from notification)
+  const [openToMessages, setOpenToMessages] = useState(false);
+
+  // Subscribe to new inbound SMS messages to update unread dots in real-time
+  useEffect(() => {
+    if (metaLeads.length === 0) return;
+
+    const subscription = supabase
+      .channel('sms_messages_realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'sms_messages', filter: 'direction=eq.inbound' },
+        (payload) => {
+          const newMessage = payload.new as { lead_id: string | null; direction: string; read_at: string | null };
+          if (newMessage.lead_id && newMessage.direction === 'inbound' && !newMessage.read_at) {
+            console.log('📬 New inbound SMS received for lead:', newMessage.lead_id);
+            setUnreadMessageCounts(prev => ({
+              ...prev,
+              [newMessage.lead_id!]: (prev[newMessage.lead_id!] || 0) + 1
+            }));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [metaLeads.length > 0]);
+
   // Handle notification tap to navigate to lead
   useEffect(() => {
     if (notificationLead && !loading) {
+      console.log('📱 Notification tap received:', notificationLead);
       // Navigate directly to the lead using the source from notification
       setSelectedLead({ source: notificationLead.source, id: notificationLead.id });
       setShowDashboard(false);
+      // If notification has openToMessages flag, set it
+      if (notificationLead.openToMessages) {
+        console.log('📱 Setting openToMessages to true');
+        setOpenToMessages(true);
+      }
       onNotificationHandled?.();
     }
   }, [notificationLead, loading, onNotificationHandled]);
@@ -694,6 +758,27 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       setMetaLeads(safeMeta);
       setDebugInfo(`leads rows: ${safeLeads.length} · meta_ads rows: ${safeMeta.length}`);
 
+      // Refresh unread message counts
+      if (safeMeta.length > 0) {
+        const leadIds = safeMeta.map(l => l.id);
+        const { data: unreadData, error: unreadError } = await supabase
+          .from('sms_messages')
+          .select('lead_id')
+          .in('lead_id', leadIds)
+          .eq('direction', 'inbound')
+          .is('read_at', null);
+        
+        if (!unreadError && unreadData) {
+          const counts: Record<string, number> = {};
+          unreadData.forEach(msg => {
+            if (msg.lead_id) {
+              counts[msg.lead_id] = (counts[msg.lead_id] || 0) + 1;
+            }
+          });
+          setUnreadMessageCounts(counts);
+        }
+      }
+
       // Refresh today's callbacks as well
       if (session?.user?.id) {
         const todayStart = new Date();
@@ -765,6 +850,30 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       }
     } finally {
       setStatusUpdating(false);
+    }
+  };
+
+  // Mark messages as read for a lead
+  const markMessagesAsRead = async (leadId: string) => {
+    console.log('📬 markMessagesAsRead called for lead:', leadId);
+    console.trace('📬 Call stack:');
+    const { error } = await supabase
+      .from('sms_messages')
+      .update({ read_at: new Date().toISOString() })
+      .eq('lead_id', leadId)
+      .eq('direction', 'inbound')
+      .is('read_at', null);
+    
+    if (!error) {
+      console.log('📬 Messages marked as read successfully');
+      // Update local state to remove unread count
+      setUnreadMessageCounts(prev => {
+        const updated = { ...prev };
+        delete updated[leadId];
+        return updated;
+      });
+    } else {
+      console.error('📬 Error marking messages as read:', error);
     }
   };
 
@@ -1111,9 +1220,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               borderColor: colors.border,
             },
           ]}
-          onPress={() =>
-            setSelectedLead({ source: 'lead', id: item.id })
-          }
+          onPress={() => {
+            setOpenToMessages(false);
+            setSelectedLead({ source: 'lead', id: item.id });
+          }}
           activeOpacity={0.7}
         >
           <View style={styles.leadHeader}>
@@ -1237,7 +1347,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const borderColor = alert ? alert.color : '#7C3AED';
     const statusColors =
       STATUS_COLOR_MAP[item.status || 'new'] || STATUS_COLOR_MAP['new'];
-    const isUnread = !item.last_contact_date && (item.status === 'new' || !item.status);
+    const hasUnreadMessages = (unreadMessageCounts[item.id] || 0) > 0;
+    const isNewLead = !item.last_contact_date && (item.status === 'new' || !item.status);
+    const isUnread = isNewLead || hasUnreadMessages;
 
     const getPlatformBadge = (platform: string) => {
       const platformLower = platform.toLowerCase();
@@ -1308,9 +1420,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               borderColor: colors.border,
             },
           ]}
-          onPress={() =>
-            setSelectedLead({ source: 'meta', id: item.id })
-          }
+          onPress={() => {
+            setOpenToMessages(false); // Ensure we don't auto-switch to messages
+            setSelectedLead({ source: 'meta', id: item.id });
+          }}
           activeOpacity={0.7}
         >
           <View style={styles.leadHeader}>
@@ -1471,9 +1584,27 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         selected={selectedLead}
         leads={filteredLeads}
         metaLeads={filteredMetaLeads}
-        onBack={() => {
+        onBack={async () => {
           setSelectedLead(null);
+          setOpenToMessages(false); // Reset notification flag
           refreshTodayCallbacks(); // Refresh callbacks when returning to dashboard
+          // Refresh unread counts
+          if (metaLeads.length > 0) {
+            const leadIds = metaLeads.map(l => l.id);
+            const { data: unreadData } = await supabase
+              .from('sms_messages')
+              .select('lead_id')
+              .in('lead_id', leadIds)
+              .eq('direction', 'inbound')
+              .is('read_at', null);
+            if (unreadData) {
+              const counts: Record<string, number> = {};
+              unreadData.forEach(msg => {
+                if (msg.lead_id) counts[msg.lead_id] = (counts[msg.lead_id] || 0) + 1;
+              });
+              setUnreadMessageCounts(counts);
+            }
+          }
         }}
         onNavigate={(leadRef) => setSelectedLead(leadRef)}
         onStatusChange={handleStatusChange}
@@ -1484,6 +1615,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         searchQuery={searchQuery}
         selectedLOFilter={selectedLOFilter}
         activeTab={activeTab}
+        openToMessages={openToMessages}
+        onMessagesOpened={() => setOpenToMessages(false)}
+        onMarkMessagesRead={markMessagesAsRead}
         onDeleteLead={async (leadId: string) => {
           // Delete from database
           const { error } = await supabase
@@ -2125,6 +2259,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                     ]}
                     onPress={() => {
                       setShowDashboard(false);
+                      setOpenToMessages(false);
                       setSelectedLead({ source: lead._tableType, id: lead.id });
                     }}
                   >
@@ -3098,7 +3233,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 function RootApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
-  const [notificationLead, setNotificationLead] = useState<{ id: string; source: 'lead' | 'meta' } | null>(null);
+  const [notificationLead, setNotificationLead] = useState<{ id: string; source: 'lead' | 'meta'; openToMessages?: boolean } | null>(null);
   const { isLocked } = useAppLock();
 
   // Check for existing Supabase session on mount
@@ -3111,11 +3246,22 @@ function RootApp() {
       setSession(existingSession);
       setCheckingSession(false);
 
+      // Register for push notifications if user is logged in
+      console.log('📱 [Auth] Session check - user id:', existingSession?.user?.id || 'none');
+      if (existingSession?.user?.id) {
+        registerForPushNotifications(existingSession.user.id);
+      }
+
       // Listen for auth changes
       const {
         data: { subscription },
       } = supabase.auth.onAuthStateChange((_event, newSession) => {
         setSession(newSession);
+        // Register for push notifications when user signs in
+        if (newSession?.user?.id) {
+          console.log('📱 [Auth] Auth state changed - registering for notifications');
+          registerForPushNotifications(newSession.user.id);
+        }
       });
 
       return () => {
@@ -3140,7 +3286,8 @@ function RootApp() {
           leadSource &&
           (leadSource === 'lead' || leadSource === 'meta')
         ) {
-          setNotificationLead({ id: leadId, source: leadSource });
+          // Open to messages tab for SMS notifications
+          setNotificationLead({ id: leadId, source: leadSource, openToMessages: true });
         }
       });
 
