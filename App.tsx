@@ -286,7 +286,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   // Collapsing header animation for dashboard view
   const dashboardScrollY = useRef(new Animated.Value(0)).current;
-  const DASHBOARD_HEADER_EXPANDED = userRole === 'super_admin' ? 420 : 460;
+  const DASHBOARD_HEADER_EXPANDED = userRole === 'super_admin' ? 440 : 460;
   const DASHBOARD_HEADER_COLLAPSED = 230;
   const HEADER_SCROLL_DISTANCE = DASHBOARD_HEADER_EXPANDED - DASHBOARD_HEADER_COLLAPSED;
 
