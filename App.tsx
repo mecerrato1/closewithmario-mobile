@@ -103,6 +103,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [showDashboard, setShowDashboard] = useState(true);
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
   const [attentionFilter, setAttentionFilter] = useState(false);
+  const [unreadFilter, setUnreadFilter] = useState(false);
   const [hasManuallySelectedTab, setHasManuallySelectedTab] = useState(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [loanOfficers, setLoanOfficers] = useState<Array<{ id: string; name: string }>>([]);
@@ -1144,6 +1145,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     return !!getLeadAlert(lead);
   };
 
+  // Unread messages filter: when enabled, only show leads with unread messages
+  const matchesUnreadFilter = (lead: Lead | MetaLead) => {
+    if (!unreadFilter) return true;
+    return (unreadMessageCounts[lead.id] || 0) > 0;
+  };
+
   // Source filter (for super admins only)
   const matchesSourceFilter = (lead: Lead | MetaLead) => {
     // Only apply filter for super admins
@@ -1823,23 +1830,58 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   </Text>
                 </View>
               </View>
-              <TouchableOpacity 
-                onPress={() => setShowProfileMenu(true)}
-                style={styles.profileButton}
-              >
-                {getAvatarUrl(session?.user?.user_metadata) ? (
-                  <Image 
-                    source={{ uri: getAvatarUrl(session?.user?.user_metadata) || '' }}
-                    style={styles.profileButtonAvatar}
-                  />
-                ) : (
-                  <View style={styles.profileButtonPlaceholder}>
-                    <Text style={styles.profileButtonText}>
-                      {session?.user?.email?.[0]?.toUpperCase() || 'U'}
-                    </Text>
-                  </View>
-                )}
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                {/* Notification Bell */}
+                <TouchableOpacity 
+                  onPress={() => {
+                    setShowDashboard(false);
+                    setSelectedStatusFilter('all');
+                    setActiveTab('meta'); // Unread messages are only for meta leads
+                    setUnreadFilter(true);
+                  }}
+                  style={{ position: 'relative' }}
+                >
+                  <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
+                  {Object.values(unreadMessageCounts).reduce((a, b) => a + b, 0) > 0 && (
+                    <View style={{
+                      position: 'absolute',
+                      top: -4,
+                      right: -4,
+                      backgroundColor: '#EF4444',
+                      borderRadius: 10,
+                      minWidth: 18,
+                      height: 18,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      paddingHorizontal: 4,
+                    }}>
+                      <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
+                        {Object.values(unreadMessageCounts).reduce((a, b) => a + b, 0) > 99 
+                          ? '99+' 
+                          : Object.values(unreadMessageCounts).reduce((a, b) => a + b, 0)}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+                {/* Profile Button */}
+                <TouchableOpacity 
+                  onPress={() => setShowProfileMenu(true)}
+                  style={styles.profileButton}
+                >
+                  {getAvatarUrl(session?.user?.user_metadata) ? (
+                    <Image 
+                      source={{ uri: getAvatarUrl(session?.user?.user_metadata) || '' }}
+                      style={styles.profileButtonAvatar}
+                    />
+                  ) : (
+                    <View style={styles.profileButtonPlaceholder}>
+                      <Text style={styles.profileButtonText}>
+                        {session?.user?.email?.[0]?.toUpperCase() || 'U'}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </Animated.View>
 
@@ -1870,6 +1912,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 onPress={() => {
                   triggerListAnimation();
                   setAttentionFilter(false);
+                  setUnreadFilter(false);
                   setActiveTab('meta');
                   setSelectedStatusFilter('all');
                   setSelectedSourceFilter('all');
@@ -1885,6 +1928,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 onPress={() => {
                   triggerListAnimation();
                   setAttentionFilter(false);
+                  setUnreadFilter(false);
                   setActiveTab('leads');
                   setSelectedStatusFilter('all');
                   setSelectedSourceFilter('all');
@@ -1900,6 +1944,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 onPress={() => {
                   triggerListAnimation();
                   setAttentionFilter(false);
+                  setUnreadFilter(false);
                   setActiveTab('all');
                   setSelectedStatusFilter('all');
                   setSelectedSourceFilter('all');
@@ -2148,6 +2193,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 style={[styles.performanceCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
                 onPress={() => {
                   setAttentionFilter(false);
+                  setUnreadFilter(false);
                   setActiveTab('all');
                   setSelectedStatusFilter('new');
                   setSelectedSourceFilter('all');
@@ -2162,6 +2208,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 style={[styles.performanceCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
                 onPress={() => {
                   setAttentionFilter(false);
+                  setUnreadFilter(false);
                   setActiveTab('all');
                   setSelectedStatusFilter('qualified');
                   setSelectedSourceFilter('all');
@@ -2176,6 +2223,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 style={[styles.performanceCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
                 onPress={() => {
                   setAttentionFilter(false);
+                  setUnreadFilter(false);
                   setActiveTab('all');
                   setSelectedStatusFilter('closed');
                   setSelectedSourceFilter('all');
@@ -2192,6 +2240,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 onPress={() => {
                   triggerListAnimation();
                   setAttentionFilter(true);
+                  setUnreadFilter(false);
                   setActiveTab('all');
                   setSelectedStatusFilter('all');
                   setSelectedSourceFilter('all');
@@ -2323,6 +2372,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               setSelectedStatusFilter('all');
               setSelectedSourceFilter('all');
               setAttentionFilter(false);
+              setUnreadFilter(false);
               setSearchQuery('');
             }} 
             style={styles.homeButton}
@@ -2478,6 +2528,86 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
       {!loading && !errorMessage && (hasLeads || hasMetaLeads) && (
         <>
+          {/* Unread Filter Active Indicator */}
+          {unreadFilter && (
+            <View style={{ 
+              backgroundColor: '#FFFFFF', 
+              marginHorizontal: 16, 
+              marginTop: 8,
+              marginBottom: 8, 
+              borderRadius: 12,
+              padding: 10,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 1 },
+              shadowOpacity: 0.1,
+              shadowRadius: 2,
+              elevation: 2,
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={{ 
+                  backgroundColor: '#EF4444', 
+                  width: 28, 
+                  height: 28, 
+                  borderRadius: 14, 
+                  justifyContent: 'center', 
+                  alignItems: 'center',
+                  marginRight: 10,
+                }}>
+                  <Ionicons name="notifications" size={16} color="#FFFFFF" />
+                </View>
+                <Text style={{ color: '#1F2937', fontWeight: '600', fontSize: 14 }}>
+                  Showing Unread Messages
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setUnreadFilter(false)}>
+                <Ionicons name="close-circle" size={24} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* No Unread Messages State */}
+          {unreadFilter && Object.values(unreadMessageCounts).reduce((a, b) => a + b, 0) === 0 && (
+            <View style={{ 
+              alignItems: 'center', 
+              paddingVertical: 40,
+              paddingHorizontal: 20,
+            }}>
+              <Ionicons name="checkmark-circle" size={64} color="#10B981" />
+              <Text style={{ 
+                fontSize: 18, 
+                fontWeight: '600', 
+                color: '#1F2937', 
+                marginTop: 16,
+                textAlign: 'center',
+              }}>
+                All caught up!
+              </Text>
+              <Text style={{ 
+                fontSize: 14, 
+                color: '#6B7280', 
+                marginTop: 8,
+                textAlign: 'center',
+              }}>
+                You have no unread messages
+              </Text>
+              <TouchableOpacity 
+                onPress={() => setUnreadFilter(false)}
+                style={{
+                  marginTop: 20,
+                  backgroundColor: '#7C3AED',
+                  paddingHorizontal: 20,
+                  paddingVertical: 10,
+                  borderRadius: 20,
+                }}
+              >
+                <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>View All Leads</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* Filter Buttons Row */}
           <View style={[styles.filterButtonContainer, { flexWrap: 'wrap' }]}>
             {/* Status Filter */}
@@ -2905,6 +3035,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               const loMatch = matchesLOFilter(lead);
               const attentionMatch = matchesAttentionFilter(lead);
               const sourceMatch = matchesSourceFilter(lead);
+              const unreadMatch = matchesUnreadFilter(lead);
               
               console.log('📋 Meta tab filter', {
                 leadId: lead.id,
@@ -2914,12 +3045,14 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 loMatch,
                 attentionMatch,
                 sourceMatch,
+                unreadMatch,
                 selectedStatusFilter,
                 attentionFilter,
                 selectedSourceFilter,
+                unreadFilter,
               });
               
-              return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch;
+              return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch && unreadMatch;
             })}
             renderItem={renderMetaLeadItem}
             keyExtractor={(item) => item.id}
