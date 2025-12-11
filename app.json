@@ -2,7 +2,7 @@
   "expo": {
     "name": "closewithmario-mobile",
     "slug": "closewithmario-mobile",
-    "version": "1.1.42",
+    "version": "1.1.43",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.closewithmario.mobile",
-      "buildNumber": "58",
+      "buildNumber": "59",
       "associatedDomains": [
         "applinks:hxpvcaspgdgsehrehbhl.supabase.co",
         "webcredentials:closewithmario.com"

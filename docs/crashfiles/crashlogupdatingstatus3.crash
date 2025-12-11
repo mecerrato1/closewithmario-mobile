@@ -1,0 +1,184 @@
+Incident Identifier: 72342366-0D36-47D4-9082-12185E099B5A
+Distributor ID:      com.apple.TestFlight
+Hardware Model:      iPhone14,3
+Process:             closewithmariomobile [23438]
+Path:                /private/var/containers/Bundle/Application/3828842E-AAFF-4472-BC10-A213A7E96643/closewithmariomobile.app/closewithmariomobile
+Identifier:          com.closewithmario.mobile
+Version:             1.1.35 (37)
+AppStoreTools:       17B101
+AppVariant:          1:iPhone14,3:26
+Beta:                YES
+Code Type:           ARM-64 (Native)
+Role:                Foreground
+Parent Process:      launchd [1]
+Coalition:           com.closewithmario.mobile [4906]
+
+Date/Time:           2025-12-05 13:12:50.9096 -0500
+Launch Time:         2025-12-05 12:55:53.2248 -0500
+OS Version:          iPhone OS 26.1 (23B85)
+Release Type:        User
+Baseband Version:    5.02.02
+Report Version:      104
+
+Exception Type:  EXC_BAD_ACCESS (SIGSEGV)
+Exception Subtype: KERN_INVALID_ADDRESS at 0x0000000001ffeff0
+Exception Codes: 0x0000000000000001, 0x0000000001ffeff0
+VM Region Info: 0x1ffeff0 is not in any region.  Bytes before following region: 4338110480
+      REGION TYPE                 START - END      [ VSIZE] PRT/MAX SHRMOD  REGION DETAIL
+      UNUSED SPACE AT START
+--->  
+      __TEXT                   104924000-104928000 [   16K] r-x/r-x SM=COW  /var/containers/Bundle/Application/3828842E-AAFF-4472-BC10-A213A7E96643/closewithmariomobile.app/closewithmariomobile
+Termination Reason: SIGNAL 11 Segmentation fault: 11
+Terminating Process: exc handler [23438]
+
+Triggered by Thread:  2
+
+
+Thread 0 name:
+Thread 0:
+0   libsystem_kernel.dylib        	0x000000022f4b3cd4 mach_msg2_trap + 8 (:-1)
+1   libsystem_kernel.dylib        	0x000000022f4b72f8 mach_msg2_internal + 76 (mach_msg.c:201)
+2   libsystem_kernel.dylib        	0x000000022f4b7214 mach_msg_overwrite + 428 (mach_msg.c:0)
+3   libsystem_kernel.dylib        	0x000000022f4b705c mach_msg + 24 (mach_msg.c:323)
+4   CoreFoundation                	0x0000000185bb0868 __CFRunLoopServiceMachPort + 160 (CFRunLoop.c:2650)
+5   CoreFoundation                	0x0000000185b87848 __CFRunLoopRun + 1188 (CFRunLoop.c:3035)
+6   CoreFoundation                	0x0000000185b86a6c _CFRunLoopRunSpecificWithOptions + 532 (CFRunLoop.c:3462)
+7   GraphicsServices              	0x0000000226798498 GSEventRunModal + 120 (GSEvent.c:2049)
+8   UIKitCore                     	0x000000018b54aba4 -[UIApplication _run] + 792 (UIApplication.m:3902)
+9   UIKitCore                     	0x000000018b4f3a78 UIApplicationMain + 336 (UIApplication.m:5577)
+10  closewithmariomobile          	0x0000000104929620 main + 64 (AppDelegate.swift:6)
+11  dyld                          	0x0000000182b9ee28 start + 7116 (dyldMain.cpp:1477)
+
+Thread 1 name:
+Thread 1:
+0   libsystem_kernel.dylib        	0x000000022f4b3cd4 mach_msg2_trap + 8 (:-1)
+1   libsystem_kernel.dylib        	0x000000022f4b72f8 mach_msg2_internal + 76 (mach_msg.c:201)
+2   libsystem_kernel.dylib        	0x000000022f4b7214 mach_msg_overwrite + 428 (mach_msg.c:0)
+3   libsystem_kernel.dylib        	0x000000022f4b705c mach_msg + 24 (mach_msg.c:323)
+4   CoreFoundation                	0x0000000185bb0868 __CFRunLoopServiceMachPort + 160 (CFRunLoop.c:2650)
+5   CoreFoundation                	0x0000000185b87848 __CFRunLoopRun + 1188 (CFRunLoop.c:3035)
+6   CoreFoundation                	0x0000000185b86a6c _CFRunLoopRunSpecificWithOptions + 532 (CFRunLoop.c:3462)
+7   Foundation                    	0x0000000183b82d60 -[NSRunLoop(NSRunLoop) runMode:beforeDate:] + 212 (NSRunLoop.m:375)
+8   Foundation                    	0x0000000183b82f38 -[NSRunLoop(NSRunLoop) runUntilDate:] + 64 (NSRunLoop.m:422)
+9   UIKitCore                     	0x000000018b51fcac -[UIEventFetcher threadMain] + 408 (UIEventFetcher.m:1333)
+10  Foundation                    	0x000000018324221c __NSThread__start__ + 732 (NSThread.m:997)
+11  libsystem_pthread.dylib       	0x00000001e1bd544c _pthread_start + 136 (pthread.c:931)
+12  libsystem_pthread.dylib       	0x00000001e1bd18cc thread_start + 8 (:-1)
+
+Thread 2 name:
+Thread 2 Crashed:
+0   hermes                        	0x00000001065b1578 hermes::vm::PointerBase::basedToPointer(hermes::vm::BasedPointer) const + 16 (PointerBase.h:213)
+1   hermes                        	0x00000001065b1578 hermes::vm::PointerBase::basedToPointerNonNull(hermes::vm::BasedPointer) const + 16 (PointerBase.h:196)
+2   hermes                        	0x00000001065b1578 hermes::vm::CompressedPointer::getNonNull(hermes::vm::PointerBase&) const + 20 (CompressedPointer.h:50)
+3   hermes                        	0x00000001065b1578 hermes::vm::GCPointer<hermes::vm::HiddenClass>::getNonNull(hermes::vm::PointerBase&) const + 20 (GCPointer.h:86)
+4   hermes                        	0x00000001065b1578 hermes::vm::JSObject::tryGetOwnNamedDescriptorFast(hermes::vm::JSObject*, hermes::vm::Runtime&, hermes::vm::SymbolID, hermes::vm::NamedPropertyDescriptor&) + 40 (JSObject.h:1867)
+5   hermes                        	0x0000000106589264 hermes::vm::CallResult<hermes::vm::HermesValue, (hermes::vm::detail::CallResultSpecialize)2> hermes::vm::Interpreter::interpretFunction<false, false>(hermes::vm::Runtime&, hermes::vm::InterpreterSt... + 6420 (:-1)
+6   hermes                        	0x0000000106587928 hermes::vm::Runtime::interpretFunctionImpl(hermes::vm::CodeBlock*) + 52 (:-1)
+7   hermes                        	0x000000010657a288 hermes::vm::JSFunction::_callImpl(hermes::vm::Handle<hermes::vm::Callable>, hermes::vm::Runtime&) + 40 (:-1)
+8   hermes                        	0x0000000106578a78 hermes::vm::Callable::executeCall0(hermes::vm::Handle<hermes::vm::Callable>, hermes::vm::Runtime&, hermes::vm::Handle<hermes::vm::HermesValue>, bool) + 156 (:-1)
+9   hermes                        	0x00000001065b70dc hermes::vm::Runtime::drainJobs() + 240 (:-1)
+10  hermes                        	0x000000010655c318 facebook::hermes::(anonymous namespace)::HermesRuntimeImpl::drainMicrotasks(int) + 36 (:-1)
+11  React                         	0x0000000105caa108 facebook::react::RuntimeScheduler_Modern::performMicrotaskCheckpoint(facebook::jsi::Runtime&) + 108 (:-1)
+12  React                         	0x0000000105ca9fa0 facebook::react::RuntimeScheduler_Modern::runEventLoopTick(facebook::jsi::Runtime&, facebook::react::Task&) + 172 (:-1)
+13  React                         	0x0000000105ca9d14 facebook::react::RuntimeScheduler_Modern::runEventLoop(facebook::jsi::Runtime&) + 96 (:-1)
+14  React                         	0x0000000105ccf094 _ZNSt3__110__function6__funcIZZN8facebook5react13ReactInstanceC1ENS_10unique_ptrINS3_9JSRuntimeENS_14default_deleteIS6_EEEENS_10shared_ptrINS3_18MessageQueueThreadEEENSA_INS3_12TimerManagerEEENS_8f... + 116 (:-1)
+15  React                         	0x0000000105ae95d8 facebook::react::tryAndReturnError(std::__1::function<void ()> const&) + 32 (:-1)
+16  React                         	0x0000000105ae4560 facebook::react::RCTMessageThread::tryFunc(std::__1::function<void ()> const&) + 24 (:-1)
+17  React                         	0x0000000105ae4364 invocation function for block in facebook::react::RCTMessageThread::runAsync(std::__1::function<void ()>) + 44 (:-1)
+18  CoreFoundation                	0x0000000185b86320 __CFRUNLOOP_IS_CALLING_OUT_TO_A_BLOCK__ + 28 (CFRunLoop.c:1845)
+19  CoreFoundation                	0x0000000185b85fec __CFRunLoopDoBlocks + 396 (CFRunLoop.c:1897)
+20  CoreFoundation                	0x0000000185b87cd8 __CFRunLoopRun + 2356 (CFRunLoop.c:3231)
+21  CoreFoundation                	0x0000000185b86a6c _CFRunLoopRunSpecificWithOptions + 532 (CFRunLoop.c:3462)
+22  React                         	0x0000000105ce4f14 +[RCTJSThreadManager runRunLoop] + 252 (:-1)
+23  Foundation                    	0x000000018324221c __NSThread__start__ + 732 (NSThread.m:997)
+24  libsystem_pthread.dylib       	0x00000001e1bd544c _pthread_start + 136 (pthread.c:931)
+25  libsystem_pthread.dylib       	0x00000001e1bd18cc thread_start + 8 (:-1)
+
+Thread 3 name:
+Thread 3:
+0   libsystem_kernel.dylib        	0x000000022f4b95d4 __psynch_cvwait + 8 (:-1)
+1   libsystem_pthread.dylib       	0x00000001e1bd3b58 _pthread_cond_wait + 984 (pthread_cond.c:862)
+2   libc++.1.dylib                	0x0000000194d396fc std::__1::condition_variable::wait(std::__1::unique_lock<std::__1::mutex>&) + 32 (condition_variable.cpp:30)
+3   hermes                        	0x00000001066239c4 hermes::vm::HadesGC::Executor::worker() + 116 (:-1)
+4   hermes                        	0x000000010662392c void* std::__1::__thread_proxy[abi:nn180100]<std::__1::tuple<std::__1::unique_ptr<std::__1::__thread_struct, std::__1::default_delete<std::__1::__thread_struct>>, hermes::vm::HadesGC::Executor::Exe... + 44 (:-1)
+5   libsystem_pthread.dylib       	0x00000001e1bd544c _pthread_start + 136 (pthread.c:931)
+6   libsystem_pthread.dylib       	0x00000001e1bd18cc thread_start + 8 (:-1)
+
+Thread 4 name:
+Thread 4:
+0   libsystem_kernel.dylib        	0x000000022f4b3cd4 mach_msg2_trap + 8 (:-1)
+1   libsystem_kernel.dylib        	0x000000022f4b72f8 mach_msg2_internal + 76 (mach_msg.c:201)
+2   libsystem_kernel.dylib        	0x000000022f4b7214 mach_msg_overwrite + 428 (mach_msg.c:0)
+3   libsystem_kernel.dylib        	0x000000022f4b705c mach_msg + 24 (mach_msg.c:323)
+4   CoreFoundation                	0x0000000185bb0868 __CFRunLoopServiceMachPort + 160 (CFRunLoop.c:2650)
+5   CoreFoundation                	0x0000000185b87848 __CFRunLoopRun + 1188 (CFRunLoop.c:3035)
+6   CoreFoundation                	0x0000000185b86a6c _CFRunLoopRunSpecificWithOptions + 532 (CFRunLoop.c:3462)
+7   CFNetwork                     	0x000000019a86fc14 +[__CFN_CoreSchedulingSetRunnable _run:] + 416 (CoreSchedulingSet.mm:1473)
+8   Foundation                    	0x000000018324221c __NSThread__start__ + 732 (NSThread.m:997)
+9   libsystem_pthread.dylib       	0x00000001e1bd544c _pthread_start + 136 (pthread.c:931)
+10  libsystem_pthread.dylib       	0x00000001e1bd18cc thread_start + 8 (:-1)
+
+Thread 5 name:
+Thread 5:
+0   libsystem_kernel.dylib        	0x000000022f4b3cd4 mach_msg2_trap + 8 (:-1)
+1   libsystem_kernel.dylib        	0x000000022f4b72f8 mach_msg2_internal + 76 (mach_msg.c:201)
+2   libsystem_kernel.dylib        	0x000000022f4b7214 mach_msg_overwrite + 428 (mach_msg.c:0)
+3   libsystem_kernel.dylib        	0x000000022f4b705c mach_msg + 24 (mach_msg.c:323)
+4   CoreFoundation                	0x0000000185bb0868 __CFRunLoopServiceMachPort + 160 (CFRunLoop.c:2650)
+5   CoreFoundation                	0x0000000185b87848 __CFRunLoopRun + 1188 (CFRunLoop.c:3035)
+6   CoreFoundation                	0x0000000185b86a6c _CFRunLoopRunSpecificWithOptions + 532 (CFRunLoop.c:3462)
+7   Foundation                    	0x0000000183b82d60 -[NSRunLoop(NSRunLoop) runMode:beforeDate:] + 212 (NSRunLoop.m:375)
+8   ReactNativeDependencies       	0x00000001050a3fd8 -[SRRunLoopThread main] + 216 (:-1)
+9   Foundation                    	0x000000018324221c __NSThread__start__ + 732 (NSThread.m:997)
+10  libsystem_pthread.dylib       	0x00000001e1bd544c _pthread_start + 136 (pthread.c:931)
+11  libsystem_pthread.dylib       	0x00000001e1bd18cc thread_start + 8 (:-1)
+
+Thread 6 name:
+Thread 6:
+0   libsystem_kernel.dylib        	0x000000022f4bb36c __select + 8 (:-1)
+1   CoreFoundation                	0x0000000185c30840 __CFSocketManager + 708 (CFSocket.c:1341)
+2   libsystem_pthread.dylib       	0x00000001e1bd544c _pthread_start + 136 (pthread.c:931)
+3   libsystem_pthread.dylib       	0x00000001e1bd18cc thread_start + 8 (:-1)
+
+Thread 7:
+
+Thread 8:
+
+Thread 9:
+
+Thread 10:
+
+Thread 11:
+
+
+Thread 2 crashed with ARM Thread State (64-bit):
+    x0: 0x000000010d33def8   x1: 0x0000000144005000   x2: 0x000000000000001f   x3: 0x000000016bad9748
+    x4: 0x0000000e0000000e   x5: 0x000000000000000e   x6: 0x000000016bad97e8   x7: 0x000000016bad9630
+    x8: 0x0000000001ffefe0   x9: 0x0000000000000000  x10: 0x0000000144438000  x11: 0xffff000000000000
+   x12: 0xffff00010d6c99f8  x13: 0x000000010670e920  x14: 0x0000000000000000  x15: 0x000000010d54120c
+   x16: 0x000000029c1213c0  x17: 0x0000000000000600  x18: 0x0000000000000000  x19: 0x0000000000000001
+   x20: 0x0000000001ffefe0  x21: 0x0000000144005010  x22: 0x0000000001ffefe0  x23: 0x000000010d33def8
+   x24: 0x0000000144327bd8  x25: 0x0000000104f78140  x26: 0x000000010579f963  x27: 0x0000000000000000
+   x28: 0x0000000144327bb0   fp: 0x000000016bad9650   lr: 0x0000000106589264
+    sp: 0x000000016bad9630   pc: 0x00000001065b1578 cpsr: 0x80001000
+   esr: 0x92000006 (Data Abort) byte read Translation fault
+
+
+Binary Images:
+        0x104924000 -         0x104bbffff closewithmariomobile arm64  <1f3231b49e50397ab22cc0d72dafc4bf> /var/containers/Bundle/Application/3828842E-AAFF-4472-BC10-A213A7E96643/closewithmariomobile.app/closewithmariomobile
+        0x104db4000 -         0x104dbffff libobjc-trampolines.dylib arm64e  <a068c18d51c33c9aa2875c9c122ada7d> /private/preboot/Cryptexes/OS/usr/lib/libobjc-trampolines.dylib
+        0x105078000 -         0x1050fffff ReactNativeDependencies arm64  <b35f1182b82e33728a74a4fe502c0906> /private/var/containers/Bundle/Application/3828842E-AAFF-4472-BC10-A213A7E96643/closewithmariomobile.app/Frameworks/ReactNativeDependencies.framework/ReactNativeDependencies
+        0x105a44000 -         0x105e7ffff React arm64  <76fbcee9351730b39dc662c4e914e908> /private/var/containers/Bundle/Application/3828842E-AAFF-4472-BC10-A213A7E96643/closewithmariomobile.app/Frameworks/React.framework/React
+        0x106554000 -         0x106757fff hermes arm64  <80d5528f2c783b90b90f747e89a9f880> /private/var/containers/Bundle/Application/3828842E-AAFF-4472-BC10-A213A7E96643/closewithmariomobile.app/Frameworks/hermes.framework/hermes
+        0x182b9a000 -         0x182c38ad7 dyld arm64e  <ef27e3863cff3752b152d96a0aa9effd> /usr/lib/dyld
+        0x1831e0000 -         0x1840267df Foundation arm64e  <218da4dc727a3341b59e8fdb39a2d7c4> /System/Library/Frameworks/Foundation.framework/Foundation
+        0x185b6a000 -         0x1860ee5ff CoreFoundation arm64e  <b4a0233bf37d3ef6a977e4f36199c5a4> /System/Library/Frameworks/CoreFoundation.framework/CoreFoundation
+        0x18b4ad000 -         0x18d8fb0df UIKitCore arm64e  <a0e1cefbfd0136f9b82351b092e4dbc6> /System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore
+        0x194d17000 -         0x194da9de3 libc++.1.dylib arm64e  <e48ff12207063a36980f32612622047e> /usr/lib/libc++.1.dylib
+        0x19a627000 -         0x19a9dcddf CFNetwork arm64e  <767c6ad713573bc682c780d710c4c815> /System/Library/Frameworks/CFNetwork.framework/CFNetwork
+        0x1e1bd1000 -         0x1e1bdd44f libsystem_pthread.dylib arm64e  <6e1be86b581a306790653412103e1df4> /usr/lib/system/libsystem_pthread.dylib
+        0x226797000 -         0x22679f7ff GraphicsServices arm64e  <3688150f0fff38a4914910b3c47b53b1> /System/Library/PrivateFrameworks/GraphicsServices.framework/GraphicsServices
+        0x22f4b3000 -         0x22f4edd2b libsystem_kernel.dylib arm64e  <ff136c45738b3f6e82e57340e51a1478> /usr/lib/system/libsystem_kernel.dylib
+        0x29c120000 -         0x29c127e4b libsystem_platform.dylib arm64e  <841ee35f10433a0fbfb8e0a8f5dc616e> /usr/lib/system/libsystem_platform.dylib
+
+EOF

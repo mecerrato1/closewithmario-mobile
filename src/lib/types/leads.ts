@@ -89,3 +89,16 @@ export type AttentionBadge = {
   label: string;
   color: string;
 } | null;
+
+// AI-powered attention data from GPT analysis
+export type AiAttentionData = {
+  leadId: string;
+  needsAttention: boolean;
+  priority: number; // 1-5, 1 = highest
+  badge: string; // Short display label like "High: Call Today"
+  reason: string;
+  suggestedAction: string;
+  fromCache: boolean;
+  loading: boolean;
+  error?: string;
+};

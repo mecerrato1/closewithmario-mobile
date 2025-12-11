@@ -61,6 +61,8 @@ export type LeadDetailViewProps = {
   openToMessages?: boolean;
   onMessagesOpened?: () => void;
   onMarkMessagesRead?: (leadId: string) => void;
+  onInvalidateAttention?: (leadId: string) => Promise<void>;
+  aiAttention?: { needsAttention: boolean; priority: number; badge: string } | null;
 };
 
 export function LeadDetailView({
@@ -82,6 +84,8 @@ export function LeadDetailView({
   openToMessages,
   onMessagesOpened,
   onMarkMessagesRead,
+  onInvalidateAttention,
+  aiAttention,
 }: LeadDetailViewProps) {
   const { colors, isDark } = useThemeColors();
   const [activeDetailTab, setActiveDetailTab] = useState<'details' | 'messages'>('details');
@@ -304,12 +308,19 @@ export function LeadDetailView({
   const status = record.status || 'No status';
   const email = record.email || '';
   const phone = record.phone || '';
-  const attentionBadge = getLeadAlert(record);
+  
+  // Use AI attention badge if available, otherwise fall back to rule-based
+  // Show AI badge if we have AI data (even if needsAttention is false - shows "No Action Needed")
+  const ruleBadge = getLeadAlert(record);
+  const attentionBadge = aiAttention?.badge 
+    ? { label: aiAttention.badge, color: aiAttention.priority <= 2 ? '#EF4444' : aiAttention.priority <= 4 ? '#F59E0B' : '#22C55E' }
+    : ruleBadge;
   
   console.log('🔍 LeadDetailView render:', { 
     leadId: record.id, 
     last_contact_date: record.last_contact_date,
-    attentionBadge: attentionBadge ? attentionBadge.label : 'none'
+    attentionBadge: attentionBadge ? attentionBadge.label : 'none',
+    aiAttention: aiAttention ? { badge: aiAttention.badge, priority: aiAttention.priority } : 'none'
   });
 
   const handleCall = async () => {
@@ -347,6 +358,11 @@ export function LeadDetailView({
         const updatedLead = { ...record, last_contact_date: now };
         console.log('📞 CALL: Updating lead', { id: updatedLead.id, last_contact_date: now, source: isMeta ? 'meta' : 'lead' });
         onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
+        
+        // Invalidate AI attention cache to get fresh analysis
+        if (onInvalidateAttention) {
+          onInvalidateAttention(record.id);
+        }
         
         // Refresh activities to show the new log
         const { data } = await supabase
@@ -1110,6 +1126,11 @@ export function LeadDetailView({
         // Update the lead in parent component state
         const updatedLead = { ...record, last_contact_date: now };
         onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
+        
+        // Invalidate AI attention cache to get fresh analysis
+        if (onInvalidateAttention) {
+          onInvalidateAttention(record.id);
+        }
         
         setActivities([data, ...activities]);
         setTaskNote('');

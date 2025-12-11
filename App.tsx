@@ -36,6 +36,7 @@ import { LeadDetailView } from './src/screens/LeadDetailScreen';
 import TeamManagementScreen from './src/screens/TeamManagementScreen';
 import MortgageCalculatorScreen from './src/screens/MortgageCalculatorScreen';
 import { AppLockProvider, useAppLock } from './src/contexts/AppLockContext';
+import { useAiLeadAttention } from './src/hooks/useAiLeadAttention';
 import LockScreen from './src/screens/LockScreen';
 import QuoteOfTheDay from './src/components/dashboard/QuoteOfTheDay';
 import { registerForPushNotifications } from './src/lib/notifications';
@@ -123,6 +124,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [showCallbackHistory, setShowCallbackHistory] = useState(false);
   const [callbackHistory, setCallbackHistory] = useState<any[]>([]);
   const [unreadMessageCounts, setUnreadMessageCounts] = useState<Record<string, number>>({});
+  
+  // AI Lead Attention - fetch from cache/API
+  const { fetchBatchAttention, getAttention, invalidateAttention, attentionMap } = useAiLeadAttention();
+  const [aiDataLoaded, setAiDataLoaded] = useState(0); // Counter to force re-render when AI data loads
   
   // Add Lead Modal state
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
@@ -509,8 +514,23 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         setLeads(safeLeads);
         setMetaLeads(safeMeta);
 
+        // Fetch AI attention data for all leads
+        const allLeadIds = [...safeLeads.map(l => l.id), ...safeMeta.map(l => l.id)];
+        if (allLeadIds.length > 0) {
+          console.log('[App] Fetching AI attention for', allLeadIds.length, 'leads');
+          fetchBatchAttention(allLeadIds)
+            .then(() => {
+              console.log('[App] AI attention fetch completed successfully');
+              // Force re-render after AI data loads
+              setAiDataLoaded(prev => prev + 1);
+            })
+            .catch((err) => {
+              console.error('[App] AI attention fetch error:', err);
+            });
+        }
+
         setDebugInfo(
-          `leads rows: ${safeLeads.length} · meta_ads rows: ${safeMeta.length}`
+          `leads: ${safeLeads.length} · meta: ${safeMeta.length}`
         );
 
         // Fetch today's callbacks for the current user (only incomplete)
@@ -815,6 +835,25 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   ) => {
     try {
       setStatusUpdating(true);
+
+      // Close detail view BEFORE updating state if the status change would filter out the lead
+      // This prevents the "Rendered fewer hooks" crash when the lead gets filtered out
+      if (selectedLead?.id === id) {
+        // Check if the new status would cause the lead to be filtered out
+        const wouldBeFilteredOut = 
+          // Case 1: Marking as unqualified when filter is 'all' (unqualified are hidden by default)
+          (newStatus === 'unqualified' && selectedStatusFilter === 'all') ||
+          // Case 2: Changing FROM unqualified to something else when filter is 'unqualified'
+          (selectedStatusFilter === 'unqualified' && newStatus !== 'unqualified') ||
+          // Case 3: Changing to a status that doesn't match the current filter (when not 'all')
+          (selectedStatusFilter !== 'all' && selectedStatusFilter !== 'unqualified' && newStatus !== selectedStatusFilter);
+        
+        if (wouldBeFilteredOut) {
+          setSelectedLead(null);
+          // Wait for React to process the unmount before updating leads state
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
+      }
 
       if (source === 'lead') {
         const { error } = await supabase
@@ -1142,6 +1181,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   // Attention filter: when enabled, only show leads with an attention badge
   const matchesAttentionFilter = (lead: Lead | MetaLead) => {
     if (!attentionFilter) return true;
+    // Use AI attention if available, fallback to rule-based
+    const aiAttention = attentionMap.get(lead.id);
+    if (aiAttention) return aiAttention.needsAttention;
     return !!getLeadAlert(lead);
   };
 
@@ -1174,7 +1216,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const statusDisplay = formatStatus(status);
     const statusColors = STATUS_COLOR_MAP[status] || STATUS_COLOR_MAP['new'];
     const emailOrPhone = item.email || item.phone || 'No contact info';
-    const alert = getLeadAlert(item);
+    // Use AI attention if available, fallback to rule-based
+    const aiAttention = attentionMap.get(item.id);
+    const alert = aiAttention?.badge 
+      ? { label: aiAttention.badge, color: aiAttention.priority <= 2 ? '#EF4444' : aiAttention.priority <= 4 ? '#F59E0B' : '#22C55E' }
+      : getLeadAlert(item);
     const borderColor = alert ? alert.color : '#7C3AED';
     const isUnread = !item.last_contact_date && (item.status === 'new' || !item.status);
 
@@ -1350,7 +1396,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const status = item.status ? formatStatus(item.status) : 'No status';
     const platform = item.platform || 'Facebook';
     const campaign = item.campaign_name || '';
-    const alert = getLeadAlert(item);
+    // Use AI attention if available, fallback to rule-based
+    const aiAttention = attentionMap.get(item.id);
+    const alert = aiAttention?.badge 
+      ? { label: aiAttention.badge, color: aiAttention.priority <= 2 ? '#EF4444' : aiAttention.priority <= 4 ? '#F59E0B' : '#22C55E' }
+      : getLeadAlert(item);
     const borderColor = alert ? alert.color : '#7C3AED';
     const statusColors =
       STATUS_COLOR_MAP[item.status || 'new'] || STATUS_COLOR_MAP['new'];
@@ -1625,6 +1675,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         openToMessages={openToMessages}
         onMessagesOpened={() => setOpenToMessages(false)}
         onMarkMessagesRead={markMessagesAsRead}
+        onInvalidateAttention={invalidateAttention}
+        aiAttention={attentionMap.get(selectedLead.id) || null}
         onDeleteLead={async (leadId: string) => {
           // Delete from database
           const { error } = await supabase
@@ -1698,9 +1750,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     // Separate count for unqualified leads
     const unqualifiedLeads = [...filteredLeads, ...filteredMetaLeads].filter(l => l.status === 'unqualified').length;
 
-    // Leads that currently have an attention badge
+    // Leads that currently have an attention badge (AI-powered with fallback)
     const attentionLeadsCount = [...activeFilteredLeads, ...activeFilteredMetaLeads]
-      .filter(l => !!getLeadAlert(l))
+      .filter(l => {
+        const aiAttention = attentionMap.get(l.id);
+        if (aiAttention) return aiAttention.needsAttention;
+        return !!getLeadAlert(l);
+      })
       .length;
     
     // Get recent leads (last 5) - exclude unqualified
@@ -2353,6 +2409,93 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Profile Menu Modal */}
+      <Modal
+        visible={showProfileMenu}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowProfileMenu(false)}
+      >
+        <TouchableOpacity 
+          style={styles.profileMenuOverlay}
+          activeOpacity={1}
+          onPress={() => setShowProfileMenu(false)}
+        >
+          <View style={[styles.profileMenuContent, { backgroundColor: colors.cardBackground }]}>
+            <TouchableOpacity
+              style={styles.profileMenuItem}
+              onPress={() => {
+                setShowProfileMenu(false);
+                setShowMortgageCalculator(true);
+              }}
+            >
+              <View style={styles.profileMenuIconContainer}>
+                <Ionicons name="calculator" size={20} color="#7C3AED" />
+              </View>
+              <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Payment Calculator</Text>
+            </TouchableOpacity>
+            
+            {userRole === 'super_admin' && (
+              <TouchableOpacity
+                style={styles.profileMenuItem}
+                onPress={() => {
+                  setShowProfileMenu(false);
+                  setShowTeamManagement(true);
+                }}
+              >
+                <View style={styles.profileMenuIconContainer}>
+                  <Ionicons name="people" size={20} color="#7C3AED" />
+                </View>
+                <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Team Management</Text>
+              </TouchableOpacity>
+            )}
+            
+            <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
+            
+            <TouchableOpacity
+              style={styles.profileMenuItem}
+              onPress={handleUploadProfilePicture}
+              disabled={uploadingPicture}
+            >
+              <View style={styles.profileMenuIconContainer}>
+                <Ionicons name="camera" size={20} color={colors.textPrimary} />
+              </View>
+              <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>
+                {uploadingPicture ? 'Uploading...' : 'Change Profile Picture'}
+              </Text>
+            </TouchableOpacity>
+            
+            {session?.user?.user_metadata?.custom_avatar_url && (
+              <TouchableOpacity
+                style={styles.profileMenuItem}
+                onPress={handleRemoveProfilePicture}
+                disabled={uploadingPicture}
+              >
+                <View style={styles.profileMenuIconContainer}>
+                  <Ionicons name="trash-outline" size={20} color={colors.textSecondary} />
+                </View>
+                <Text style={[styles.profileMenuText, { color: colors.textSecondary }]}>Remove Custom Picture</Text>
+              </TouchableOpacity>
+            )}
+            
+            <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
+            
+            <TouchableOpacity
+              style={styles.profileMenuItem}
+              onPress={() => {
+                setShowProfileMenu(false);
+                onSignOut();
+              }}
+            >
+              <View style={styles.profileMenuIconContainer}>
+                <Ionicons name="log-out-outline" size={20} color="#EF4444" />
+              </View>
+              <Text style={[styles.profileMenuText, { color: '#EF4444' }]}>Sign Out</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Modern Purple Header with Stats and Search - Animated Collapsing */}
       <Animated.View style={[
         styles.leadsHeaderContainer, 
@@ -2383,9 +2526,57 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             <Text style={styles.headerTitle}>Close With Mario</Text>
             <Text style={styles.headerSubtitle}>Lead Management</Text>
           </View>
-          <TouchableOpacity onPress={onSignOut} style={styles.signOutButton}>
-            <Text style={styles.signOutText}>Sign Out</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            {/* Notification Bell */}
+            <TouchableOpacity 
+              onPress={() => {
+                setSelectedStatusFilter('all');
+                setActiveTab('meta'); // Unread messages are only for meta leads
+                setUnreadFilter(true);
+              }}
+              style={{ position: 'relative' }}
+            >
+              <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
+              {Object.values(unreadMessageCounts).reduce((a, b) => a + b, 0) > 0 && (
+                <View style={{
+                  position: 'absolute',
+                  top: -4,
+                  right: -4,
+                  backgroundColor: '#EF4444',
+                  borderRadius: 10,
+                  minWidth: 18,
+                  height: 18,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  paddingHorizontal: 4,
+                }}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
+                    {Object.values(unreadMessageCounts).reduce((a, b) => a + b, 0) > 99 
+                      ? '99+' 
+                      : Object.values(unreadMessageCounts).reduce((a, b) => a + b, 0)}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            {/* Profile Button */}
+            <TouchableOpacity 
+              onPress={() => setShowProfileMenu(true)}
+              style={styles.profileButton}
+            >
+              {getAvatarUrl(session?.user?.user_metadata) ? (
+                <Image 
+                  source={{ uri: getAvatarUrl(session?.user?.user_metadata) || '' }}
+                  style={styles.profileButtonAvatar}
+                />
+              ) : (
+                <View style={styles.profileButtonPlaceholder}>
+                  <Text style={styles.profileButtonText}>
+                    {session?.user?.email?.[0]?.toUpperCase() || 'U'}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          </View>
         </Animated.View>
 
         {/* Stats Row inside Purple Header - Fades out when scrolling */}
@@ -3012,6 +3203,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             })}
             renderItem={renderLeadItem}
             keyExtractor={(item) => item.id}
+            extraData={aiDataLoaded}
             contentContainerStyle={styles.listContent}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -3056,6 +3248,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             })}
             renderItem={renderMetaLeadItem}
             keyExtractor={(item) => item.id}
+            extraData={aiDataLoaded}
             contentContainerStyle={styles.listContent}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -3114,6 +3307,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               return renderLeadItem({ item });
             }}
             keyExtractor={(item) => `${item._tableType}-${item.id}`}
+            extraData={aiDataLoaded}
             contentContainerStyle={styles.listContent}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
