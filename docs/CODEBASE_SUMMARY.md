@@ -1,13 +1,13 @@
 # CloseWithMario Mobile - Codebase Summary
 
-**Last Updated:** December 2, 2025 at 4:54 PM EST  
+**Last Updated:** December 11, 2025 at 1:30 PM EST  
 **Platform:** iOS Mobile Application  
 **EAS Account:** mecerrato1  
-**Latest Build:** iOS Production Build 41 (v1.1.26, Dec 2, 2025)  
+**Latest Build:** iOS Production Build 60 (v1.1.44, Dec 11, 2025)  
 **Major Refactor:** November 26, 2025 - Modular architecture with separated screens and styles  
 **Security Update:** November 29, 2025 - Face ID/Touch ID biometric authentication  
-**Feature Update:** December 1, 2025 - "My Lead" self-created leads, voice note preview, LO activity deletion  
-**UI/UX Update:** December 2, 2025 - Dashboard performance cards with emojis, callback templates with smart dates, platform name formatting, W2 Regular template, Quote of the Day
+**Feature Update:** December 11, 2025 - AI-powered lead attention badges, profile menu with notification bell, source filtering for super admins  
+**UI/UX Update:** December 11, 2025 - Profile menu modal, notification bell with unread count, AI badges from Supabase cache
 
 ---
 
@@ -1252,6 +1252,67 @@ The codebase underwent a massive refactoring to improve maintainability, readabi
 - Proper TypeScript typing for all new features
 - Optimized re-renders with proper state management
 
+### December 11, 2025 - AI Badges, Profile Menu & Source Filtering (v1.1.44, Build 60)
+
+#### 🤖 AI-Powered Lead Attention Badges
+1. **AI Lead Disposition System** - GPT-4o-mini powered lead prioritization
+   - Reads from `lead_attention_cache` Supabase table (fast, no API calls)
+   - Priority 1-5 scale with color-coded badges:
+     - 🔴 Priority 1-2: Red (URGENT/HIGH - respond immediately/today)
+     - 🟠 Priority 3-4: Orange/Yellow (MEDIUM/LOW - follow up soon)
+     - 🟢 Priority 5: Green (✅ No Action Needed)
+   - Badges display on lead cards and detail view
+   - Shows badge regardless of `needsAttention` flag (green badges for no action needed)
+   - New hook: `src/hooks/useAiLeadAttention.ts`
+
+2. **AI Badge Integration**
+   - `renderLeadItem` and `renderMetaLeadItem` display AI badges
+   - `LeadDetailScreen` shows AI badge with priority-based colors
+   - Falls back to rule-based badges if no AI data available
+   - Cache invalidation on activity logging
+
+#### 👤 Profile Menu Modal
+3. **New Profile Menu** - Replaces "Sign Out" button with profile avatar
+   - Profile avatar button in header (shows user initial or custom picture)
+   - Modal menu with options:
+     - 🧮 Payment Calculator
+     - 👥 Team Management (super admin only)
+     - 📷 Change Profile Picture
+     - 🗑️ Remove Custom Picture (if custom avatar exists)
+     - 🚪 Sign Out (red)
+   - Clean slide-down animation
+
+4. **Notification Bell** - Unread message indicator
+   - Bell icon in header next to profile avatar
+   - Red badge with unread message count
+   - Tapping filters to unread messages on Meta tab
+   - Shows "99+" for counts over 99
+
+#### 🔍 Source Filtering for Super Admins
+5. **Filter by Source/Ad Name** - Super admin feature
+   - New source filter button in filter row
+   - Aggregates ad names from meta leads and sources from organic leads
+   - Shows count for each source option
+   - Smart tab switching (auto-switches to correct tab based on source)
+   - Respects other active filters (status, LO)
+
+#### 🐛 Bug Fixes (Dec 3-11)
+6. **Fixed filtering issues** after adding source filter
+7. **Fixed microphone in use error** - Better error handling for voice recording
+8. **Fixed AI badge display** - Shows badge regardless of `needsAttention` flag
+9. **Fixed crash issues** - Various stability improvements
+10. **Fixed menu layout** - Profile menu positioning and styling
+
+#### Technical Implementation
+- New `useAiLeadAttention` hook queries Supabase directly (no slow API)
+- `AiAttentionData` type with `badge`, `priority`, `needsAttention`, `reason`, `suggestedAction`
+- Profile menu state: `showProfileMenu`
+- Source filter state: `selectedSourceFilter`, `showSourcePicker`
+- `uniqueSources` memo aggregates sources from both lead types
+- `matchesSourceFilter` helper function
+
+---
+
 ### December 2, 2025 Updates
 
 #### UI/UX Enhancements
@@ -1361,11 +1422,11 @@ The codebase underwent a massive refactoring to improve maintainability, readabi
 - Corrected OAuth redirect URI configuration
 
 ### Build Information
-- **Latest iOS Build:** Build 41 (Production, Dec 2, 2025)
-- **App Version:** 1.1.26
+- **Latest iOS Build:** Build 60 (Production, Dec 11, 2025)
+- **App Version:** 1.1.44
 - **Build Status:** Successful, submitted to TestFlight
 - **Distribution:** App Store ready
-- **Latest Features:** Quote of the Day, dashboard performance cards with emojis, email templates, smart callback dates, platform name formatting, W2 Regular template, theme system foundation
+- **Latest Features:** AI-powered lead attention badges, profile menu with notification bell, source filtering for super admins
 
 ---
 
@@ -1422,11 +1483,12 @@ npm start
 ### Key Technologies
 - **Frontend:** React Native 0.81.5 + Expo SDK 54 + TypeScript 5.9.2
 - **Backend:** Supabase (PostgreSQL + Auth + Storage)
+- **AI:** GPT-4o-mini for lead attention analysis (cached in Supabase)
 - **Security:** Face ID/Touch ID biometric authentication
-- **Main File:** `App.tsx` (~2268 lines - modular with imported screens)
+- **Main File:** `App.tsx` (~2500+ lines - modular with imported screens)
 - **Color Scheme:** Purple (#7C3AED) + Green (#10B981)
-- **Version:** 1.1.26 (Build 41)
-- **Latest Update:** December 2, 2025
+- **Version:** 1.1.44 (Build 60)
+- **Latest Update:** December 11, 2025
 
 ### Main Components
 1. `LockScreen` - Face ID/Touch ID biometric authentication
@@ -1447,7 +1509,7 @@ npm start
 - `meta_ad_activities` - Meta lead interaction history
 - `lead_callbacks` - Scheduled callback reminders
 
-### Current State (Dec 2, 2025)
+### Current State (Dec 11, 2025)
 - ✅ Full CRUD for lead status and activities
 - ✅ RBAC with super_admin/loan_officer/realtor/buyer roles
 - ✅ Modern UI with brand colors (purple/green)
@@ -1455,13 +1517,13 @@ npm start
 - ✅ Face ID/Touch ID biometric authentication
 - ✅ Auto-lock after 10 minutes idle
 - ✅ Session persistence with AsyncStorage
-- ✅ iOS Production Build 41 deployed (v1.1.26)
+- ✅ iOS Production Build 60 deployed (v1.1.44)
 - ✅ SMS/Email templates with bilingual support (11 templates, English/Spanish)
 - ✅ Voice notes recording with preview and playback
 - ✅ Unread lead indicator - blue dot
 - ✅ Document checklist templates with dynamic years
 - ✅ UI micro-animations
-- ✅ Advanced filtering (status, LO, search, attention)
+- ✅ Advanced filtering (status, LO, search, attention, **source**)
 - ✅ Smart navigation (respects all filters, tab-aware)
 - ✅ Team management screen
 - ✅ Callback scheduling with smart date formatting
@@ -1472,12 +1534,17 @@ npm start
 - ✅ LOs can delete activities on their own leads
 - ✅ Voice note preview before saving
 - ✅ Referral source tracking and display
-- ✅ **Quote of the Day - 40 rotating motivational quotes (NEW Dec 2)**
-- ✅ **Dashboard performance cards with emojis (NEW Dec 2)**
-- ✅ **Email templates integration (NEW Dec 2)**
-- ✅ **Platform name formatting (FB→Facebook, IG→Instagram) (NEW Dec 2)**
-- ✅ **W2 Regular document template (NEW Dec 2)**
-- ✅ **Theme system foundation for dark mode (NEW Dec 2)**
+- ✅ Quote of the Day - 40 rotating motivational quotes
+- ✅ Dashboard performance cards with emojis
+- ✅ Email templates integration
+- ✅ Platform name formatting (FB→Facebook, IG→Instagram)
+- ✅ W2 Regular document template
+- ✅ Theme system foundation for dark mode
+- ✅ **AI-powered lead attention badges (NEW Dec 11)**
+- ✅ **Profile menu modal with avatar (NEW Dec 11)**
+- ✅ **Notification bell with unread count (NEW Dec 11)**
+- ✅ **Source/ad name filtering for super admins (NEW Dec 3)**
+- ✅ **Smart tab switching based on source filter (NEW Dec 3)**
 - ⚠️ Need to fix: Square logo for Android, duplicate dependencies
 - 🔜 Next: Push notifications, pagination, dark mode implementation
 
@@ -1498,9 +1565,13 @@ npm start
 - Voice notes stored in Supabase Storage bucket `activity-voice-notes`
 - Unread leads identified by `!last_contact_date && (status === 'new' || !status)`
 - Spanish templates auto-selected if `preferred_language === 'spanish'`
-- Navigation respects status filter, LO filter, search query, and attention filter
+- Navigation respects status filter, LO filter, search query, attention filter, and **source filter**
 - Unqualified leads excluded from default "all" view but accessible via filter
 - Tab-aware navigation combines meta + regular leads on "all" tab
+- **AI attention badges** read from `lead_attention_cache` Supabase table
+- **Profile menu** replaces sign out button with avatar and dropdown
+- **Notification bell** shows unread message count with red badge
+- **Source filter** for super admins to filter by ad name or lead source
 - Platform names formatted: FB→Facebook, IG→Instagram (case-insensitive)
 - Theme system foundation in place for future dark mode implementation
 
