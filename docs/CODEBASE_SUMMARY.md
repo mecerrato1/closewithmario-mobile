@@ -1,9 +1,9 @@
 # CloseWithMario Mobile - Codebase Summary
 
-**Last Updated:** December 11, 2025 at 1:30 PM EST  
+**Last Updated:** December 11, 2025 at 3:00 PM EST  
 **Platform:** iOS Mobile Application  
 **EAS Account:** mecerrato1  
-**Latest Build:** iOS Production Build 60 (v1.1.44, Dec 11, 2025)  
+**Latest Build:** iOS Production Build 61 (v1.1.45, Dec 11, 2025)  
 **Major Refactor:** November 26, 2025 - Modular architecture with separated screens and styles  
 **Security Update:** November 29, 2025 - Face ID/Touch ID biometric authentication  
 **Feature Update:** December 11, 2025 - AI-powered lead attention badges, profile menu with notification bell, source filtering for super admins  
@@ -1303,6 +1303,14 @@ The codebase underwent a massive refactoring to improve maintainability, readabi
 9. **Fixed crash issues** - Various stability improvements
 10. **Fixed menu layout** - Profile menu positioning and styling
 
+#### 📱 Apple App Store Compliance (Dec 11)
+11. **Updated permission descriptions** for Apple approval
+    - Microphone: "Close With Mario uses your microphone to record voice notes on leads, such as when you want to add spoken updates instead of typing."
+    - Contacts: "Close With Mario uses your contacts only when you choose to save a lead into your device's address book."
+    - Photo Library: "Close With Mario uses your photo library only when you choose an image for your profile picture."
+    - Camera: "Close With Mario uses your camera only when you take a profile picture so your team can recognize your account."
+    - All descriptions now explain the specific use case and user benefit
+
 #### Technical Implementation
 - New `useAiLeadAttention` hook queries Supabase directly (no slow API)
 - `AiAttentionData` type with `badge`, `priority`, `needsAttention`, `reason`, `suggestedAction`
@@ -1422,11 +1430,11 @@ The codebase underwent a massive refactoring to improve maintainability, readabi
 - Corrected OAuth redirect URI configuration
 
 ### Build Information
-- **Latest iOS Build:** Build 60 (Production, Dec 11, 2025)
-- **App Version:** 1.1.44
+- **Latest iOS Build:** Build 61 (Production, Dec 11, 2025)
+- **App Version:** 1.1.45
 - **Build Status:** Successful, submitted to TestFlight
 - **Distribution:** App Store ready
-- **Latest Features:** AI-powered lead attention badges, profile menu with notification bell, source filtering for super admins
+- **Latest Features:** AI-powered lead attention badges, profile menu with notification bell, source filtering for super admins, Apple-compliant permission descriptions
 
 ---
 
@@ -1487,7 +1495,7 @@ npm start
 - **Security:** Face ID/Touch ID biometric authentication
 - **Main File:** `App.tsx` (~2500+ lines - modular with imported screens)
 - **Color Scheme:** Purple (#7C3AED) + Green (#10B981)
-- **Version:** 1.1.44 (Build 60)
+- **Version:** 1.1.45 (Build 61)
 - **Latest Update:** December 11, 2025
 
 ### Main Components
@@ -1517,7 +1525,7 @@ npm start
 - ✅ Face ID/Touch ID biometric authentication
 - ✅ Auto-lock after 10 minutes idle
 - ✅ Session persistence with AsyncStorage
-- ✅ iOS Production Build 60 deployed (v1.1.44)
+- ✅ iOS Production Build 61 deployed (v1.1.45)
 - ✅ SMS/Email templates with bilingual support (11 templates, English/Spanish)
 - ✅ Voice notes recording with preview and playback
 - ✅ Unread lead indicator - blue dot
