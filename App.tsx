@@ -18,6 +18,7 @@ import {
   Animated,
   Alert,
   Image,
+  Linking,
 } from 'react-native';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -124,6 +125,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [showCallbackHistory, setShowCallbackHistory] = useState(false);
   const [callbackHistory, setCallbackHistory] = useState<any[]>([]);
   const [unreadMessageCounts, setUnreadMessageCounts] = useState<Record<string, number>>({});
+  const [showAiRecommendationModal, setShowAiRecommendationModal] = useState(false);
+  const [selectedAiAttention, setSelectedAiAttention] = useState<{ reason: string; suggestedAction: string; badge: string; leadId: string; source: 'lead' | 'meta'; phone: string; firstName: string } | null>(null);
   
   // AI Lead Attention - fetch from cache/API
   const { fetchBatchAttention, getAttention, invalidateAttention, attentionMap } = useAiLeadAttention();
@@ -1149,6 +1152,77 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     }
   };
 
+  // Handle sending AI-suggested text directly from the modal
+  const handleAiSuggestedTextFromModal = async () => {
+    if (!selectedAiAttention?.phone || !selectedAiAttention?.suggestedAction) return;
+    
+    const { phone, suggestedAction, leadId, source } = selectedAiAttention;
+    
+    // Extract the quoted message from the AI suggestion
+    const quoteMatch = suggestedAction.match(/['"]([^'"]+)['"]/);
+    const aiMessage = quoteMatch ? quoteMatch[1] : suggestedAction.replace(/^Send a text:\s*/i, '').trim();
+    
+    // Get LO info from session
+    const loFullname = session?.user?.user_metadata?.full_name || 'Mario';
+    const loPhone = session?.user?.user_metadata?.phone || '[Phone]';
+    const loEmail = session?.user?.email || '[Email]';
+
+    // Build the full message with AI suggestion + signature
+    const messageBody = `${aiMessage}\n\n- ${loFullname}\n📞 ${loPhone}\n📧 ${loEmail}`;
+    
+    setShowAiRecommendationModal(false);
+
+    const encodedBody = encodeURIComponent(messageBody);
+
+    // Log the text activity
+    try {
+      const tableName = source === 'meta' ? 'meta_ad_activities' : 'lead_activities';
+      const foreignKeyColumn = source === 'meta' ? 'meta_ad_id' : 'lead_id';
+      const leadTableName = source === 'meta' ? 'meta_ads' : 'leads';
+      
+      const activityData = {
+        [foreignKeyColumn]: leadId,
+        activity_type: 'text',
+        notes: `Sent AI-suggested text:\n\n${messageBody}`,
+        created_by: session?.user?.id || null,
+        user_email: session?.user?.email || 'Mobile App User',
+      };
+
+      const { error } = await supabase
+        .from(tableName)
+        .insert([activityData]);
+
+      if (!error) {
+        // Update last_contact_date on the lead
+        const now = new Date().toISOString();
+        await supabase
+          .from(leadTableName)
+          .update({ last_contact_date: now })
+          .eq('id', leadId);
+        
+        // Update local state
+        if (source === 'meta') {
+          setMetaLeads(prev => prev.map(l => l.id === leadId ? { ...l, last_contact_date: now } : l));
+        } else {
+          setLeads(prev => prev.map(l => l.id === leadId ? { ...l, last_contact_date: now } : l));
+        }
+        
+        // Invalidate AI attention cache
+        invalidateAttention(leadId);
+      }
+    } catch (e) {
+      console.error('Error logging AI text activity:', e);
+    }
+
+    // Open SMS app with pre-filled message
+    const smsUrl = `sms:${phone}${Platform.OS === 'ios' ? '&' : '?'}body=${encodedBody}`;
+    try {
+      await Linking.openURL(smsUrl);
+    } catch (error) {
+      console.error('Error opening SMS:', error);
+    }
+  };
+
   // Search filter function
   const matchesSearch = (lead: Lead | MetaLead) => {
     if (!searchQuery.trim()) return true;
@@ -1308,7 +1382,24 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             )}
           </View>
           {alert && (
-            <View style={[styles.attentionBadge, { backgroundColor: alert.color }]}>
+            <TouchableOpacity
+              style={[styles.attentionBadge, { backgroundColor: alert.color }]}
+              onPress={() => {
+                if (aiAttention?.reason) {
+                  setSelectedAiAttention({
+                    reason: aiAttention.reason,
+                    suggestedAction: aiAttention.suggestedAction || '',
+                    badge: aiAttention.badge,
+                    leadId: item.id,
+                    source: 'lead',
+                    phone: item.phone || '',
+                    firstName: item.first_name || 'there',
+                  });
+                  setShowAiRecommendationModal(true);
+                }
+              }}
+              activeOpacity={aiAttention?.reason ? 0.7 : 1}
+            >
               <Ionicons
                 name="warning-outline"
                 size={12}
@@ -1316,7 +1407,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 style={{ marginRight: 4 }}
               />
               <Text style={styles.attentionBadgeText}>{alert.label}</Text>
-            </View>
+              {aiAttention?.reason && (
+                <Ionicons name="information-circle-outline" size={12} color="#FFF" style={{ marginLeft: 4 }} />
+              )}
+            </TouchableOpacity>
           )}
           <View style={[
             styles.statusBadge,
@@ -1493,7 +1587,24 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             {getPlatformBadge(platform)}
           </View>
           {alert && (
-            <View style={[styles.attentionBadge, { backgroundColor: alert.color }]}>
+            <TouchableOpacity
+              style={[styles.attentionBadge, { backgroundColor: alert.color }]}
+              onPress={() => {
+                if (aiAttention?.reason) {
+                  setSelectedAiAttention({
+                    reason: aiAttention.reason,
+                    suggestedAction: aiAttention.suggestedAction || '',
+                    badge: aiAttention.badge,
+                    leadId: item.id,
+                    source: 'meta',
+                    phone: item.phone || '',
+                    firstName: item.first_name || 'there',
+                  });
+                  setShowAiRecommendationModal(true);
+                }
+              }}
+              activeOpacity={aiAttention?.reason ? 0.7 : 1}
+            >
               <Ionicons
                 name="warning-outline"
                 size={12}
@@ -1501,7 +1612,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 style={{ marginRight: 4 }}
               />
               <Text style={styles.attentionBadgeText}>{alert.label}</Text>
-            </View>
+              {aiAttention?.reason && (
+                <Ionicons name="information-circle-outline" size={12} color="#FFF" style={{ marginLeft: 4 }} />
+              )}
+            </TouchableOpacity>
           )}
           <View style={[
             styles.statusBadge,
@@ -3552,9 +3666,149 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* AI Recommendation Modal */}
+      <Modal
+        visible={showAiRecommendationModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAiRecommendationModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity 
+            style={StyleSheet.absoluteFill} 
+            activeOpacity={1} 
+            onPress={() => setShowAiRecommendationModal(false)} 
+          />
+          <View style={aiRecommendationStyles.container}>
+            <View style={aiRecommendationStyles.header}>
+              <Text style={aiRecommendationStyles.title}>Why this needs attention</Text>
+              <TouchableOpacity
+                onPress={() => setShowAiRecommendationModal(false)}
+                style={aiRecommendationStyles.closeIcon}
+              >
+                <Ionicons name="close" size={24} color="#94A3B8" />
+              </TouchableOpacity>
+            </View>
+            
+            <Text style={aiRecommendationStyles.reason}>
+              {selectedAiAttention?.reason || 'No additional details available.'}
+            </Text>
+            
+            {selectedAiAttention?.suggestedAction && (
+              <View style={aiRecommendationStyles.suggestionContainer}>
+                <Text style={aiRecommendationStyles.suggestionIcon}>💡</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={aiRecommendationStyles.suggestionText}>
+                    {selectedAiAttention.suggestedAction}
+                  </Text>
+                  {selectedAiAttention.suggestedAction.toLowerCase().includes('send a text') && selectedAiAttention.phone && (
+                    <Text style={aiRecommendationStyles.tapHint}>
+                      👆 Tap button below to send
+                    </Text>
+                  )}
+                </View>
+              </View>
+            )}
+            
+            {selectedAiAttention?.suggestedAction?.toLowerCase().includes('send a text') && selectedAiAttention?.phone ? (
+              <TouchableOpacity
+                style={aiRecommendationStyles.sendTextButton}
+                onPress={handleAiSuggestedTextFromModal}
+              >
+                <Ionicons name="chatbubble-outline" size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={aiRecommendationStyles.closeButtonText}>Send This Text</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={aiRecommendationStyles.closeButton}
+                onPress={() => setShowAiRecommendationModal(false)}
+              >
+                <Text style={aiRecommendationStyles.closeButtonText}>Got it</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
+
+// Styles for AI Recommendation Modal
+const aiRecommendationStyles = StyleSheet.create({
+  container: {
+    backgroundColor: '#1E293B',
+    borderRadius: 16,
+    padding: 20,
+    marginHorizontal: 24,
+    maxWidth: 400,
+    width: '100%',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  closeIcon: {
+    padding: 4,
+  },
+  reason: {
+    fontSize: 15,
+    color: '#CBD5E1',
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  suggestionContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+    alignItems: 'flex-start',
+  },
+  suggestionIcon: {
+    fontSize: 18,
+    marginRight: 10,
+  },
+  suggestionText: {
+    fontSize: 14,
+    color: '#10B981',
+    flex: 1,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  tapHint: {
+    fontSize: 12,
+    color: '#6EE7B7',
+    marginTop: 8,
+    fontWeight: '600',
+  },
+  sendTextButton: {
+    backgroundColor: '#10B981',
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  closeButton: {
+    backgroundColor: '#7C3AED',
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});
 
 // Root app that knows about session + lock state
 function RootApp() {

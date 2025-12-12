@@ -62,7 +62,7 @@ export type LeadDetailViewProps = {
   onMessagesOpened?: () => void;
   onMarkMessagesRead?: (leadId: string) => void;
   onInvalidateAttention?: (leadId: string) => Promise<void>;
-  aiAttention?: { needsAttention: boolean; priority: number; badge: string } | null;
+  aiAttention?: { needsAttention: boolean; priority: number; badge: string; reason?: string; suggestedAction?: string } | null;
 };
 
 export function LeadDetailView({
@@ -111,6 +111,7 @@ export function LeadDetailView({
   const [templateMode, setTemplateMode] = useState<'text' | 'email'>('text');
   const [showCustomMessage, setShowCustomMessage] = useState(false);
   const [customMessageText, setCustomMessageText] = useState('');
+  const [showAiRecommendation, setShowAiRecommendation] = useState(false);
   
   // Voice notes state (expo-av)
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -670,6 +671,88 @@ export function LeadDetailView({
     setTemplateMode('email');
     setShowTemplateModal(true);
   };
+
+  // Handle AI-suggested text action - extracts message from suggestion and sends with proper formatting
+  const handleAiSuggestedText = async () => {
+    if (!phone || !aiAttention?.suggestedAction) return;
+    
+    // Extract the quoted message from the AI suggestion
+    // Format: "Send a text: 'Hi Andres and Maria, just checking in...'"
+    const suggestion = aiAttention.suggestedAction;
+    const quoteMatch = suggestion.match(/['"]([^'"]+)['"]/);
+    const aiMessage = quoteMatch ? quoteMatch[1] : suggestion.replace(/^Send a text:\s*/i, '').trim();
+    
+    const fname = record.first_name || 'there';
+    const loFullname = currentLOInfo 
+      ? `${currentLOInfo.firstName} ${currentLOInfo.lastName}`.trim() 
+      : 'Mario';
+    const loPhone = currentLOInfo?.phone || '[Phone]';
+    const loEmail = currentLOInfo?.email || '[Email]';
+
+    // Build the full message with AI suggestion + signature
+    const messageBody = `${aiMessage}\n\n- ${loFullname}\n📞 ${loPhone}\n📧 ${loEmail}`;
+    
+    setShowAiRecommendation(false);
+
+    const encodedBody = encodeURIComponent(messageBody);
+
+    // Log the text activity automatically
+    try {
+      const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
+      const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
+      const leadTableName = isMeta ? 'meta_ads' : 'leads';
+      
+      const activityData = {
+        [foreignKeyColumn]: record.id,
+        activity_type: 'text',
+        notes: `Sent AI-suggested text:\n\n${messageBody}`,
+        created_by: session?.user?.id || null,
+        user_email: session?.user?.email || 'Mobile App User',
+      };
+
+      const { data, error } = await supabase
+        .from(tableName)
+        .insert([activityData])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error logging AI text activity:', error);
+      } else if (data) {
+        // Update last_contact_date on the lead
+        const now = new Date().toISOString();
+        await supabase
+          .from(leadTableName)
+          .update({ last_contact_date: now })
+          .eq('id', record.id);
+        
+        // Update the lead in parent component state
+        const updatedLead = { ...record, last_contact_date: now };
+        onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
+        
+        // Invalidate AI attention cache since we just took action
+        if (onInvalidateAttention) {
+          onInvalidateAttention(record.id);
+        }
+        
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setActivities([data, ...activities]);
+      }
+    } catch (e) {
+      console.error('Error logging AI text activity:', e);
+    }
+
+    // Open SMS app with pre-filled message
+    const smsUrl = `sms:${phone}${Platform.OS === 'ios' ? '&' : '?'}body=${encodedBody}`;
+    try {
+      await Linking.openURL(smsUrl);
+    } catch (error) {
+      console.error('Error opening SMS:', error);
+    }
+  };
+
+  // Check if AI suggestion is a "Send a text" recommendation
+  const isTextSuggestion = aiAttention?.suggestedAction?.toLowerCase().includes('send a text');
 
   // Load current loan officer info
   useEffect(() => {
@@ -1466,13 +1549,20 @@ export function LeadDetailView({
             {/* Divider */}
             <View style={styles.sectionDivider} />
 
-            {/* Status Dropdown */}
+            {/* AI Attention Badge - Tappable to show recommendation */}
             {attentionBadge && (
-            <View style={styles.attentionBadgeContainer}>
+            <TouchableOpacity 
+              style={styles.attentionBadgeContainer}
+              onPress={() => aiAttention?.reason && setShowAiRecommendation(true)}
+              activeOpacity={aiAttention?.reason ? 0.7 : 1}
+            >
               <View style={[styles.detailAttentionBadge, { backgroundColor: attentionBadge.color }]}>
                 <Text style={styles.detailAttentionBadgeText}>⚠️ {attentionBadge.label}</Text>
+                {aiAttention?.reason && (
+                  <Ionicons name="information-circle-outline" size={14} color="#FFF" style={{ marginLeft: 6 }} />
+                )}
               </View>
-            </View>
+            </TouchableOpacity>
           )}
           
           {/* Status and LO Assignment Row (for admins) or Full Width Status (for non-admins) */}
@@ -2617,9 +2707,140 @@ export function LeadDetailView({
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+
+      {/* AI Recommendation Modal */}
+      <Modal
+        visible={showAiRecommendation}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAiRecommendation(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setShowAiRecommendation(false)}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback onPress={() => {}}>
+              <View style={aiRecommendationStyles.container}>
+                <View style={aiRecommendationStyles.header}>
+                  <Text style={aiRecommendationStyles.title}>Why this needs attention</Text>
+                  <TouchableOpacity
+                    onPress={() => setShowAiRecommendation(false)}
+                    style={styles.templateModalClose}
+                  >
+                    <Text style={styles.templateModalCloseText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                
+                <Text style={aiRecommendationStyles.reason}>
+                  {aiAttention?.reason || 'No additional details available.'}
+                </Text>
+                
+                {aiAttention?.suggestedAction && (
+                  <TouchableOpacity 
+                    style={[
+                      aiRecommendationStyles.suggestionContainer,
+                      isTextSuggestion && phone && aiRecommendationStyles.suggestionTappable
+                    ]}
+                    onPress={isTextSuggestion && phone ? handleAiSuggestedText : undefined}
+                    activeOpacity={isTextSuggestion && phone ? 0.7 : 1}
+                    disabled={!isTextSuggestion || !phone}
+                  >
+                    <Text style={aiRecommendationStyles.suggestionIcon}>💡</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={aiRecommendationStyles.suggestionText}>
+                        {aiAttention.suggestedAction}
+                      </Text>
+                      {isTextSuggestion && phone && (
+                        <Text style={aiRecommendationStyles.tapToSend}>
+                          👆 Tap to send this text
+                        </Text>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                )}
+                
+                <TouchableOpacity
+                  style={aiRecommendationStyles.closeButton}
+                  onPress={() => setShowAiRecommendation(false)}
+                >
+                  <Text style={aiRecommendationStyles.closeButtonText}>Got it</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 }
+
+// Styles for AI Recommendation Modal
+const aiRecommendationStyles = StyleSheet.create({
+  container: {
+    backgroundColor: '#1E293B',
+    borderRadius: 16,
+    padding: 20,
+    marginHorizontal: 24,
+    maxWidth: 400,
+    width: '100%',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  reason: {
+    fontSize: 15,
+    color: '#CBD5E1',
+    lineHeight: 22,
+    marginBottom: 16,
+  },
+  suggestionContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 20,
+    alignItems: 'flex-start',
+  },
+  suggestionIcon: {
+    fontSize: 18,
+    marginRight: 10,
+  },
+  suggestionText: {
+    fontSize: 14,
+    color: '#10B981',
+    flex: 1,
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  suggestionTappable: {
+    borderWidth: 1,
+    borderColor: '#10B981',
+    borderStyle: 'dashed',
+  },
+  tapToSend: {
+    fontSize: 12,
+    color: '#6EE7B7',
+    marginTop: 8,
+    fontWeight: '600',
+  },
+  closeButton: {
+    backgroundColor: '#7C3AED',
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});
 
 // Styles for the Detail/Messages tab bar
 const detailTabStyles = StyleSheet.create({

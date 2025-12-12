@@ -156,17 +156,33 @@ export function useAiLeadAttention(): UseAiLeadAttentionResult {
     return attentionMap.get(leadId) || null;
   }, [attentionMap]);
 
-  // Invalidate just clears local state and re-fetches from Supabase
+  // Invalidate clears local state AND deletes from Supabase cache so next fetch triggers fresh AI analysis
   const invalidateAttention = useCallback(async (leadId: string): Promise<void> => {
+    console.log('[useAiLeadAttention] Invalidating cache for lead:', leadId);
+    
+    // Clear from local state immediately
     setAttentionMap(prev => {
       const next = new Map(prev);
       next.delete(leadId);
       return next;
     });
 
-    // Re-fetch from Supabase
-    await fetchAttention(leadId, true);
-  }, [fetchAttention]);
+    // Delete from Supabase cache so next fetch triggers fresh AI analysis
+    try {
+      const { error } = await supabase
+        .from('lead_attention_cache')
+        .delete()
+        .eq('lead_id', leadId);
+      
+      if (error) {
+        console.error('[useAiLeadAttention] Error deleting cache entry:', error);
+      } else {
+        console.log('[useAiLeadAttention] Deleted cache entry for lead:', leadId);
+      }
+    } catch (e) {
+      console.error('[useAiLeadAttention] Error invalidating cache:', e);
+    }
+  }, []);
 
   const attentionCount = Array.from(attentionMap.values()).filter(a => a.needsAttention).length;
 
