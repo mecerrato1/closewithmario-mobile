@@ -254,7 +254,10 @@ export function LeadDetailView({
     const campaignName = (record as MetaLead).campaign_name?.toLowerCase() || '';
     const searchText = `${adName} ${campaignName}`.toLowerCase();
     
-    if (searchText.includes('florida renter')) {
+    // Check specific "florida renter image ad" first before general "florida renter"
+    if (searchText.includes('florida renter image')) {
+      return require('../../assets/FLRenterPoster.jpg');
+    } else if (searchText.includes('florida renter')) {
       return require('../../assets/Fl_Renter_Ad.png');
     } else if (searchText.includes('hpa')) {
       return require('../../assets/BrowardHPA_Ad.jpg');
