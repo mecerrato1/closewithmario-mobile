@@ -1228,6 +1228,18 @@ export const styles = StyleSheet.create({
     color: '#333',
     lineHeight: 20,
   },
+  emailBodyContainer: {
+    marginTop: 8,
+    padding: 10,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    maxHeight: 250,
+  },
+  emailBodyText: {
+    fontSize: 12,
+    color: '#4B5563',
+    lineHeight: 18,
+  },
   activityUserEmail: {
     fontSize: 12,
     color: '#888',

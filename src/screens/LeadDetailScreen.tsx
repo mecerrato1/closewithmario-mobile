@@ -2300,6 +2300,15 @@ export function LeadDetailView({
                     <Text style={styles.activityHistoryNote}>{activity.notes}</Text>
                   ) : null}
                   
+                  {/* Email body for inbound emails */}
+                  {activity.activity_type === 'email' && activity.body ? (
+                    <ScrollView style={styles.emailBodyContainer} nestedScrollEnabled={true}>
+                      <Text style={styles.emailBodyText}>
+                        {activity.body}
+                      </Text>
+                    </ScrollView>
+                  ) : null}
+                  
                   {/* Voice note playback button */}
                   {activity.audio_url && (
                     <TouchableOpacity

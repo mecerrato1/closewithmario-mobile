@@ -82,6 +82,10 @@ export type Activity = {
   created_by?: string;
   user_email?: string;
   audio_url?: string | null; // 👈 NEW - for voice notes
+  body?: string | null; // Email body from inbound emails
+  subject?: string | null;
+  from_email?: string | null;
+  direction?: string | null;
 };
 
 export type AttentionBadge = {
