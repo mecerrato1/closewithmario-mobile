@@ -1732,7 +1732,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   if (selectedLead) {
     // Apply the same filters to leads/metaLeads that are used in the list view
-    const filteredLeads = leads.filter(lead => {
+    let filteredLeads = leads.filter(lead => {
       const statusMatch = selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter;
       const searchMatch = matchesSearch(lead);
       const loMatch = matchesLOFilter(lead);
@@ -1741,7 +1741,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch;
     });
 
-    const filteredMetaLeads = metaLeads.filter(lead => {
+    let filteredMetaLeads = metaLeads.filter(lead => {
       const statusMatch = selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter;
       const searchMatch = matchesSearch(lead);
       const loMatch = matchesLOFilter(lead);
@@ -1749,6 +1749,20 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       const sourceMatch = matchesSourceFilter(lead);
       return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch;
     });
+
+    // Keep the currently selected lead available in detail view even if a state update
+    // (e.g. logging a call + invalidating attention) causes it to fall out of filters.
+    if (selectedLead.source === 'lead') {
+      const selectedRecord = leads.find(l => l.id === selectedLead.id);
+      if (selectedRecord && !filteredLeads.some(l => l.id === selectedLead.id)) {
+        filteredLeads = [selectedRecord, ...filteredLeads];
+      }
+    } else {
+      const selectedRecord = metaLeads.find(l => l.id === selectedLead.id);
+      if (selectedRecord && !filteredMetaLeads.some(l => l.id === selectedLead.id)) {
+        filteredMetaLeads = [selectedRecord, ...filteredMetaLeads];
+      }
+    }
 
     return (
       <LeadDetailView

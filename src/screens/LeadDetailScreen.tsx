@@ -289,46 +289,37 @@ export function LeadDetailView({
     }
   };
 
-  if (!record) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.detailHeader}>
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <Text style={styles.backButtonText}>✕</Text>
-          </TouchableOpacity>
-          <Text style={styles.detailHeaderTitle}>Lead not found</Text>
-          <View style={{ width: 40 }} />
-        </View>
-        <View style={styles.centerContent}>
-          <Text>We couldn&apos;t find this lead in memory.</Text>
-        </View>
-      </View>
-    );
-  }
-
   const fullName =
-    [record.first_name, record.last_name].filter(Boolean).join(' ') ||
-    '(No name)';
-  const status = record.status || 'No status';
-  const email = record.email || '';
-  const phone = record.phone || '';
+    record
+      ? [record.first_name, record.last_name].filter(Boolean).join(' ') || '(No name)'
+      : '(No name)';
+  const status = record?.status || 'No status';
+  const email = record?.email || '';
+  const phone = record?.phone || '';
   
   // Use AI attention badge if available, otherwise fall back to rule-based
   // Show AI badge if we have AI data (even if needsAttention is false - shows "No Action Needed")
-  const ruleBadge = getLeadAlert(record);
+  const ruleBadge = record ? getLeadAlert(record) : null;
   const attentionBadge = aiAttention?.badge 
     ? { label: aiAttention.badge, color: aiAttention.priority <= 2 ? '#EF4444' : aiAttention.priority <= 4 ? '#F59E0B' : '#22C55E' }
     : ruleBadge;
   
   console.log('🔍 LeadDetailView render:', { 
-    leadId: record.id, 
-    last_contact_date: record.last_contact_date,
+    leadId: record?.id, 
+    last_contact_date: record?.last_contact_date,
     attentionBadge: attentionBadge ? attentionBadge.label : 'none',
     aiAttention: aiAttention ? { badge: aiAttention.badge, priority: aiAttention.priority } : 'none'
   });
 
   const handleCall = async () => {
     if (!phone) return;
+
+    const rawPhone = String(phone).trim();
+    const sanitizedPhone = rawPhone.replace(/[^\d+]/g, '');
+    if (!sanitizedPhone || sanitizedPhone === '+') {
+      Alert.alert('Invalid phone number', 'This lead does not have a valid phone number to call.');
+      return;
+    }
     
     // Log the call activity automatically
     try {
@@ -337,9 +328,9 @@ export function LeadDetailView({
       const leadTableName = isMeta ? 'meta_ads' : 'leads';
       
       const activityData = {
-        [foreignKeyColumn]: record.id,
+        [foreignKeyColumn]: record!.id,
         activity_type: 'call',
-        notes: `Called ${phone}`,
+        notes: `Called ${rawPhone}`,
         created_by: session?.user?.id || null,
         user_email: session?.user?.email || 'Mobile App User',
       };
@@ -356,23 +347,23 @@ export function LeadDetailView({
         await supabase
           .from(leadTableName)
           .update({ last_contact_date: now })
-          .eq('id', record.id);
+          .eq('id', record!.id);
         
         // Update the lead in parent component state
-        const updatedLead = { ...record, last_contact_date: now };
+        const updatedLead = { ...record!, last_contact_date: now };
         console.log('📞 CALL: Updating lead', { id: updatedLead.id, last_contact_date: now, source: isMeta ? 'meta' : 'lead' });
         onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
         
         // Invalidate AI attention cache to get fresh analysis
         if (onInvalidateAttention) {
-          onInvalidateAttention(record.id);
+          onInvalidateAttention(record!.id);
         }
         
         // Refresh activities to show the new log
         const { data } = await supabase
           .from(tableName)
           .select('*')
-          .eq(foreignKeyColumn, record.id)
+          .eq(foreignKeyColumn, record!.id)
           .order('created_at', { ascending: false });
         
         if (data) {
@@ -384,7 +375,18 @@ export function LeadDetailView({
     }
     
     // Open phone dialer
-    Linking.openURL(`tel:${phone}`);
+    const telUrl = `tel:${sanitizedPhone}`;
+    try {
+      const canOpen = await Linking.canOpenURL(telUrl);
+      if (!canOpen) {
+        Alert.alert('Unable to place call', 'Your device cannot open the phone dialer for this number.');
+        return;
+      }
+      await Linking.openURL(telUrl);
+    } catch (e) {
+      console.log('Error opening dialer:', e);
+      Alert.alert('Unable to place call', 'There was a problem opening the phone dialer.');
+    }
   };
 
   const handleText = () => {
@@ -1420,6 +1422,24 @@ export function LeadDetailView({
       Alert.alert('Error', 'Could not save contact. Please try again.');
     }
   };
+
+  if (!record) {
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <View style={styles.detailHeader}>
+          <TouchableOpacity onPress={onBack} style={styles.backButton}>
+            <Text style={styles.backButtonText}>✕</Text>
+          </TouchableOpacity>
+          <Text style={styles.detailHeaderTitle}>Lead not found</Text>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.centerContent}>
+          <Text>We couldn&apos;t find this lead in memory.</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -2557,7 +2577,13 @@ export function LeadDetailView({
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={styles.modalOverlay}>
             <TouchableWithoutFeedback onPress={() => {}}>
-              <View style={styles.callbackModalContent}>
+              <View
+                style={styles.callbackModalContent}
+                onStartShouldSetResponder={() => {
+                  Keyboard.dismiss();
+                  return false;
+                }}
+              >
                 <View style={styles.templateModalHeader}>
                   <Text style={styles.templateModalTitle}>Schedule Callback</Text>
                   <TouchableOpacity

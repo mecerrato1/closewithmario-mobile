@@ -14,6 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Session } from '@supabase/supabase-js';
 import { useThemeColors } from '../styles/theme';
 import { supabase } from '../lib/supabase';
+import { ALLOW_SIGNUP } from '../lib/featureFlags';
 import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
@@ -41,7 +42,12 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // Load saved email on mount
+  useEffect(() => {
+    if (!ALLOW_SIGNUP && mode === 'signUp') {
+      setMode('signIn');
+    }
+  }, [mode]);
+
   useEffect(() => {
     loadSavedEmail();
   }, []);
@@ -84,6 +90,11 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
           onAuth(data.session);
         }
       } else {
+        if (!ALLOW_SIGNUP) {
+          setAuthError('Account creation is disabled. Please sign in.');
+          setMode('signIn');
+          return;
+        }
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -269,17 +280,19 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => setMode(mode === 'signIn' ? 'signUp' : 'signIn')}
-            style={styles.authSignUpLinkCompact}
-          >
-            <Text style={styles.authSignUpText}>
-              {mode === 'signIn' ? "Don't have an account? " : 'Already have an account? '}
-              <Text style={styles.authSignUpTextBold}>
-                {mode === 'signIn' ? 'Sign up' : 'Sign in'}
+          {ALLOW_SIGNUP && (
+            <TouchableOpacity
+              onPress={() => setMode(mode === 'signIn' ? 'signUp' : 'signIn')}
+              style={styles.authSignUpLinkCompact}
+            >
+              <Text style={styles.authSignUpText}>
+                {mode === 'signIn' ? "Don't have an account? " : 'Already have an account? '}
+                <Text style={styles.authSignUpTextBold}>
+                  {mode === 'signIn' ? 'Sign up' : 'Sign in'}
+                </Text>
               </Text>
-            </Text>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          )}
 
           <Text style={styles.authOrTextCompact}>OR</Text>
 
