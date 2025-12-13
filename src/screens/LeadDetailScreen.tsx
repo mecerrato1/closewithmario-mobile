@@ -398,6 +398,8 @@ export function LeadDetailView({
   const handleTemplateSelect = async (templateId: string) => {
     const template = TEXT_TEMPLATES.find(t => t.id === templateId);
     if (!template) return;
+    if (!record) return;
+    const r = record;
 
     console.log('Current LO Info when creating template:', currentLOInfo);
 
@@ -441,7 +443,7 @@ export function LeadDetailView({
           const { data: callbacks } = await supabase
             .from('lead_callbacks')
             .select('scheduled_for')
-            .or(isMeta ? `meta_ad_id.eq.${record.id}` : `lead_id.eq.${record.id}`)
+            .or(isMeta ? `meta_ad_id.eq.${r.id}` : `lead_id.eq.${r.id}`)
             .gte('scheduled_for', now.toISOString()) // Only get future callbacks
             .order('scheduled_for', { ascending: true }) // Get the soonest upcoming callback
             .limit(1);
@@ -464,16 +466,16 @@ export function LeadDetailView({
     };
 
     const variables: TemplateVariables = {
-      fname: record.first_name || 'there',
+      fname: r.first_name || 'there',
       loFullname: currentLOInfo 
         ? `${currentLOInfo.firstName} ${currentLOInfo.lastName}`.trim() 
         : 'Mario',
       loFname: currentLOInfo?.firstName || 'Mario',
       loPhone: currentLOInfo?.phone || '[Phone]',
       loEmail: currentLOInfo?.email || '[Email]',
-      platform: isMeta ? (record as MetaLead).platform || 'Facebook' : 'our website',
+      platform: isMeta ? (r as MetaLead).platform || 'Facebook' : 'our website',
       callbackTime: callbackTime,
-      adDate: formatAdDate(record.created_at),
+      adDate: formatAdDate(r.created_at),
     };
 
     console.log('Template variables:', variables);
@@ -495,7 +497,7 @@ export function LeadDetailView({
         const leadTableName = isMeta ? 'meta_ads' : 'leads';
         
         const activityData = {
-          [foreignKeyColumn]: record.id,
+          [foreignKeyColumn]: r.id,
           activity_type: 'text',
           notes: `Sent: "${template.name}"\n\n${messageBody}`,
           created_by: session?.user?.id || null,
@@ -514,17 +516,17 @@ export function LeadDetailView({
           await supabase
             .from(leadTableName)
             .update({ last_contact_date: now })
-            .eq('id', record.id);
+            .eq('id', r.id);
           
           // Update the lead in parent component state
-          const updatedLead = { ...record, last_contact_date: now };
+          const updatedLead = { ...r, last_contact_date: now };
           onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
           
           // Refresh activities to show the new log
           const { data } = await supabase
             .from(tableName)
             .select('*')
-            .eq(foreignKeyColumn, record.id)
+            .eq(foreignKeyColumn, r.id)
             .order('created_at', { ascending: false });
           
           if (data) {
@@ -549,7 +551,7 @@ export function LeadDetailView({
         const leadTableName = isMeta ? 'meta_ads' : 'leads';
 
         const activityData = {
-          [foreignKeyColumn]: record.id,
+          [foreignKeyColumn]: r.id,
           activity_type: 'email',
           notes: `Sent email: "${template.name}"\n\n${messageBody}`,
           created_by: session?.user?.id || null,
@@ -606,8 +608,10 @@ export function LeadDetailView({
 
   const handleCustomMessageSend = async () => {
     if (!customMessageText.trim()) return;
+    if (!record) return;
+    const r = record;
 
-    const fname = record.first_name || 'there';
+    const fname = r.first_name || 'there';
     const loPhone = currentLOInfo?.phone || '[Phone]';
     const loEmail = currentLOInfo?.email || '[Email]';
 
@@ -628,7 +632,7 @@ export function LeadDetailView({
         const leadTableName = isMeta ? 'meta_ads' : 'leads';
         
         const activityData = {
-          [foreignKeyColumn]: record.id,
+          [foreignKeyColumn]: r.id,
           activity_type: 'text',
           notes: `Sent text: Custom Message\n\n${messageBody}`,
           created_by: session?.user?.id || null,
@@ -680,6 +684,8 @@ export function LeadDetailView({
   // Handle AI-suggested text action - extracts message from suggestion and sends with proper formatting
   const handleAiSuggestedText = async () => {
     if (!phone || !aiAttention?.suggestedAction) return;
+    if (!record) return;
+    const r = record;
     
     // Extract the quoted message from the AI suggestion
     // Format: "Send a text: 'Hi Andres and Maria, just checking in...'"
@@ -708,7 +714,7 @@ export function LeadDetailView({
       const leadTableName = isMeta ? 'meta_ads' : 'leads';
       
       const activityData = {
-        [foreignKeyColumn]: record.id,
+        [foreignKeyColumn]: r.id,
         activity_type: 'text',
         notes: `Sent AI-suggested text:\n\n${messageBody}`,
         created_by: session?.user?.id || null,
@@ -729,15 +735,15 @@ export function LeadDetailView({
         await supabase
           .from(leadTableName)
           .update({ last_contact_date: now })
-          .eq('id', record.id);
+          .eq('id', r.id);
         
         // Update the lead in parent component state
-        const updatedLead = { ...record, last_contact_date: now };
+        const updatedLead = { ...r, last_contact_date: now };
         onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
         
         // Invalidate AI attention cache since we just took action
         if (onInvalidateAttention) {
-          onInvalidateAttention(record.id);
+          onInvalidateAttention(r.id);
         }
         
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -1308,6 +1314,13 @@ export function LeadDetailView({
       return;
     }
 
+    if (!record) {
+      alert('Unable to update: lead not found.');
+      return;
+    }
+
+    const r = record;
+
     try {
       setUpdatingLO(true);
       
@@ -1317,7 +1330,7 @@ export function LeadDetailView({
       const { data, error } = await supabase
         .from(tableName)
         .update({ lo_id: newLOId })
-        .eq('id', record.id)
+        .eq('id', r.id)
         .select()
         .single();
 
@@ -1343,9 +1356,16 @@ export function LeadDetailView({
       return;
     }
 
+    if (!record) {
+      console.log('[Contacts] No record, skipping save');
+      return;
+    }
+
+    const r = record;
+
     try {
       console.log('[Contacts] Save contact pressed', {
-        leadId: record.id,
+        leadId: r.id,
         isMeta,
         hasPhone: !!phone,
         hasEmail: !!email,
@@ -1354,12 +1374,12 @@ export function LeadDetailView({
       const company = isMeta ? 'Mortgage Meta' : 'Mortgage';
       const notesLines: string[] = [];
 
-      if (!isMeta && (record as any).source) {
-        notesLines.push(`Source: ${(record as any).source}`);
+      if (!isMeta && (r as any).source) {
+        notesLines.push(`Source: ${(r as any).source}`);
       }
 
       if (isMeta) {
-        const metaRecord = record as any;
+        const metaRecord = r as any;
         if (metaRecord.ad_name) notesLines.push(`Ad: ${metaRecord.ad_name}`);
         if (metaRecord.subject_address) notesLines.push(`Address: ${metaRecord.subject_address}`);
         if (metaRecord.price_range) notesLines.push(`Price Range: ${metaRecord.price_range}`);
@@ -1369,7 +1389,7 @@ export function LeadDetailView({
         if (metaRecord.monthly_income) notesLines.push(`Income: ${metaRecord.monthly_income}`);
         if (metaRecord.meta_ad_notes) notesLines.push(`Notes: ${metaRecord.meta_ad_notes}`);
       } else {
-        const leadRecord = record as any;
+        const leadRecord = r as any;
 
         if (leadRecord.loan_purpose) {
           notesLines.push(`Loan Purpose: ${leadRecord.loan_purpose}`);
@@ -1394,7 +1414,7 @@ export function LeadDetailView({
         }
       }
 
-      const createdDate = new Date(record.created_at).toLocaleDateString('en-US', {
+      const createdDate = new Date(r.created_at).toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
         year: 'numeric',
@@ -1404,8 +1424,8 @@ export function LeadDetailView({
       const notes = notesLines.join('\n');
 
       const payload = {
-        firstName: record.first_name || 'Lead',
-        lastName: record.last_name || '',
+        firstName: r.first_name || 'Lead',
+        lastName: r.last_name || '',
         phone: phone || '',
         email: email || '',
         company,
@@ -2576,14 +2596,8 @@ export function LeadDetailView({
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback onPress={() => {}}>
-              <View
-                style={styles.callbackModalContent}
-                onStartShouldSetResponder={() => {
-                  Keyboard.dismiss();
-                  return false;
-                }}
-              >
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <View style={styles.callbackModalContent}>
                 <View style={styles.templateModalHeader}>
                   <Text style={styles.templateModalTitle}>Schedule Callback</Text>
                   <TouchableOpacity
