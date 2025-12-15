@@ -36,6 +36,7 @@ import AuthScreen from './src/screens/AuthScreen';
 import { LeadDetailView } from './src/screens/LeadDetailScreen';
 import TeamManagementScreen from './src/screens/TeamManagementScreen';
 import MortgageCalculatorScreen from './src/screens/MortgageCalculatorScreen';
+import ProfileSettingsScreen from './src/screens/ProfileSettingsScreen';
 import { AppLockProvider, useAppLock } from './src/contexts/AppLockContext';
 import { useAiLeadAttention } from './src/hooks/useAiLeadAttention';
 import LockScreen from './src/screens/LockScreen';
@@ -43,13 +44,7 @@ import QuoteOfTheDay from './src/components/dashboard/QuoteOfTheDay';
 import { registerForPushNotifications } from './src/lib/notifications';
 import { styles } from './src/styles/appStyles';
 import { useThemeColors } from './src/styles/theme';
-import { 
-  requestMediaLibraryPermission, 
-  pickProfileImage, 
-  uploadProfilePicture, 
-  removeCustomProfilePicture,
-  getAvatarUrl 
-} from './src/utils/profilePicture';
+import { getAvatarUrl } from './src/utils/profilePicture';
 
 import * as WebBrowser from 'expo-web-browser';
 
@@ -114,7 +109,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [showTeamManagement, setShowTeamManagement] = useState(false);
   const [showMortgageCalculator, setShowMortgageCalculator] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [uploadingPicture, setUploadingPicture] = useState(false);
+  const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [teamMemberId, setTeamMemberId] = useState<string | null>(null);
   const [selectedLOFilter, setSelectedLOFilter] = useState<string | null>(null); // null = all LOs
   const [showLOPicker, setShowLOPicker] = useState(false);
@@ -147,87 +142,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   });
   const [showLoanPurposePicker, setShowLoanPurposePicker] = useState(false);
   const LOAN_PURPOSES = ['Home Buying', 'Home Selling', 'Mortgage Refinance', 'Investment Property', 'General Real Estate'];
-
-  // Profile picture upload handlers
-  const handleUploadProfilePicture = async () => {
-    try {
-      setShowProfileMenu(false);
-      
-      // Request permission
-      const hasPermission = await requestMediaLibraryPermission();
-      if (!hasPermission) {
-        Alert.alert(
-          'Permission Required',
-          'Please allow access to your photo library to upload a profile picture.',
-          [{ text: 'OK' }]
-        );
-        return;
-      }
-
-      // Pick image
-      const result = await pickProfileImage();
-      if (!result || result.canceled) {
-        return;
-      }
-
-      setUploadingPicture(true);
-
-      // Upload to Supabase
-      const uploadResult = await uploadProfilePicture(
-        session?.user?.id || '',
-        result.assets[0].uri
-      );
-
-      setUploadingPicture(false);
-
-      if (uploadResult.success) {
-        Alert.alert('Success', 'Profile picture updated!', [{ text: 'OK' }]);
-        // Force a re-render by toggling a state
-        setUploadingPicture(false);
-        setUploadingPicture(true);
-        setUploadingPicture(false);
-      } else {
-        Alert.alert('Error', uploadResult.error || 'Failed to upload picture', [{ text: 'OK' }]);
-      }
-    } catch (error) {
-      setUploadingPicture(false);
-      Alert.alert('Error', 'An unexpected error occurred', [{ text: 'OK' }]);
-    }
-  };
-
-  const handleRemoveProfilePicture = async () => {
-    try {
-      setShowProfileMenu(false);
-      
-      Alert.alert(
-        'Remove Profile Picture',
-        'Are you sure you want to remove your custom profile picture?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Remove',
-            style: 'destructive',
-            onPress: async () => {
-              setUploadingPicture(true);
-              
-              const result = await removeCustomProfilePicture(session?.user?.id || '');
-              
-              setUploadingPicture(false);
-              
-              if (result.success) {
-                Alert.alert('Success', 'Profile picture removed', [{ text: 'OK' }]);
-              } else {
-                Alert.alert('Error', result.error || 'Failed to remove picture', [{ text: 'OK' }]);
-              }
-            }
-          }
-        ]
-      );
-    } catch (error) {
-      setUploadingPicture(false);
-      Alert.alert('Error', 'An unexpected error occurred', [{ text: 'OK' }]);
-    }
-  };
 
   // Micro animations for the lead list
   const listOpacity = useRef(new Animated.Value(1)).current;
@@ -1730,6 +1644,16 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     );
   }
 
+  if (showProfileSettings) {
+    return (
+      <ProfileSettingsScreen
+        session={session}
+        onBack={() => setShowProfileSettings(false)}
+        onSignOut={onSignOut}
+      />
+    );
+  }
+
   if (selectedLead) {
     // Apply the same filters to leads/metaLeads that are used in the list view
     let filteredLeads = leads.filter(lead => {
@@ -1943,32 +1867,19 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               )}
               
               <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
-              
+
               <TouchableOpacity
                 style={styles.profileMenuItem}
-                onPress={handleUploadProfilePicture}
-                disabled={uploadingPicture}
+                onPress={() => {
+                  setShowProfileMenu(false);
+                  setShowProfileSettings(true);
+                }}
               >
                 <View style={styles.profileMenuIconContainer}>
-                  <Ionicons name="camera" size={20} color={colors.textPrimary} />
+                  <Ionicons name="person-circle-outline" size={20} color={colors.textPrimary} />
                 </View>
-                <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>
-                  {uploadingPicture ? 'Uploading...' : 'Change Profile Picture'}
-                </Text>
+                <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Profile Settings</Text>
               </TouchableOpacity>
-              
-              {session?.user?.user_metadata?.custom_avatar_url && (
-                <TouchableOpacity
-                  style={styles.profileMenuItem}
-                  onPress={handleRemoveProfilePicture}
-                  disabled={uploadingPicture}
-                >
-                  <View style={styles.profileMenuIconContainer}>
-                    <Ionicons name="trash-outline" size={20} color={colors.textSecondary} />
-                  </View>
-                  <Text style={[styles.profileMenuText, { color: colors.textSecondary }]}>Remove Custom Picture</Text>
-                </TouchableOpacity>
-              )}
               
               <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
               
@@ -2579,33 +2490,20 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             )}
             
             <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
-            
+
             <TouchableOpacity
               style={styles.profileMenuItem}
-              onPress={handleUploadProfilePicture}
-              disabled={uploadingPicture}
+              onPress={() => {
+                setShowProfileMenu(false);
+                setShowProfileSettings(true);
+              }}
             >
               <View style={styles.profileMenuIconContainer}>
-                <Ionicons name="camera" size={20} color={colors.textPrimary} />
+                <Ionicons name="person-circle-outline" size={20} color={colors.textPrimary} />
               </View>
-              <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>
-                {uploadingPicture ? 'Uploading...' : 'Change Profile Picture'}
-              </Text>
+              <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Profile Settings</Text>
             </TouchableOpacity>
-            
-            {session?.user?.user_metadata?.custom_avatar_url && (
-              <TouchableOpacity
-                style={styles.profileMenuItem}
-                onPress={handleRemoveProfilePicture}
-                disabled={uploadingPicture}
-              >
-                <View style={styles.profileMenuIconContainer}>
-                  <Ionicons name="trash-outline" size={20} color={colors.textSecondary} />
-                </View>
-                <Text style={[styles.profileMenuText, { color: colors.textSecondary }]}>Remove Custom Picture</Text>
-              </TouchableOpacity>
-            )}
-            
+
             <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
             
             <TouchableOpacity
