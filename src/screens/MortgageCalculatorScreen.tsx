@@ -11,6 +11,8 @@ import {
   Platform,
   KeyboardAvoidingView,
   PanResponder,
+  Linking,
+  Alert,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -39,14 +41,14 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
   const { colors, isDark } = useThemeColors();
 
   // Input states
-  const [price, setPrice] = useState('450000');
+  const [price, setPrice] = useState('450,000');
   const [loanType, setLoanType] = useState<LoanType>('Conventional');
   const [downPct, setDownPct] = useState('3');
   const [termYears, setTermYears] = useState(30);
   const [creditBand, setCreditBand] = useState<CreditBand>('740-759');
   const [county, setCounty] = useState('Broward');
-  const [annualTax, setAnnualTax] = useState('6000');
-  const [annualIns, setAnnualIns] = useState('2400');
+  const [annualTax, setAnnualTax] = useState('6,000');
+  const [annualIns, setAnnualIns] = useState('2,400');
   const [buyerPaysSellerTransfer, setBuyerPaysSellerTransfer] = useState(false);
   const [vaLoanUsage, setVaLoanUsage] = useState<VALoanUsage>('firstUse');
   const [sellerCredit, setSellerCredit] = useState('0');
@@ -171,6 +173,60 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(value);
+  };
+
+  const handleTextResults = async () => {
+    const priceValue = parseFloat(price.replace(/[^0-9.]/g, '')) || 0;
+    const downPaymentAmount = results.actualDownPayment;
+    const downPaymentPct = parseFloat(downPct) || 0;
+
+    const financedFeeBlurb = results.financedFee > 0 
+      ? loanType === 'FHA'
+        ? `\n• UFMIP (1.75%): ${formatCurrency(results.financedFee)} (financed)`
+        : `\n• VA Funding Fee (${(results.feeRate * 100).toFixed(2)}%): ${formatCurrency(results.financedFee)} (financed)`
+      : '';
+
+    const message = `Hi,
+
+🏠 Mortgage Illustration
+
+📍 ${county} County, FL
+💰 Sales Price: ${formatCurrency(priceValue)}
+💵 Down Payment: ${formatCurrency(downPaymentAmount)} (${downPaymentPct}%)
+
+📋 Loan Details
+• Type: ${loanType}
+• Term: ${termYears} years
+• Rate: ${results.noteRate.toFixed(3)}% | APR: ${results.apr.toFixed(3)}%
+• Base Loan: ${formatCurrency(results.baseLoanBeforeFee)}${financedFeeBlurb}${results.financedFee > 0 ? `\n• Total Loan: ${formatCurrency(results.baseLoan)}` : ''}
+
+💳 Monthly Payment: ${formatCurrencyDetailed(results.monthlyTotal)}
+• P&I: ${formatCurrency(results.monthlyPI)}
+• Taxes: ${formatCurrency(results.monthlyTax)}
+• Insurance: ${formatCurrency(results.monthlyIns)}${results.monthlyMI > 0 ? `\n• MI: ${formatCurrency(results.monthlyMI)}` : ''}
+
+🔑 Cash to Close: ${formatCurrencyDetailed(results.cashToClose)}
+• Down Payment: ${formatCurrency(results.actualDownPayment)}
+• Closing Costs: ${formatCurrency(results.closingCosts)}
+• Prepaids: ${formatCurrency(results.prepaids)}${results.sellerCreditAmount > 0 ? `\n• Seller Credit: -${formatCurrency(results.sellerCreditAmount)}` : ''}
+
+⚠️ This is an illustration only and not a commitment to lend. Actual rates, payments, and costs may vary. Please contact me for a personalized quote.`;
+
+    const smsUrl = Platform.OS === 'ios' 
+      ? `sms:&body=${encodeURIComponent(message)}`
+      : `sms:?body=${encodeURIComponent(message)}`;
+
+    try {
+      const canOpen = await Linking.canOpenURL(smsUrl);
+      if (canOpen) {
+        await Linking.openURL(smsUrl);
+      } else {
+        Alert.alert('Unable to Send', 'SMS is not available on this device.');
+      }
+    } catch (error) {
+      console.log('Error opening SMS:', error);
+      Alert.alert('Error', 'Could not open messaging app.');
+    }
   };
 
   const formatCurrencyDetailed = (value: number) => {
@@ -561,6 +617,54 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               </View>
             )}
           </View>
+
+          {/* Divider */}
+          <View style={{ height: 1, backgroundColor: 'rgba(255, 255, 255, 0.2)', marginVertical: 20 }} />
+
+          {/* Cash to Close */}
+          <Text style={styles.resultLabel}>Cash to Close</Text>
+          <Text style={styles.resultValue}>{formatCurrencyDetailed(results.cashToClose)}</Text>
+          
+          <View style={styles.resultBreakdown}>
+            <View style={styles.resultBreakdownItem}>
+              <Text style={styles.resultBreakdownLabel}>Down Pmt</Text>
+              <Text style={styles.resultBreakdownValue}>{formatCurrency(results.actualDownPayment)}</Text>
+            </View>
+            <View style={styles.resultBreakdownItem}>
+              <Text style={styles.resultBreakdownLabel}>Closing</Text>
+              <Text style={styles.resultBreakdownValue}>{formatCurrency(results.closingCosts)}</Text>
+            </View>
+            <View style={styles.resultBreakdownItem}>
+              <Text style={styles.resultBreakdownLabel}>Prepaids</Text>
+              <Text style={styles.resultBreakdownValue}>{formatCurrency(results.prepaids)}</Text>
+            </View>
+            {results.sellerCreditAmount > 0 && (
+              <View style={styles.resultBreakdownItem}>
+                <Text style={styles.resultBreakdownLabel}>Credit</Text>
+                <Text style={styles.resultBreakdownValue}>-{formatCurrency(results.sellerCreditAmount)}</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Text Results Button */}
+          <TouchableOpacity
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#10B981',
+              borderRadius: 12,
+              paddingVertical: 14,
+              marginTop: 16,
+              gap: 8,
+            }}
+            onPress={handleTextResults}
+          >
+            <Ionicons name="chatbubble-outline" size={20} color="#FFFFFF" />
+            <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>
+              Text Results
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Cash to Close Card */}
@@ -611,20 +715,58 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
           {showClosingBreakdown && (
             <View style={{ marginTop: 12 }}>
               <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Processing Fee</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(DEFAULT_FEES.processingFee)}</Text>
+              </View>
+              <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Underwriting Fee</Text>
                 <Text style={styles.detailValue}>{formatCurrencyDetailed(DEFAULT_FEES.underwritingFee)}</Text>
               </View>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Processing Fee</Text>
-                <Text style={styles.detailValue}>{formatCurrencyDetailed(DEFAULT_FEES.processingFee)}</Text>
+                <Text style={styles.detailLabel}>Tax Service Fee</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(DEFAULT_FEES.taxServiceFee)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Credit Report Fee</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(DEFAULT_FEES.creditReportFee)}</Text>
               </View>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Appraisal Fee</Text>
                 <Text style={styles.detailValue}>{formatCurrencyDetailed(DEFAULT_FEES.appraisalFee)}</Text>
               </View>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Lender's Title</Text>
-                <Text style={styles.detailValue}>{formatCurrencyDetailed(results.lendersTitle)}</Text>
+                <Text style={styles.detailLabel}>Flood Cert Fee</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(DEFAULT_FEES.floodCertFee)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Survey Fee</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(DEFAULT_FEES.surveyFee)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Title Closing Fee</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(DEFAULT_FEES.titleClosingFee)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Owner's Title Fee</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(DEFAULT_FEES.ownersTitleFee)}</Text>
+              </View>
+              {results.lendersTitleBuyerSide > 0 && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Lender's Title</Text>
+                  <Text style={styles.detailValue}>{formatCurrencyDetailed(results.lendersTitleBuyerSide)}</Text>
+                </View>
+              )}
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Title Search Fee</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(DEFAULT_FEES.titleSearchFee)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Endorsements</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(DEFAULT_FEES.endorsements)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Recording Fee</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(DEFAULT_FEES.recordingFee)}</Text>
               </View>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Intangible Tax</Text>
@@ -634,12 +776,6 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
                 <Text style={styles.detailLabel}>Doc Stamps</Text>
                 <Text style={styles.detailValue}>{formatCurrencyDetailed(results.deed)}</Text>
               </View>
-              {results.ownersTitleBuyerSide > 0 && (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Owner's Title</Text>
-                  <Text style={styles.detailValue}>{formatCurrencyDetailed(results.ownersTitleBuyerSide)}</Text>
-                </View>
-              )}
             </View>
           )}
 
@@ -990,14 +1126,38 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               </TouchableOpacity>
             </View>
             
-            <TextInput
-              style={styles.input}
-              value={sellerCredit}
-              onChangeText={(text) => setSellerCredit(formatNumberWithCommas(text))}
-              keyboardType="numeric"
-              placeholder={sellerCreditType === 'percentage' ? '3' : '5,000'}
-              placeholderTextColor={colors.textSecondary}
-            />
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              {sellerCreditType === 'dollar' && (
+                <Text style={{ fontSize: 18, fontWeight: '600', color: colors.textPrimary, marginRight: 4 }}>$</Text>
+              )}
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                value={sellerCredit}
+                onChangeText={(text) => {
+                  if (sellerCreditType === 'percentage') {
+                    // Strip commas and limit to reasonable percentage (0-10)
+                    const numericValue = text.replace(/[^0-9.]/g, '');
+                    const num = parseFloat(numericValue) || 0;
+                    if (num <= 10) {
+                      setSellerCredit(numericValue);
+                    }
+                  } else {
+                    setSellerCredit(formatNumberWithCommas(text));
+                  }
+                }}
+                keyboardType="decimal-pad"
+                placeholder={sellerCreditType === 'percentage' ? '3' : '5,000'}
+                placeholderTextColor={colors.textSecondary}
+              />
+              {sellerCreditType === 'percentage' && (
+                <Text style={{ fontSize: 18, fontWeight: '600', color: colors.textPrimary, marginLeft: 4 }}>%</Text>
+              )}
+            </View>
+            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
+              {sellerCreditType === 'percentage' 
+                ? 'Enter percentage of sales price' 
+                : 'Enter dollar amount'}
+            </Text>
           </View>
 
           <View style={styles.card}>

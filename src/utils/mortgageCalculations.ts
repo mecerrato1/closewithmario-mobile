@@ -24,8 +24,8 @@ export interface ClosingCostFees {
 }
 
 export const DEFAULT_FEES: ClosingCostFees = {
-  underwritingFee: 695,
-  processingFee: 899,
+  underwritingFee: 795,
+  processingFee: 995,
   appraisalFee: 550,
   taxServiceFee: 68,
   floodCertFee: 5,
@@ -35,7 +35,7 @@ export const DEFAULT_FEES: ClosingCostFees = {
   titleSearchFee: 125,
   endorsements: 300,
   recordingFee: 250,
-  creditReportFee: 250
+  creditReportFee: 225
 };
 
 export const MIN_DOWN_BY_LOAN: Record<LoanType, number> = {
@@ -71,6 +71,7 @@ export interface MortgageInputs {
 
 export interface MortgageResults {
   baseLoan: number;
+  baseLoanBeforeFee: number;
   financedFee: number;
   feeRate: number;
   noteRate: number;
@@ -91,7 +92,7 @@ export interface MortgageResults {
   lendersTitle: number;
   intangible: number;
   deed: number;
-  ownersTitleBuyerSide: number;
+  lendersTitleBuyerSide: number;
   prepaidTaxes: number;
   prepaidInsurance: number;
   prepaidInterest: number;
@@ -110,7 +111,8 @@ export function calculateMortgage(inputs: MortgageInputs, fees: ClosingCostFees 
   
   // Calculate base loan and financed fees
   const downPayment = inputs.price * (inputs.downPct / 100);
-  let baseLoan = inputs.price - downPayment;
+  const baseLoanBeforeFee = inputs.price - downPayment;
+  let baseLoan = baseLoanBeforeFee;
   let financedFee = 0;
   let feeRate = 0;
 
@@ -221,12 +223,12 @@ export function calculateMortgage(inputs: MortgageInputs, fees: ClosingCostFees 
   // State taxes
   const intangible = fl.getIntangibleTax(baseLoan);
   const deed = fl.getDeedTax(baseLoan, inputs.buyerPaysSellerTransfer, inputs.price, inputs.county);
-  const ownersTitleBuyerSide = fl.buyerPaysOwnersTitle(inputs.county) ? fees.ownersTitleFee : 0;
+  const lendersTitleBuyerSide = fl.buyerPaysOwnersTitle(inputs.county) ? lendersTitle : 0;
 
   // Closing costs
   const closingCosts =
     fees.underwritingFee + fees.processingFee + fees.appraisalFee + fees.taxServiceFee + fees.floodCertFee +
-    fees.surveyFee + fees.titleClosingFee + ownersTitleBuyerSide + lendersTitle +
+    fees.surveyFee + fees.titleClosingFee + fees.ownersTitleFee + lendersTitleBuyerSide +
     fees.titleSearchFee + fees.endorsements + fees.recordingFee + fees.creditReportFee +
     intangible + deed;
 
@@ -242,7 +244,7 @@ export function calculateMortgage(inputs: MortgageInputs, fees: ClosingCostFees 
     : inputs.sellerCredit;
 
   // Cash to close
-  const actualDownPayment = inputs.price - baseLoan;
+  const actualDownPayment = downPayment;
   const cashToClose = actualDownPayment + closingCosts + prepaids - sellerCreditAmount;
 
   // Total monthly payment
@@ -250,6 +252,7 @@ export function calculateMortgage(inputs: MortgageInputs, fees: ClosingCostFees 
 
   return {
     baseLoan,
+    baseLoanBeforeFee,
     financedFee,
     feeRate,
     noteRate,
@@ -269,7 +272,7 @@ export function calculateMortgage(inputs: MortgageInputs, fees: ClosingCostFees 
     lendersTitle,
     intangible,
     deed,
-    ownersTitleBuyerSide,
+    lendersTitleBuyerSide,
     prepaidTaxes,
     prepaidInsurance,
     prepaidInterest
