@@ -770,31 +770,45 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
             <Text style={styles.resultLabel}>Cash to Close</Text>
             {totalDPAAmount > 0 && (
-              <TouchableOpacity
-                onPress={() => {
-                  const currentDown = parseFloat(downPct);
-                  const minDownPct = MIN_DOWN_BY_LOAN[loanType];
-                  const newDown = Math.max(currentDown - 0.25, minDownPct);
-                  
-                  // Check if new down payment would exceed 105% CLTV
-                  const feeMultiplier = loanType === 'FHA' ? 1.0175 : loanType === 'VA' ? 1.023 : 1;
-                  const testLoan = priceValue * (1 - newDown / 100) * feeMultiplier;
-                  const testCLTV = ((testLoan + totalDPAAmount) / priceValue) * 100;
-                  
-                  // Calculate projected cash to close
-                  const testDownPayment = priceValue * (newDown / 100);
-                  const testCashToClose = results.cashToClose + discountPointsAmount - totalDPAAmount + totalDPAFees - (results.actualDownPayment - testDownPayment);
-                  
-                  // Only apply if CLTV doesn't exceed 105% AND cash to close is not negative
-                  if (testCLTV <= 105 && testCashToClose >= 0) {
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <TouchableOpacity
+                  onPress={() => {
+                    const currentDown = parseFloat(downPct);
+                    const minDownPct = MIN_DOWN_BY_LOAN[loanType];
+                    const newDown = Math.max(currentDown - 0.25, minDownPct);
+                    
+                    // Check if new down payment would exceed 105% CLTV
+                    const feeMultiplier = loanType === 'FHA' ? 1.0175 : loanType === 'VA' ? 1.023 : 1;
+                    const testLoan = priceValue * (1 - newDown / 100) * feeMultiplier;
+                    const testCLTV = ((testLoan + totalDPAAmount) / priceValue) * 100;
+                    
+                    // Calculate projected cash to close
+                    const testDownPayment = priceValue * (newDown / 100);
+                    const testCashToClose = results.cashToClose + discountPointsAmount - totalDPAAmount + totalDPAFees - (results.actualDownPayment - testDownPayment);
+                    
+                    // Only apply if CLTV doesn't exceed 105% AND cash to close is not negative
+                    if (testCLTV <= 105 && testCashToClose >= 0) {
+                      setDownPct(newDown.toFixed(1));
+                    }
+                  }}
+                  style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 6 }}
+                >
+                  <Ionicons name="chevron-down-circle-outline" size={16} color="#FFFFFF" />
+                  <Text style={{ fontSize: 11, color: '#FFFFFF', marginLeft: 2, fontWeight: '500' }}>Reduce CTC</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  onPress={() => {
+                    const currentDown = parseFloat(downPct);
+                    const newDown = Math.min(currentDown + 0.25, 100);
                     setDownPct(newDown.toFixed(1));
-                  }
-                }}
-                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 6 }}
-              >
-                <Ionicons name="chevron-down-circle-outline" size={16} color="#FFFFFF" />
-                <Text style={{ fontSize: 11, color: '#FFFFFF', marginLeft: 2, fontWeight: '500' }}>Reduce CTC</Text>
-              </TouchableOpacity>
+                  }}
+                  style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 6 }}
+                >
+                  <Ionicons name="chevron-up-circle-outline" size={16} color="#FFFFFF" />
+                  <Text style={{ fontSize: 11, color: '#FFFFFF', marginLeft: 2, fontWeight: '500' }}>Increase CTC</Text>
+                </TouchableOpacity>
+              </View>
             )}
           </View>
           <Text style={styles.resultValue}>{formatCurrencyDetailed(adjustedCashToClose)}</Text>
