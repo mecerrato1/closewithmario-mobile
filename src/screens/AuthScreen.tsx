@@ -305,6 +305,10 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
             <Text style={styles.authGoogleIconNew}>G</Text>
             <Text style={[styles.authGoogleButtonTextNew, { color: colors.textPrimary }]}>Continue with Google</Text>
           </TouchableOpacity>
+
+          <Text style={[styles.authCreateAccountHint, { color: colors.textSecondary }]}>
+            Don't have an account? Create one at closewithmario.com
+          </Text>
         </View>
 
         {/* Version Info */}
@@ -488,5 +492,12 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     fontSize: 16,
     fontWeight: '600',
+  },
+  authCreateAccountHint: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    marginTop: 12,
+    fontWeight: '400',
   },
 });

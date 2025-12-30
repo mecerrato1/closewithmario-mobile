@@ -54,6 +54,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
   const [sellerCredit, setSellerCredit] = useState('0');
   const [sellerCreditType, setSellerCreditType] = useState<'percentage' | 'dollar'>('percentage');
   const [customRate, setCustomRate] = useState('');
+  const [discountPoints, setDiscountPoints] = useState('0.5');
   
   // Rate fetching state
   const [rates, setRates] = useState<RateData | null>(null);
@@ -119,6 +120,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
         if (data.sellerCredit) setSellerCredit(formatNumberWithCommas(data.sellerCredit));
         if (data.sellerCreditType) setSellerCreditType(data.sellerCreditType);
         if (data.customRate) setCustomRate(data.customRate);
+        if (data.discountPoints !== undefined) setDiscountPoints(data.discountPoints.toString());
       }
     } catch (error) {
       console.error('Failed to load saved inputs:', error);
@@ -129,7 +131,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
     try {
       const data = {
         price, loanType, downPct, termYears, creditBand, county, annualTax, annualIns,
-        buyerPaysSellerTransfer, vaLoanUsage, sellerCredit, sellerCreditType, customRate
+        buyerPaysSellerTransfer, vaLoanUsage, sellerCredit, sellerCreditType, customRate, discountPoints
       };
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (error) {
@@ -165,6 +167,20 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
     return calculateMortgage(inputs, DEFAULT_FEES);
   }, [price, loanType, downPct, termYears, creditBand, county, annualTax, annualIns, 
       buyerPaysSellerTransfer, vaLoanUsage, sellerCredit, sellerCreditType, customRate, rates]);
+
+  // Calculate discount points dollar amount
+  const discountPointsAmount = useMemo(() => {
+    const points = parseFloat(discountPoints) || 0;
+    // For FHA/VA: multiply by total loan (includes financed fee)
+    // For Conventional: multiply by base loan amount
+    const loanForPoints = (loanType === 'FHA' || loanType === 'VA') 
+      ? results.baseLoan 
+      : results.baseLoanBeforeFee;
+    return loanForPoints * (points / 100);
+  }, [discountPoints, results.baseLoan, results.baseLoanBeforeFee, loanType]);
+
+  // Adjusted cash to close including discount points
+  const adjustedCashToClose = results.cashToClose + discountPointsAmount;
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -205,10 +221,10 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
 • Taxes: ${formatCurrency(results.monthlyTax)}
 • Insurance: ${formatCurrency(results.monthlyIns)}${results.monthlyMI > 0 ? `\n• MI: ${formatCurrency(results.monthlyMI)}` : ''}
 
-🔑 Cash to Close: ${formatCurrencyDetailed(results.cashToClose)}
+🔑 Cash to Close: ${formatCurrencyDetailed(adjustedCashToClose)}
 • Down Payment: ${formatCurrency(results.actualDownPayment)}
 • Closing Costs: ${formatCurrency(results.closingCosts)}
-• Prepaids: ${formatCurrency(results.prepaids)}${results.sellerCreditAmount > 0 ? `\n• Seller Credit: -${formatCurrency(results.sellerCreditAmount)}` : ''}
+• Prepaids: ${formatCurrency(results.prepaids)}${discountPointsAmount > 0 ? `\n• Discount Points (${discountPoints}%): ${formatCurrency(discountPointsAmount)}` : ''}${results.sellerCreditAmount > 0 ? `\n• Seller Credit: -${formatCurrency(results.sellerCreditAmount)}` : ''}
 
 ⚠️ This is an illustration only and not a commitment to lend. Actual rates, payments, and costs may vary. Please contact me for a personalized quote.`;
 
@@ -484,12 +500,13 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       justifyContent: 'space-between',
       backgroundColor: 'rgba(255, 255, 255, 0.15)',
       borderRadius: 12,
-      padding: 16,
-      gap: 12,
+      padding: 12,
+      gap: 6,
     },
     resultBreakdownItem: {
       flex: 1,
       alignItems: 'center',
+      minWidth: 0,
     },
     resultBreakdownLabel: {
       fontSize: 11,
@@ -500,7 +517,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       letterSpacing: 0.5,
     },
     resultBreakdownValue: {
-      fontSize: 18,
+      fontSize: 14,
       fontWeight: '700',
       color: '#FFFFFF',
     },
@@ -600,20 +617,20 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
           <View style={styles.resultBreakdown}>
             <View style={styles.resultBreakdownItem}>
               <Text style={styles.resultBreakdownLabel}>P&I</Text>
-              <Text style={styles.resultBreakdownValue}>{formatCurrency(results.monthlyPI)}</Text>
+              <Text style={styles.resultBreakdownValue} numberOfLines={1}>{formatCurrency(results.monthlyPI)}</Text>
             </View>
             <View style={styles.resultBreakdownItem}>
               <Text style={styles.resultBreakdownLabel}>Taxes</Text>
-              <Text style={styles.resultBreakdownValue}>{formatCurrency(results.monthlyTax)}</Text>
+              <Text style={styles.resultBreakdownValue} numberOfLines={1}>{formatCurrency(results.monthlyTax)}</Text>
             </View>
             <View style={styles.resultBreakdownItem}>
               <Text style={styles.resultBreakdownLabel}>Insurance</Text>
-              <Text style={styles.resultBreakdownValue}>{formatCurrency(results.monthlyIns)}</Text>
+              <Text style={styles.resultBreakdownValue} numberOfLines={1}>{formatCurrency(results.monthlyIns)}</Text>
             </View>
             {results.monthlyMI > 0 && (
               <View style={styles.resultBreakdownItem}>
                 <Text style={styles.resultBreakdownLabel}>MI ({results.miRatePct.toFixed(2)}%)</Text>
-                <Text style={styles.resultBreakdownValue}>{formatCurrency(results.monthlyMI)}</Text>
+                <Text style={styles.resultBreakdownValue} numberOfLines={1}>{formatCurrency(results.monthlyMI)}</Text>
               </View>
             )}
           </View>
@@ -623,25 +640,31 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
 
           {/* Cash to Close */}
           <Text style={styles.resultLabel}>Cash to Close</Text>
-          <Text style={styles.resultValue}>{formatCurrencyDetailed(results.cashToClose)}</Text>
+          <Text style={styles.resultValue}>{formatCurrencyDetailed(adjustedCashToClose)}</Text>
           
           <View style={styles.resultBreakdown}>
             <View style={styles.resultBreakdownItem}>
               <Text style={styles.resultBreakdownLabel}>Down Pmt</Text>
-              <Text style={styles.resultBreakdownValue}>{formatCurrency(results.actualDownPayment)}</Text>
+              <Text style={styles.resultBreakdownValue} numberOfLines={1}>{formatCurrency(results.actualDownPayment)}</Text>
             </View>
             <View style={styles.resultBreakdownItem}>
               <Text style={styles.resultBreakdownLabel}>Closing</Text>
-              <Text style={styles.resultBreakdownValue}>{formatCurrency(results.closingCosts)}</Text>
+              <Text style={styles.resultBreakdownValue} numberOfLines={1}>{formatCurrency(results.closingCosts)}</Text>
             </View>
             <View style={styles.resultBreakdownItem}>
               <Text style={styles.resultBreakdownLabel}>Prepaids</Text>
-              <Text style={styles.resultBreakdownValue}>{formatCurrency(results.prepaids)}</Text>
+              <Text style={styles.resultBreakdownValue} numberOfLines={1}>{formatCurrency(results.prepaids)}</Text>
             </View>
+            {discountPointsAmount > 0 && (
+              <View style={styles.resultBreakdownItem}>
+                <Text style={styles.resultBreakdownLabel}>Points</Text>
+                <Text style={styles.resultBreakdownValue} numberOfLines={1}>{formatCurrency(discountPointsAmount)}</Text>
+              </View>
+            )}
             {results.sellerCreditAmount > 0 && (
               <View style={styles.resultBreakdownItem}>
                 <Text style={styles.resultBreakdownLabel}>Credit</Text>
-                <Text style={styles.resultBreakdownValue}>-{formatCurrency(results.sellerCreditAmount)}</Text>
+                <Text style={styles.resultBreakdownValue} numberOfLines={1}>-{formatCurrency(results.sellerCreditAmount)}</Text>
               </View>
             )}
           </View>
@@ -682,6 +705,12 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
             <Text style={styles.detailLabel}>Prepaids</Text>
             <Text style={styles.detailValue}>{formatCurrency(results.prepaids)}</Text>
           </View>
+          {discountPointsAmount > 0 && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Discount Points ({discountPoints}%)</Text>
+              <Text style={styles.detailValue}>{formatCurrency(discountPointsAmount)}</Text>
+            </View>
+          )}
           {results.sellerCreditAmount > 0 && (
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Seller Credit</Text>
@@ -695,7 +724,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               Total Cash to Close
             </Text>
             <Text style={[styles.detailValue, { fontSize: 18, color: '#7C3AED' }]}>
-              {formatCurrencyDetailed(results.cashToClose)}
+              {formatCurrencyDetailed(adjustedCashToClose)}
             </Text>
           </View>
 
@@ -1066,6 +1095,38 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
             />
             <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
               {customRate ? 'Custom rate - edit as needed' : 'Live market rate - tap to customize'}
+            </Text>
+          </View>
+
+          <View style={styles.card}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <Text style={styles.inputLabel}>Discount Points (%)</Text>
+              {parseFloat(discountPoints) > 0 && (
+                <Text style={{ fontSize: 12, color: '#7C3AED', fontWeight: '600' }}>
+                  = {formatCurrency(discountPointsAmount)}
+                </Text>
+              )}
+            </View>
+            <TextInput
+              style={styles.input}
+              value={discountPoints}
+              onChangeText={(text) => {
+                // Allow up to 2 decimal places
+                const cleaned = text.replace(/[^0-9.]/g, '');
+                const parts = cleaned.split('.');
+                if (parts.length > 2) return;
+                if (parts[1] && parts[1].length > 2) return;
+                const num = parseFloat(cleaned) || 0;
+                if (num <= 10) {
+                  setDiscountPoints(cleaned);
+                }
+              }}
+              keyboardType="decimal-pad"
+              placeholder="0"
+              placeholderTextColor={colors.textSecondary}
+            />
+            <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
+              Points paid upfront to lower rate (added to prepaids)
             </Text>
           </View>
 
