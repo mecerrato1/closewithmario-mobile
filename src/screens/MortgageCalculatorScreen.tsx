@@ -66,7 +66,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
   const [sellerCredit, setSellerCredit] = useState('0');
   const [sellerCreditType, setSellerCreditType] = useState<'percentage' | 'dollar'>('percentage');
   const [customRate, setCustomRate] = useState('');
-  const [discountPoints, setDiscountPoints] = useState('0.5');
+  const [discountPoints, setDiscountPoints] = useState('0');
   const [dpaEntries, setDpaEntries] = useState<DPAEntry[]>([]);
   
   // Rate fetching state
@@ -274,7 +274,31 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
   };
 
   const handleDeleteDPA = (id: string) => {
-    setDpaEntries((prev) => prev.filter((e) => e.id !== id));
+    const remaining = dpaEntries.filter((e) => e.id !== id);
+    setDpaEntries(remaining);
+    
+    const minDown = MIN_DOWN_BY_LOAN[loanType];
+    
+    // If no DPA remaining, reset to max LTV for loan type
+    if (remaining.length === 0) {
+      setDownPct(minDown.toString());
+      return;
+    }
+    
+    // Recalculate optimal down payment for remaining DPA (max 105% CLTV)
+    let dpaTotal = 0;
+    for (const e of remaining) {
+      if (e.type === 'fixed') dpaTotal += e.value;
+      else if (e.type === 'salesPrice') dpaTotal += priceValue * (e.value / 100);
+      else if (e.type === 'loanAmount') dpaTotal += priceValue * 0.965 * (e.value / 100);
+    }
+    
+    const feeMultiplier = loanType === 'FHA' ? 1.0175 : loanType === 'VA' ? 1.023 : 1;
+    const maxBaseLoan = priceValue * 1.05 - dpaTotal;
+    const maxBaseLoanBeforeFee = maxBaseLoan / feeMultiplier;
+    const optimalDownPct = ((priceValue - maxBaseLoanBeforeFee) / priceValue) * 100;
+    const finalDownPct = Math.max(Math.ceil(optimalDownPct * 2) / 2, minDown);
+    setDownPct(finalDownPct.toFixed(1));
   };
 
   const handleEditDPA = (entry: DPAEntry) => {
@@ -600,8 +624,8 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       justifyContent: 'space-between',
       backgroundColor: 'rgba(255, 255, 255, 0.15)',
       borderRadius: 12,
-      padding: 12,
-      gap: 6,
+      paddingVertical: 10,
+      paddingHorizontal: 6,
     },
     resultBreakdownItem: {
       flex: 1,
@@ -609,15 +633,13 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       minWidth: 0,
     },
     resultBreakdownLabel: {
-      fontSize: 11,
+      fontSize: 10,
       color: '#FFFFFF',
       opacity: 0.75,
-      marginBottom: 6,
-      fontWeight: '600',
-      letterSpacing: 0.5,
+      marginBottom: 1,
     },
     resultBreakdownValue: {
-      fontSize: 14,
+      fontSize: 13,
       fontWeight: '700',
       color: '#FFFFFF',
     },
@@ -711,7 +733,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
         {/* Results Card */}
         <View style={styles.resultCard}>
-          <Text style={styles.resultLabel}>Monthly Payment{totalDPAPayment > 0 ? ' (incl. DPA)' : ''}</Text>
+          <Text style={styles.resultLabel}>Monthly Payment{dpaEntries.length > 0 ? ' 🏠 DPA Applied' : ''}</Text>
           <Text style={styles.resultValue}>{formatCurrencyDetailed(totalMonthlyWithDPA)}</Text>
           
           <View style={styles.resultBreakdown}>
@@ -1374,7 +1396,21 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
 
         {/* Down Payment Assistance */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Down Payment Assistance</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <Text style={styles.sectionTitle}>Down Payment Assistance</Text>
+            {dpaEntries.length > 0 && (
+              <TouchableOpacity
+                onPress={() => {
+                  setDpaEntries([]);
+                  setDownPct(MIN_DOWN_BY_LOAN[loanType].toString());
+                }}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 8 }}
+              >
+                <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                <Text style={{ fontSize: 13, color: '#EF4444', marginLeft: 4, fontWeight: '500' }}>Clear All</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           
           {/* DPA List */}
           {dpaEntries.map((entry, index) => {

@@ -40,7 +40,7 @@ export const createEmptyDPA = (): DPAEntry => ({
   fees: 0,
 });
 
-// Preset DPA programs (can be expanded)
+// Preset DPA programs - ordered by most used
 export const DPA_PRESETS: DPAPreset[] = [
   {
     label: 'Hometown Heroes (5% of Loan)',
@@ -68,6 +68,74 @@ export const DPA_PRESETS: DPAPreset[] = [
       fees: 675,
     },
   },
+  {
+    label: 'PHCD 35k (DPA)',
+    entry: {
+      name: 'PHCD 35k',
+      type: 'fixed',
+      value: 35000,
+      paymentType: 'none',
+      rate: 0,
+      term: 0,
+      fixedPayment: 0,
+      fees: 500,
+    },
+  },
+  {
+    label: 'PHCD 80k (HLP) 2% Rate',
+    entry: {
+      name: 'PHCD 80k',
+      type: 'fixed',
+      value: 80000,
+      paymentType: 'loanPI',
+      rate: 2,
+      term: 360, // 30 years
+      fixedPayment: 0,
+      fees: 500,
+    },
+  },
+  {
+    label: 'PHCD 100k (HLP) 1% Rate',
+    entry: {
+      name: 'PHCD 100k',
+      type: 'fixed',
+      value: 100000,
+      paymentType: 'loanPI',
+      rate: 1,
+      term: 360, // 30 years
+      fixedPayment: 0,
+      fees: 500,
+    },
+  },
+  {
+    label: 'Access Zero 5% (5% of Sales Price)',
+    entry: {
+      name: 'Access Zero 5%',
+      type: 'salesPrice',
+      value: 5,
+      paymentType: 'loanPI',
+      rate: 0, // Will be set dynamically: 1st mortgage + 2%
+      term: 120, // 10 year amortization
+      fixedPayment: 0,
+      fees: 500,
+    },
+    rateOffset: 2, // 2 points above first mortgage
+  },
+  {
+    label: 'Access Zero 3.5% (3.5% of Sales Price)',
+    entry: {
+      name: 'Access Zero 3.5%',
+      type: 'salesPrice',
+      value: 3.5,
+      paymentType: 'loanPI',
+      rate: 0, // Will be set dynamically: 1st mortgage + 2%
+      term: 120, // 10 year amortization
+      fixedPayment: 0,
+      fees: 500,
+    },
+    rateOffset: 2, // 2 points above first mortgage
+  },
+  // === FHFC HFA PLUS GRANTS ===
   {
     label: 'FHFC HFA Plus Grant (3% of Loan)',
     entry: {
@@ -106,34 +174,6 @@ export const DPA_PRESETS: DPAPreset[] = [
       fixedPayment: 0,
       fees: 675,
     },
-  },
-  {
-    label: 'Access Zero 3.5% (3.5% of Sales Price)',
-    entry: {
-      name: 'Access Zero 3.5%',
-      type: 'salesPrice',
-      value: 3.5,
-      paymentType: 'loanPI',
-      rate: 0, // Will be set dynamically: 1st mortgage + 2%
-      term: 120, // 10 year amortization
-      fixedPayment: 0,
-      fees: 500,
-    },
-    rateOffset: 2, // 2 points above first mortgage
-  },
-  {
-    label: 'Access Zero 5% (5% of Sales Price)',
-    entry: {
-      name: 'Access Zero 5%',
-      type: 'salesPrice',
-      value: 5,
-      paymentType: 'loanPI',
-      rate: 0, // Will be set dynamically: 1st mortgage + 2%
-      term: 120, // 10 year amortization
-      fixedPayment: 0,
-      fees: 500,
-    },
-    rateOffset: 2, // 2 points above first mortgage
   },
 ];
 
