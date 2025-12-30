@@ -30,6 +30,18 @@ import {
 } from '../utils/mortgageCalculations';
 import { FLORIDA_COUNTIES } from '../utils/floridaCounties';
 import { fetchRates, getRateForLoanType, type RateData } from '../utils/rateService';
+import { DPAEntry, createEmptyDPA } from '../utils/dpaTypes';
+import {
+  calculateTotalDPA,
+  calculateTotalDPAPayment,
+  calculateTotalDPAFees,
+  calculateDPAAmount,
+  calculateDPAPayment,
+  calculateLTV,
+  calculateCLTV,
+  formatDPAForText,
+} from '../utils/dpaCalculations';
+import DPAEntryModal from '../components/DPAEntryModal';
 
 const STORAGE_KEY = '@mortgage_calculator_inputs';
 
@@ -55,6 +67,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
   const [sellerCreditType, setSellerCreditType] = useState<'percentage' | 'dollar'>('percentage');
   const [customRate, setCustomRate] = useState('');
   const [discountPoints, setDiscountPoints] = useState('0.5');
+  const [dpaEntries, setDpaEntries] = useState<DPAEntry[]>([]);
   
   // Rate fetching state
   const [rates, setRates] = useState<RateData | null>(null);
@@ -67,6 +80,8 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
   const [showVAPicker, setShowVAPicker] = useState(false);
   const [showClosingBreakdown, setShowClosingBreakdown] = useState(false);
   const [showPrepaidsBreakdown, setShowPrepaidsBreakdown] = useState(false);
+  const [showDPAModal, setShowDPAModal] = useState(false);
+  const [editingDPA, setEditingDPA] = useState<DPAEntry | null>(null);
 
   // Fetch rates on mount
   useEffect(() => {
@@ -100,7 +115,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
   useEffect(() => {
     saveInputs();
   }, [price, loanType, downPct, termYears, creditBand, county, annualTax, annualIns, 
-      buyerPaysSellerTransfer, vaLoanUsage, sellerCredit, sellerCreditType, customRate]);
+      buyerPaysSellerTransfer, vaLoanUsage, sellerCredit, sellerCreditType, customRate, dpaEntries]);
 
   const loadSavedInputs = async () => {
     try {
@@ -121,6 +136,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
         if (data.sellerCreditType) setSellerCreditType(data.sellerCreditType);
         if (data.customRate) setCustomRate(data.customRate);
         if (data.discountPoints !== undefined) setDiscountPoints(data.discountPoints.toString());
+        if (data.dpaEntries) setDpaEntries(data.dpaEntries);
       }
     } catch (error) {
       console.error('Failed to load saved inputs:', error);
@@ -131,13 +147,20 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
     try {
       const data = {
         price, loanType, downPct, termYears, creditBand, county, annualTax, annualIns,
-        buyerPaysSellerTransfer, vaLoanUsage, sellerCredit, sellerCreditType, customRate, discountPoints
+        buyerPaysSellerTransfer, vaLoanUsage, sellerCredit, sellerCreditType, customRate, discountPoints, dpaEntries
       };
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     } catch (error) {
       console.error('Failed to save inputs:', error);
     }
   };
+
+  // Check if Hometown Heroes, FL Assist, or FHFC HFA Plus is in DPA (waives intangible & doc stamps)
+  const hasWaivedTaxProgram = useMemo(() => {
+    return dpaEntries.some(e => 
+      e.name === 'Hometown Heroes' || e.name === 'FL Assist' || e.name === 'FHFC HFA Plus'
+    );
+  }, [dpaEntries]);
 
   // Calculate results
   const results: MortgageResults = useMemo(() => {
@@ -164,9 +187,9 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       sellerCreditType,
       customRate: rateToUse,
     };
-    return calculateMortgage(inputs, DEFAULT_FEES);
+    return calculateMortgage(inputs, DEFAULT_FEES, { waiveIntangibleAndDeed: hasWaivedTaxProgram });
   }, [price, loanType, downPct, termYears, creditBand, county, annualTax, annualIns, 
-      buyerPaysSellerTransfer, vaLoanUsage, sellerCredit, sellerCreditType, customRate, rates]);
+      buyerPaysSellerTransfer, vaLoanUsage, sellerCredit, sellerCreditType, customRate, rates, hasWaivedTaxProgram]);
 
   // Calculate discount points dollar amount
   const discountPointsAmount = useMemo(() => {
@@ -179,8 +202,85 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
     return loanForPoints * (points / 100);
   }, [discountPoints, results.baseLoan, results.baseLoanBeforeFee, loanType]);
 
-  // Adjusted cash to close including discount points
-  const adjustedCashToClose = results.cashToClose + discountPointsAmount;
+  // Calculate DPA totals
+  const priceValue = parseFloat(price.replace(/[^0-9.]/g, '')) || 0;
+  const totalDPAAmount = useMemo(() => {
+    return calculateTotalDPA(dpaEntries, priceValue, results.baseLoan);
+  }, [dpaEntries, priceValue, results.baseLoan]);
+
+  const totalDPAPayment = useMemo(() => {
+    return calculateTotalDPAPayment(dpaEntries, priceValue, results.baseLoan);
+  }, [dpaEntries, priceValue, results.baseLoan]);
+
+  const totalDPAFees = useMemo(() => {
+    return calculateTotalDPAFees(dpaEntries);
+  }, [dpaEntries]);
+
+  // Calculate LTV and CLTV
+  const ltv = useMemo(() => {
+    return calculateLTV(results.baseLoan, priceValue);
+  }, [results.baseLoan, priceValue]);
+
+  const cltv = useMemo(() => {
+    return calculateCLTV(results.baseLoan, totalDPAAmount, priceValue);
+  }, [results.baseLoan, totalDPAAmount, priceValue]);
+
+  // Adjusted cash to close including discount points and DPA
+  // DPA reduces cash needed, fees add to it
+  const adjustedCashToClose = results.cashToClose + discountPointsAmount - totalDPAAmount + totalDPAFees;
+
+  // Total monthly payment including DPA payments
+  const totalMonthlyWithDPA = results.monthlyTotal + totalDPAPayment;
+
+  // DPA handlers
+  const handleSaveDPA = (entry: DPAEntry) => {
+    // Calculate new DPA entries
+    const newEntries = (() => {
+      const existingIndex = dpaEntries.findIndex((e) => e.id === entry.id);
+      if (existingIndex >= 0) {
+        const updated = [...dpaEntries];
+        updated[existingIndex] = entry;
+        return updated;
+      }
+      return [...dpaEntries, entry];
+    })();
+    
+    // Calculate total DPA
+    let dpaTotal = 0;
+    for (const e of newEntries) {
+      if (e.type === 'fixed') dpaTotal += e.value;
+      else if (e.type === 'salesPrice') dpaTotal += priceValue * (e.value / 100);
+      else if (e.type === 'loanAmount') dpaTotal += priceValue * 0.965 * (e.value / 100);
+    }
+    
+    // Check if CLTV would exceed 105% at current down payment
+    const feeMultiplier = loanType === 'FHA' ? 1.0175 : loanType === 'VA' ? 1.023 : 1;
+    const currentDown = parseFloat(downPct) || MIN_DOWN_BY_LOAN[loanType];
+    const currentLoan = priceValue * (1 - currentDown / 100) * feeMultiplier;
+    const projectedCLTV = ((currentLoan + dpaTotal) / priceValue) * 100;
+    
+    // Auto-adjust if needed
+    if (projectedCLTV > 105) {
+      const maxBaseLoan = priceValue * 1.05 - dpaTotal;
+      const maxBaseLoanBeforeFee = maxBaseLoan / feeMultiplier;
+      const optimalDownPct = ((priceValue - maxBaseLoanBeforeFee) / priceValue) * 100;
+      const minDown = MIN_DOWN_BY_LOAN[loanType];
+      const finalDownPct = Math.max(Math.ceil(optimalDownPct * 2) / 2, minDown);
+      setDownPct(finalDownPct.toFixed(1));
+    }
+    
+    setDpaEntries(newEntries);
+    setEditingDPA(null);
+  };
+
+  const handleDeleteDPA = (id: string) => {
+    setDpaEntries((prev) => prev.filter((e) => e.id !== id));
+  };
+
+  const handleEditDPA = (entry: DPAEntry) => {
+    setEditingDPA(entry);
+    setShowDPAModal(true);
+  };
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -211,20 +311,20 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
 💵 Down Payment: ${formatCurrency(downPaymentAmount)} (${downPaymentPct}%)
 
 📋 Loan Details
-• Type: ${loanType}
+• Type: ${loanType}${dpaEntries.length > 0 ? ` + ${dpaEntries.map(e => e.name || 'DPA').join(', ')}` : ''}
 • Term: ${termYears} years
 • Rate: ${results.noteRate.toFixed(3)}% | APR: ${results.apr.toFixed(3)}%
 • Base Loan: ${formatCurrency(results.baseLoanBeforeFee)}${financedFeeBlurb}${results.financedFee > 0 ? `\n• Total Loan: ${formatCurrency(results.baseLoan)}` : ''}
 
-💳 Monthly Payment: ${formatCurrencyDetailed(results.monthlyTotal)}
+💳 Monthly Payment: ${formatCurrencyDetailed(totalMonthlyWithDPA)}
 • P&I: ${formatCurrency(results.monthlyPI)}
 • Taxes: ${formatCurrency(results.monthlyTax)}
-• Insurance: ${formatCurrency(results.monthlyIns)}${results.monthlyMI > 0 ? `\n• MI: ${formatCurrency(results.monthlyMI)}` : ''}
+• Insurance: ${formatCurrency(results.monthlyIns)}${results.monthlyMI > 0 ? `\n• MI: ${formatCurrency(results.monthlyMI)}` : ''}${totalDPAPayment > 0 ? `\n• DPA Payment: ${formatCurrency(totalDPAPayment)}` : ''}
 
 🔑 Cash to Close: ${formatCurrencyDetailed(adjustedCashToClose)}
 • Down Payment: ${formatCurrency(results.actualDownPayment)}
 • Closing Costs: ${formatCurrency(results.closingCosts)}
-• Prepaids: ${formatCurrency(results.prepaids)}${discountPointsAmount > 0 ? `\n• Discount Points (${discountPoints}%): ${formatCurrency(discountPointsAmount)}` : ''}${results.sellerCreditAmount > 0 ? `\n• Seller Credit: -${formatCurrency(results.sellerCreditAmount)}` : ''}
+• Prepaids: ${formatCurrency(results.prepaids)}${discountPointsAmount > 0 ? `\n• Discount Points (${discountPoints}%): ${formatCurrency(discountPointsAmount)}` : ''}${totalDPAAmount > 0 ? `\n• DPA Credit: -${formatCurrency(totalDPAAmount)}` : ''}${totalDPAFees > 0 ? `\n• DPA Fees: ${formatCurrency(totalDPAFees)}` : ''}${results.sellerCreditAmount > 0 ? `\n• Seller Credit: -${formatCurrency(results.sellerCreditAmount)}` : ''}
 
 ⚠️ This is an illustration only and not a commitment to lend. Actual rates, payments, and costs may vary. Please contact me for a personalized quote.`;
 
@@ -611,8 +711,8 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
         {/* Results Card */}
         <View style={styles.resultCard}>
-          <Text style={styles.resultLabel}>Monthly Payment</Text>
-          <Text style={styles.resultValue}>{formatCurrencyDetailed(results.monthlyTotal)}</Text>
+          <Text style={styles.resultLabel}>Monthly Payment{totalDPAPayment > 0 ? ' (incl. DPA)' : ''}</Text>
+          <Text style={styles.resultValue}>{formatCurrencyDetailed(totalMonthlyWithDPA)}</Text>
           
           <View style={styles.resultBreakdown}>
             <View style={styles.resultBreakdownItem}>
@@ -631,6 +731,12 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               <View style={styles.resultBreakdownItem}>
                 <Text style={styles.resultBreakdownLabel}>MI ({results.miRatePct.toFixed(2)}%)</Text>
                 <Text style={styles.resultBreakdownValue} numberOfLines={1}>{formatCurrency(results.monthlyMI)}</Text>
+              </View>
+            )}
+            {totalDPAPayment > 0 && (
+              <View style={styles.resultBreakdownItem}>
+                <Text style={styles.resultBreakdownLabel}>DPA</Text>
+                <Text style={styles.resultBreakdownValue} numberOfLines={1}>{formatCurrency(totalDPAPayment)}</Text>
               </View>
             )}
           </View>
@@ -709,6 +815,20 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Discount Points ({discountPoints}%)</Text>
               <Text style={styles.detailValue}>{formatCurrency(discountPointsAmount)}</Text>
+            </View>
+          )}
+          {totalDPAAmount > 0 && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>DPA Assistance</Text>
+              <Text style={[styles.detailValue, { color: '#10B981' }]}>
+                -{formatCurrency(totalDPAAmount)}
+              </Text>
+            </View>
+          )}
+          {totalDPAFees > 0 && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>DPA Fees</Text>
+              <Text style={styles.detailValue}>{formatCurrency(totalDPAFees)}</Text>
             </View>
           )}
           {results.sellerCreditAmount > 0 && (
@@ -855,8 +975,24 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
           </View>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>LTV</Text>
-            <Text style={styles.detailValue}>{results.ltv.toFixed(2)}%</Text>
+            <Text style={styles.detailValue}>{ltv.toFixed(2)}%</Text>
           </View>
+          {dpaEntries.length > 0 && (
+            <>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>CLTV</Text>
+                <Text style={[styles.detailValue, cltv > 105 ? { color: '#EF4444' } : {}]}>
+                  {cltv.toFixed(2)}%
+                </Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>DPA Program{dpaEntries.length > 1 ? 's' : ''}</Text>
+                <Text style={[styles.detailValue, { color: '#7C3AED', flex: 1, textAlign: 'right' }]} numberOfLines={2}>
+                  {dpaEntries.map(e => e.name || 'DPA').join(', ')}
+                </Text>
+              </View>
+            </>
+          )}
           {results.financedFee > 0 && (
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>
@@ -1207,7 +1343,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
                   }
                 }}
                 keyboardType="decimal-pad"
-                placeholder={sellerCreditType === 'percentage' ? '3' : '5,000'}
+                placeholder={sellerCreditType === 'percentage' ? '0' : '0'}
                 placeholderTextColor={colors.textSecondary}
               />
               {sellerCreditType === 'percentage' && (
@@ -1234,6 +1370,93 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               <Text style={styles.checkboxLabel}>Buyer pays seller transfer tax</Text>
             </TouchableOpacity>
           </View>
+        </View>
+
+        {/* Down Payment Assistance */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Down Payment Assistance</Text>
+          
+          {/* DPA List */}
+          {dpaEntries.map((entry, index) => {
+            const entryAmount = calculateDPAAmount(entry, priceValue, results.baseLoan);
+            return (
+              <View key={entry.id} style={[styles.card, { marginBottom: 12 }]}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: colors.textPrimary, marginBottom: 4 }}>
+                      {entry.name || `DPA Program ${index + 1}`}
+                    </Text>
+                    <Text style={{ fontSize: 14, color: colors.textSecondary }}>
+                      {entry.type === 'salesPrice' ? `${entry.value}% of Sales Price` :
+                       entry.type === 'loanAmount' ? `${entry.value}% of Loan Amount` :
+                       'Fixed Amount'}
+                    </Text>
+                    <Text style={{ fontSize: 18, fontWeight: '700', color: '#7C3AED', marginTop: 8 }}>
+                      {formatCurrency(entryAmount)}
+                    </Text>
+                    {entry.paymentType !== 'none' && (
+                      <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
+                        Payment: {formatCurrencyDetailed(calculateDPAPayment(entry, entryAmount))}/mo
+                      </Text>
+                    )}
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity
+                      onPress={() => handleEditDPA(entry)}
+                      style={{ padding: 8 }}
+                    >
+                      <Ionicons name="pencil" size={20} color="#7C3AED" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => handleDeleteDPA(entry.id)}
+                      style={{ padding: 8 }}
+                    >
+                      <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            );
+          })}
+
+          {/* Add DPA Button */}
+          <TouchableOpacity
+            style={[styles.card, { 
+              flexDirection: 'row', 
+              alignItems: 'center', 
+              justifyContent: 'center',
+              paddingVertical: 16,
+              borderStyle: 'dashed',
+              borderWidth: 2,
+              borderColor: '#7C3AED',
+              backgroundColor: isDark ? 'rgba(124, 58, 237, 0.1)' : 'rgba(124, 58, 237, 0.05)',
+            }]}
+            onPress={() => {
+              setEditingDPA(null);
+              setShowDPAModal(true);
+            }}
+          >
+            <Ionicons name="add-circle-outline" size={24} color="#7C3AED" />
+            <Text style={{ fontSize: 16, fontWeight: '600', color: '#7C3AED', marginLeft: 8 }}>
+              Add DPA Program
+            </Text>
+          </TouchableOpacity>
+
+          {/* CLTV Warning */}
+          {cltv > 105 && (
+            <View style={{ 
+              backgroundColor: '#FEF3C7', 
+              borderRadius: 8, 
+              padding: 12, 
+              marginTop: 12,
+              borderLeftWidth: 4,
+              borderLeftColor: '#F59E0B'
+            }}>
+              <Text style={{ fontSize: 13, color: '#92400E', fontWeight: '600' }}>
+                ⚠️ CLTV ({cltv.toFixed(1)}%) exceeds 105% maximum. Reduce DPA or increase down payment.
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Disclaimer */}
@@ -1352,6 +1575,20 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
           </View>
         </View>
       </Modal>
+
+      {/* DPA Entry Modal */}
+      <DPAEntryModal
+        visible={showDPAModal}
+        onClose={() => {
+          setShowDPAModal(false);
+          setEditingDPA(null);
+        }}
+        onSave={handleSaveDPA}
+        editEntry={editingDPA}
+        salesPrice={priceValue}
+        loanAmount={results.baseLoan}
+        firstMortgageRate={results.noteRate}
+      />
     </KeyboardAvoidingView>
   );
 }

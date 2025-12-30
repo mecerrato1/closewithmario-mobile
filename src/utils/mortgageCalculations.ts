@@ -105,7 +105,11 @@ function getCreditScore(creditBand: CreditBand): number {
   return match ? parseInt(match[1], 10) : 740;
 }
 
-export function calculateMortgage(inputs: MortgageInputs, fees: ClosingCostFees = DEFAULT_FEES): MortgageResults {
+export interface MortgageOptions {
+  waiveIntangibleAndDeed?: boolean; // For programs like Hometown Heroes, FL Assist
+}
+
+export function calculateMortgage(inputs: MortgageInputs, fees: ClosingCostFees = DEFAULT_FEES, options: MortgageOptions = {}): MortgageResults {
   const fl = new FloridaTaxCalculator();
   const creditScore = getCreditScore(inputs.creditBand);
   
@@ -220,9 +224,9 @@ export function calculateMortgage(inputs: MortgageInputs, fees: ClosingCostFees 
     }
   }
 
-  // State taxes
-  const intangible = fl.getIntangibleTax(baseLoan);
-  const deed = fl.getDeedTax(baseLoan, inputs.buyerPaysSellerTransfer, inputs.price, inputs.county);
+  // State taxes (waived for Hometown Heroes, FL Assist)
+  const intangible = options.waiveIntangibleAndDeed ? 0 : fl.getIntangibleTax(baseLoan);
+  const deed = options.waiveIntangibleAndDeed ? 0 : fl.getDeedTax(baseLoan, inputs.buyerPaysSellerTransfer, inputs.price, inputs.county);
   const lendersTitleBuyerSide = fl.buyerPaysOwnersTitle(inputs.county) ? lendersTitle : 0;
 
   // Closing costs

@@ -1,0 +1,375 @@
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { CellInput } from '@/components/ui/CellInput';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import * as FormattedNumber from '@/utils/formattedNumber';
+import { cn } from '@/utils/utils';
+import { DownPaymentAssistance } from '@/models/DPA/downPaymentAssistance';
+import { TrashIcon } from '@/components/ui/Icons';
+import { calculateTotalDPA, calculateDPAPayment, qualifierDPAPayment } from '@/models/DPA/dpaCalculations';
+import { useOfficerContext } from '@/context/officer';
+import { OfficerState } from '@/context/officer/officerState';
+import { TextInput } from '@/components/ui/TextInput';
+
+export const DPAEntry = ({
+  dpaNumber,
+  className,
+  data
+}: {
+  dpaNumber: number;
+  className?: string;
+  data: DownPaymentAssistance;
+}) => {
+  const { updateOfficerState, editCacher, activeOption, activeLoan } = useOfficerContext();
+  //   console.warn("ACTIVE", activeOption.dpa, dpaNumber)
+  const updateActiveOption = OfficerState.getActiveOptionUpdater(updateOfficerState);
+  const loanAmount = activeLoan.getLoanAmount();
+
+  return (
+    <Card className={cn('!shadow-md !shadow-gray-500', className)}>
+      <CardHeader>
+        <CardTitle className='flex flex-row justify-between align-center'>
+          <div className='flex flex-row'>
+            <div>{dpaNumber === 0 ? 'DPA 1 / HELOC' : `Down Payment Assistance ${dpaNumber + 1}`}</div>
+          </div>
+          <Button
+            className='!px-1 !py-1 !h-8 w-8 ml-6'
+            onClick={() => {
+              updateActiveOption((draft) => {
+                draft.dpa.splice(dpaNumber, 1);
+              });
+            }}>
+            <TrashIcon className='w-5 h-5' />
+          </Button>
+        </CardTitle>
+        <CardDescription>
+          {dpaNumber === 0 ? 'Add a DPA Program or HELOC' : 'Add a down payment assistance program.'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className='space-y-4'>
+        <div className='grid gap-2'>
+          <Label htmlFor='name'>Name</Label>
+          <TextInput
+            placeholder='Enter name'
+            defaultValue={data.name}
+            className={
+              editCacher.hasChanges(activeOption.slug, activeOption, (x) => x.dpa[dpaNumber]?.name)
+                ? 'border border-orange-300'
+                : ''
+            }
+            setData={(inputValue) => {
+              updateActiveOption((draft) => {
+                draft.dpa[dpaNumber].name = inputValue;
+              });
+            }}
+          />
+        </div>
+        <div className='grid gap-2'>
+          <Label htmlFor={'type' + (dpaNumber ? (dpaNumber + 1).toString() : '')}>Type</Label>
+          <RadioGroup
+            id={'type' + (dpaNumber ? (dpaNumber + 1).toString() : '')}
+            defaultValue={data.type}
+            className='!flex flex-row justify-between items-center'
+            onValueChange={(val) => {
+              updateActiveOption((draft) => {
+                draft.dpa[dpaNumber].type = val as 'salesPrice' | 'loanAmount' | 'fixed';
+                draft.dpa[dpaNumber].value = 0;
+              });
+            }}>
+            <Label
+              htmlFor={'type-sales-price' + (dpaNumber ? (dpaNumber + 1).toString() : '')}
+              className='flex items-center gap-2 cursor-pointer w-max'>
+              <RadioGroupItem
+                id={'type-sales-price' + (dpaNumber ? (dpaNumber + 1).toString() : '')}
+                value='salesPrice'
+              />
+              Sales Price
+            </Label>
+            <Label
+              htmlFor={'type-loan-amount' + (dpaNumber ? (dpaNumber + 1).toString() : '')}
+              className='flex items-center gap-2 cursor-pointer w-max'>
+              <RadioGroupItem
+                //disabled={true}
+                id={'type-loan-amount' + (dpaNumber ? (dpaNumber + 1).toString() : '')}
+                value='loanAmount'
+              />
+              Loan Amount
+            </Label>
+            <Label
+              htmlFor={'type-fixed-amount' + (dpaNumber ? (dpaNumber + 1).toString() : '')}
+              className='flex items-center gap-2 cursor-pointer w-max'>
+              <RadioGroupItem id={'type-fixed-amount' + (dpaNumber ? (dpaNumber + 1).toString() : '')} value='fixed' />
+              Fixed Amount
+            </Label>
+          </RadioGroup>
+        </div>
+        <div className='grid gap-2'>
+          <Label>Value</Label>
+          <CellInput
+            id='value'
+            placeholder='Enter value'
+            defaultValue={data.value}
+            dataType={data.type === 'fixed' ? FormattedNumber.money : FormattedNumber.percentage}
+            hasChanges={editCacher.hasChanges(activeOption.slug, activeOption, (x) => x.dpa[dpaNumber]?.value)}
+            setData={(value) => {
+              updateActiveOption((draft) => {
+                if (draft.dpa[dpaNumber].type === 'loanAmount') {
+                  if (value > 10) {
+                    draft.dpa[dpaNumber].showMaxWarning = true;
+                    value = 10;
+                  } else {
+                    draft.dpa[dpaNumber].showMaxWarning = false;
+                  }
+                } else if (draft.dpa[dpaNumber].type === 'salesPrice') {
+                  value = Math.min(value, 100);
+                }
+                draft.dpa[dpaNumber].value = value;
+              });
+            }}
+          />
+          {data.type === 'loanAmount' && data.showMaxWarning && (
+            <div className='text-sm text-red-500 mt-1'>Maximum loan amount percentage is 10%</div>
+          )}
+        </div>
+        <div className='grid gap-2'>
+          <Label>Calculated Value</Label>
+          <div className='border-b-2 text-right p-2 border-black'>
+            {FormattedNumber.moneyNoDecimals.toString(
+              Math.round(
+                calculateTotalDPA(
+                  data,
+                  activeOption.salesPrice,
+                  activeOption.loanType === 'FHADPA'
+                    ? loanAmount * 1.0175
+                    : activeOption.loanType === 'VADPA'
+                      ? loanAmount * (1 + activeLoan.getFundingFee(loanAmount))
+                      : loanAmount
+                )
+              )
+            )}
+          </div>
+        </div>
+        <div className='grid gap-2'>
+          <Label htmlFor={'payment-type' + (dpaNumber ? (dpaNumber + 1).toString() : '')}>Payment Type</Label>
+          <RadioGroup
+            id={'payment-type' + (dpaNumber ? (dpaNumber + 1).toString() : '')}
+            defaultValue={data.payment.paymentType}
+            className='!flex flex-row justify-around items-center'
+            onValueChange={(val) => {
+              updateActiveOption((draft) => {
+                switch (val) {
+                  case 'fixed':
+                    draft.dpa[dpaNumber].payment = {
+                      paymentType: 'fixed',
+                      amount: 0
+                    };
+                    break;
+                  case 'loan':
+                    draft.dpa[dpaNumber].payment = {
+                      paymentType: 'loan',
+                      interest: 0,
+                      term: 0
+                    };
+                    break;
+                  case 'I/O':
+                    draft.dpa[dpaNumber].payment = {
+                      paymentType: 'I/O',
+                      interest: 0,
+                      term: 0
+                    };
+                    break;
+                  case 'none':
+                    draft.dpa[dpaNumber].payment = {
+                      paymentType: 'none'
+                    };
+                }
+              });
+            }}>
+            <Label
+              htmlFor={'payment-type-fixed' + (dpaNumber ? (dpaNumber + 1).toString() : '')}
+              className='flex items-center gap-2 cursor-pointer w-max'>
+              <RadioGroupItem id={'payment-type-fixed' + (dpaNumber ? (dpaNumber + 1).toString() : '')} value='fixed' />
+              Fixed
+            </Label>
+            <Label
+              htmlFor={'payment-type-loan' + (dpaNumber ? (dpaNumber + 1).toString() : '')}
+              className='flex items-center gap-2 cursor-pointer w-max'>
+              <RadioGroupItem id={'payment-type-loan' + (dpaNumber ? (dpaNumber + 1).toString() : '')} value='loan' />
+              Loan (P&I)
+            </Label>
+            <Label
+              htmlFor={'payment-type-IO' + (dpaNumber ? (dpaNumber + 1).toString() : '')}
+              className='flex items-center gap-2 cursor-pointer w-max'>
+              <RadioGroupItem id={'payment-type-IO' + (dpaNumber ? (dpaNumber + 1).toString() : '')} value='I/O' />
+              Loan (I/O)
+            </Label>
+            <Label
+              htmlFor={'payment-type-none' + (dpaNumber ? (dpaNumber + 1).toString() : '')}
+              className='flex items-center gap-2 cursor-pointer w-max'>
+              <RadioGroupItem id={'payment-type-none' + (dpaNumber ? (dpaNumber + 1).toString() : '')} value='none' />
+              None
+            </Label>
+          </RadioGroup>
+        </div>
+
+        {data.payment.paymentType === 'none' ? (
+          <div>{/* Placeholder */}</div>
+        ) : (
+          <div>
+            {data.payment.paymentType === 'loan' ? (
+              <div className='grid grid-cols-2 gap-8 '>
+                <div className='grid gap-2'>
+                  <Label htmlFor='interest-rate'>Interest Rate</Label>
+                  <CellInput
+                    id='interest-rate'
+                    placeholder='Enter interest rate'
+                    defaultValue={data.payment.interest}
+                    dataType={FormattedNumber.percentage}
+                    hasChanges={editCacher.hasChanges(activeOption.slug, activeOption, (x) =>
+                      x.dpa[dpaNumber]?.payment.paymentType === 'loan' ? x.dpa[dpaNumber]?.payment.interest : undefined
+                    )}
+                    setData={(value) => {
+                      updateActiveOption((draft) => {
+                        if (draft.dpa[dpaNumber].payment.paymentType === 'loan') {
+                          draft.dpa[dpaNumber].payment.interest = value;
+                        }
+                      });
+                    }}
+                  />
+                </div>
+                <div className='grid gap-2'>
+                  <Label htmlFor='term'>Term (months)</Label>
+                  <CellInput
+                    id='term'
+                    placeholder='Enter term'
+                    defaultValue={data.payment.term}
+                    dataType={FormattedNumber.looseNumber}
+                    hasChanges={editCacher.hasChanges(activeOption.slug, activeOption, (x) =>
+                      x.dpa[dpaNumber]?.payment.paymentType === 'loan' ? x.dpa[dpaNumber]?.payment.term : undefined
+                    )}
+                    setData={(value) => {
+                      updateActiveOption((draft) => {
+                        if (draft.dpa[dpaNumber].payment.paymentType === 'loan') {
+                          draft.dpa[dpaNumber].payment.term = value;
+                        }
+                      });
+                    }}
+                  />
+                </div>
+              </div>
+            ) : data.payment.paymentType === 'I/O' ? (
+              <div className='grid grid-cols-2 gap-4'>
+                <div>
+                  <Label htmlFor='io-interest-rate'>Interest Rate</Label>
+                  <CellInput
+                    id='io-interest-rate'
+                    placeholder='Enter interest rate'
+                    defaultValue={data.payment.interest}
+                    dataType={FormattedNumber.percentage}
+                    hasChanges={editCacher.hasChanges(activeOption.slug, activeOption, (x) =>
+                      x.dpa[dpaNumber]?.payment.paymentType === 'I/O' ? x.dpa[dpaNumber]?.payment.interest : undefined
+                    )}
+                    setData={(value) => {
+                      updateActiveOption((draft) => {
+                        if (draft.dpa[dpaNumber].payment.paymentType === 'I/O') {
+                          draft.dpa[dpaNumber].payment.interest = value;
+                        }
+                      });
+                    }}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor='io-term'>Term</Label>
+                  <CellInput
+                    id='io-term'
+                    placeholder='Enter term'
+                    defaultValue={data.payment.term}
+                    dataType={FormattedNumber.looseNumber}
+                    hasChanges={editCacher.hasChanges(activeOption.slug, activeOption, (x) =>
+                      x.dpa[dpaNumber]?.payment.paymentType === 'I/O' ? x.dpa[dpaNumber]?.payment.term : undefined
+                    )}
+                    setData={(value) => {
+                      updateActiveOption((draft) => {
+                        if (draft.dpa[dpaNumber].payment.paymentType === 'I/O') {
+                          draft.dpa[dpaNumber].payment.term = value;
+                        }
+                      });
+                    }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className='grid gap-2'>
+                <Label htmlFor='amount'>Amount</Label>
+                <CellInput
+                  id='amount'
+                  placeholder='Enter amount'
+                  defaultValue={
+                    (
+                      data.payment as {
+                        paymentType: 'fixed';
+                        amount: number;
+                      }
+                    ).amount
+                  }
+                  dataType={FormattedNumber.money}
+                  hasChanges={editCacher.hasChanges(activeOption.slug, activeOption, (x) =>
+                    x.dpa[dpaNumber]?.payment.paymentType === 'fixed' ? x.dpa[dpaNumber]?.payment.amount : undefined
+                  )}
+                  setData={(value) => {
+                    updateActiveOption((draft) => {
+                      draft.dpa[dpaNumber].payment = {
+                        paymentType: 'fixed',
+                        amount: value
+                      };
+                    });
+                  }}
+                />
+              </div>
+            )}
+            {data.payment.paymentType === 'I/O' ? (
+              <div className='grid grid-cols-2 gap-4'>
+                <div className='grid gap-2 mt-4'>
+                  <Label>I/O Payment</Label>
+                  <div className='border-b-2 text-right p-2 border-black'>
+                    {FormattedNumber.money.toString(calculateDPAPayment(data, activeOption.salesPrice, loanAmount))}
+                  </div>
+                </div>
+                <div className='grid gap-2 mt-4'>
+                  <Label>Qualifying Payment</Label>
+                  <div className='border-b-2 text-right p-2 border-black'>
+                    {FormattedNumber.money.toString(qualifierDPAPayment(data, activeOption.salesPrice, loanAmount))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className='grid gap-2 mt-4'>
+                <Label>Monthly Payment</Label>
+                <div className='border-b-2 text-right p-2 border-black'>
+                  {FormattedNumber.money.toString(calculateDPAPayment(data, activeOption.salesPrice, loanAmount))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        <div className='grid gap-2'>
+          <Label htmlFor='fees'>Fees</Label>
+          <CellInput
+            id='fees'
+            placeholder='Enter value'
+            defaultValue={data.fee}
+            dataType={FormattedNumber.money}
+            hasChanges={editCacher.hasChanges(activeOption.slug, activeOption, (x) => x.dpa[dpaNumber]?.fee)}
+            setData={(value) => {
+              updateActiveOption((draft) => {
+                draft.dpa[dpaNumber].fee = value;
+              });
+            }}
+          />
+        </div>
+      </CardContent>
+      <CardFooter></CardFooter>
+    </Card>
+  );
+};
