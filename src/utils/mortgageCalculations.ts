@@ -45,6 +45,13 @@ export const MIN_DOWN_BY_LOAN: Record<LoanType, number> = {
   DSCR: 20
 };
 
+export const MAX_LTV_BY_LOAN: Record<LoanType, number> = {
+  Conventional: 97,
+  FHA: 96.5,
+  VA: 100,
+  DSCR: 80
+};
+
 // Static rates (can be replaced with dynamic rates later)
 export const RATE_BY_LOAN: Record<LoanType, number> = {
   Conventional: 7.5,
