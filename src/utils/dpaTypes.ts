@@ -56,7 +56,7 @@ export const DPA_PRESETS: DPAPreset[] = [
     },
   },
   {
-    label: 'FL Assist (Up to $10,000)',
+    label: 'FL Assist ($10,000)',
     entry: {
       name: 'FL Assist',
       type: 'fixed',
@@ -134,6 +134,20 @@ export const DPA_PRESETS: DPAPreset[] = [
       fees: 500,
     },
     rateOffset: 2, // 2 points above first mortgage
+  },
+  // === FL HLP ===
+  {
+    label: 'FL HLP ($12,500)',
+    entry: {
+      name: 'FL HLP',
+      type: 'fixed',
+      value: 12500,
+      paymentType: 'loanPI',
+      rate: 3,
+      term: 360, // 30 year amortization
+      fixedPayment: 0,
+      fees: 675,
+    },
   },
   // === FHFC HFA PLUS GRANTS ===
   {
