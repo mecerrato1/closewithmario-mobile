@@ -62,12 +62,13 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
   const [county, setCounty] = useState('Broward');
   const [annualTax, setAnnualTax] = useState('6,000');
   const [annualIns, setAnnualIns] = useState('2,400');
+  const [monthlyHOA, setMonthlyHOA] = useState('');
   const [buyerPaysSellerTransfer, setBuyerPaysSellerTransfer] = useState(false);
   const [vaLoanUsage, setVaLoanUsage] = useState<VALoanUsage>('firstUse');
-  const [sellerCredit, setSellerCredit] = useState('0');
+  const [sellerCredit, setSellerCredit] = useState('');
   const [sellerCreditType, setSellerCreditType] = useState<'percentage' | 'dollar'>('percentage');
   const [customRate, setCustomRate] = useState('');
-  const [discountPoints, setDiscountPoints] = useState('0');
+  const [discountPoints, setDiscountPoints] = useState('');
   const [dpaEntries, setDpaEntries] = useState<DPAEntry[]>([]);
   
   // Rate fetching state
@@ -115,7 +116,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
   // Save inputs whenever they change
   useEffect(() => {
     saveInputs();
-  }, [price, loanType, downPct, termYears, creditBand, county, annualTax, annualIns, 
+  }, [price, loanType, downPct, termYears, creditBand, county, annualTax, annualIns, monthlyHOA,
       buyerPaysSellerTransfer, vaLoanUsage, sellerCredit, sellerCreditType, customRate, dpaEntries]);
 
   const loadSavedInputs = async () => {
@@ -131,6 +132,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
         if (data.county) setCounty(data.county);
         if (data.annualTax) setAnnualTax(formatNumberWithCommas(data.annualTax));
         if (data.annualIns) setAnnualIns(formatNumberWithCommas(data.annualIns));
+        if (data.monthlyHOA) setMonthlyHOA(formatNumberWithCommas(data.monthlyHOA));
         if (data.buyerPaysSellerTransfer !== undefined) setBuyerPaysSellerTransfer(data.buyerPaysSellerTransfer);
         if (data.vaLoanUsage) setVaLoanUsage(data.vaLoanUsage);
         if (data.sellerCredit) setSellerCredit(formatNumberWithCommas(data.sellerCredit));
@@ -147,7 +149,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
   const saveInputs = async () => {
     try {
       const data = {
-        price, loanType, downPct, termYears, creditBand, county, annualTax, annualIns,
+        price, loanType, downPct, termYears, creditBand, county, annualTax, annualIns, monthlyHOA,
         buyerPaysSellerTransfer, vaLoanUsage, sellerCredit, sellerCreditType, customRate, discountPoints, dpaEntries
       };
       await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -230,8 +232,39 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
   // DPA reduces cash needed, fees add to it
   const adjustedCashToClose = results.cashToClose + discountPointsAmount - totalDPAAmount + totalDPAFees;
 
-  // Total monthly payment including DPA payments
-  const totalMonthlyWithDPA = results.monthlyTotal + totalDPAPayment;
+  // Monthly HOA amount
+  const monthlyHOAAmount = parseFloat(monthlyHOA.replace(/[^0-9.]/g, '')) || 0;
+
+  // Total monthly payment including DPA payments and HOA
+  const totalMonthlyWithDPA = results.monthlyTotal + totalDPAPayment + monthlyHOAAmount;
+
+  // Auto-adjust down payment when cash to close goes negative with DPA
+  useEffect(() => {
+    if (totalDPAAmount > 0 && adjustedCashToClose < 0) {
+      // Increase down payment to make CTC positive
+      const currentDown = parseFloat(downPct) || MIN_DOWN_BY_LOAN[loanType];
+      const minDown = MIN_DOWN_BY_LOAN[loanType];
+      const feeMultiplier = loanType === 'FHA' ? 1.0175 : loanType === 'VA' ? 1.023 : 1;
+      
+      // Iterate to find minimum down payment for positive CTC
+      for (let testDown = currentDown + 0.25; testDown <= 50; testDown += 0.25) {
+        const testDownPayment = priceValue * (testDown / 100);
+        const testBaseLoan = (priceValue - testDownPayment) * feeMultiplier;
+        
+        // Use actual costs from results as base, adjust for new down payment
+        const costDelta = (results.actualDownPayment - testDownPayment); // How much down payment changed
+        const testCTC = adjustedCashToClose - costDelta; // Reducing down payment reduces CTC
+        
+        // Also check CLTV
+        const testCLTV = ((testBaseLoan + totalDPAAmount) / priceValue) * 100;
+        
+        if (testCTC >= 100 && testCLTV <= 105) { // $100 buffer
+          setDownPct(Math.max(minDown, testDown).toFixed(2).replace(/\.?0+$/, ''));
+          break;
+        }
+      }
+    }
+  }, [totalDPAAmount, adjustedCashToClose]);
 
   // DPA handlers
   const handleSaveDPA = (entry: DPAEntry) => {
@@ -344,7 +377,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
 💳 Monthly Payment: ${formatCurrencyDetailed(totalMonthlyWithDPA)}
 • P&I: ${formatCurrency(results.monthlyPI)}
 • Taxes: ${formatCurrency(results.monthlyTax)}
-• Insurance: ${formatCurrency(results.monthlyIns)}${results.monthlyMI > 0 ? `\n• MI: ${formatCurrency(results.monthlyMI)}` : ''}${totalDPAPayment > 0 ? `\n• DPA Payment: ${formatCurrency(totalDPAPayment)}` : ''}
+• Insurance: ${formatCurrency(results.monthlyIns)}${results.monthlyMI > 0 ? `\n• MI: ${formatCurrency(results.monthlyMI)}` : ''}${monthlyHOAAmount > 0 ? `\n• HOA: ${formatCurrency(monthlyHOAAmount)}` : ''}${totalDPAPayment > 0 ? `\n• DPA Payment: ${formatCurrency(totalDPAPayment)}` : ''}
 
 🔑 Cash to Close: ${formatCurrencyDetailed(adjustedCashToClose)}
 • Down Payment: ${formatCurrency(results.actualDownPayment)}
@@ -762,6 +795,12 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
                 <Text style={styles.resultBreakdownValue} numberOfLines={1}>{formatCurrency(totalDPAPayment)}</Text>
               </View>
             )}
+            {monthlyHOAAmount > 0 && (
+              <View style={styles.resultBreakdownItem}>
+                <Text style={styles.resultBreakdownLabel}>HOA</Text>
+                <Text style={styles.resultBreakdownValue} numberOfLines={1}>{formatCurrency(monthlyHOAAmount)}</Text>
+              </View>
+            )}
           </View>
 
           {/* Divider */}
@@ -991,9 +1030,17 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
                 <Text style={styles.detailValue}>{formatCurrencyDetailed(results.intangible)}</Text>
               </View>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Doc Stamps</Text>
-                <Text style={styles.detailValue}>{formatCurrencyDetailed(results.deed)}</Text>
+                <Text style={styles.detailLabel}>Doc Stamps (Mortgage)</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(results.baseLoan * 0.0035)}</Text>
               </View>
+              {buyerPaysSellerTransfer && (
+                <View style={styles.detailRow}>
+                  <Text style={[styles.detailLabel, { color: '#7C3AED' }]}>Doc Stamps (Seller Transfer) ⚠️</Text>
+                  <Text style={[styles.detailValue, { color: '#7C3AED' }]}>
+                    {formatCurrencyDetailed(priceValue * (county === 'Miami-Dade' ? 0.006 : 0.007))}
+                  </Text>
+                </View>
+              )}
             </View>
           )}
 
@@ -1030,10 +1077,29 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
         {/* Loan Details */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Loan Details</Text>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Loan Amount</Text>
-            <Text style={styles.detailValue}>{formatCurrency(results.baseLoan)}</Text>
-          </View>
+          {(loanType === 'FHA' || loanType === 'VA') ? (
+            <>
+              <View style={styles.detailRow}>
+                <Text style={styles.detailLabel}>Base Loan</Text>
+                <Text style={styles.detailValue}>{formatCurrency(results.baseLoanBeforeFee)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={[styles.detailLabel, { color: '#7C3AED' }]}>
+                  {loanType === 'FHA' ? 'FHA UFMIP (1.75%)' : `VA Funding Fee (${(results.feeRate * 100).toFixed(2)}%)`}
+                </Text>
+                <Text style={[styles.detailValue, { color: '#7C3AED' }]}>{formatCurrency(results.financedFee)}</Text>
+              </View>
+              <View style={styles.detailRow}>
+                <Text style={[styles.detailLabel, { fontWeight: '600' }]}>Total Loan</Text>
+                <Text style={[styles.detailValue, { fontWeight: '700' }]}>{formatCurrency(results.baseLoan)}</Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Loan Amount</Text>
+              <Text style={styles.detailValue}>{formatCurrency(results.baseLoan)}</Text>
+            </View>
+          )}
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Interest Rate</Text>
             <Text style={styles.detailValue}>{results.noteRate.toFixed(3)}%</Text>
@@ -1062,16 +1128,6 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               </View>
             </>
           )}
-          {results.financedFee > 0 && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>
-                {loanType === 'VA' 
-                  ? `VA Funding Fee (${(results.feeRate * 100).toFixed(2)}%)`
-                  : 'FHA UFMIP (1.75%)'}
-              </Text>
-              <Text style={styles.detailValue}>{formatCurrency(results.financedFee)}</Text>
-            </View>
-          )}
         </View>
 
         {/* Input Section */}
@@ -1091,38 +1147,82 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
 
           <View style={styles.card}>
             <Text style={styles.inputLabel}>Purchase Price</Text>
-            <TextInput
-              style={styles.input}
-              value={price}
-              onChangeText={(text) => setPrice(formatNumberWithCommas(text))}
-              keyboardType="numeric"
-              placeholder="450,000"
-              placeholderTextColor={colors.textSecondary}
-            />
+            <View style={{ position: 'relative' }}>
+              <TextInput
+                style={[styles.input, { paddingRight: 36 }]}
+                value={price}
+                onChangeText={(text) => setPrice(formatNumberWithCommas(text))}
+                keyboardType="numeric"
+                              />
+              {price && price !== '0' && (
+                <TouchableOpacity
+                  onPress={() => setPrice('')}
+                  style={{ position: 'absolute', right: 10, top: 0, bottom: 0, justifyContent: 'center' }}
+                >
+                  <Ionicons name="close-circle-outline" size={18} color={colors.textSecondary} style={{ opacity: 0.5 }} />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
 
           <View style={styles.card}>
             <Text style={styles.inputLabel}>Annual Property Tax</Text>
-            <TextInput
-              style={styles.input}
-              value={annualTax}
-              onChangeText={(text) => setAnnualTax(formatNumberWithCommas(text))}
-              keyboardType="numeric"
-              placeholder="6,000"
-              placeholderTextColor={colors.textSecondary}
-            />
+            <View style={{ position: 'relative' }}>
+              <TextInput
+                style={[styles.input, { paddingRight: 36 }]}
+                value={annualTax}
+                onChangeText={(text) => setAnnualTax(formatNumberWithCommas(text))}
+                keyboardType="numeric"
+                              />
+              {annualTax && annualTax !== '0' && (
+                <TouchableOpacity
+                  onPress={() => setAnnualTax('')}
+                  style={{ position: 'absolute', right: 10, top: 0, bottom: 0, justifyContent: 'center' }}
+                >
+                  <Ionicons name="close-circle-outline" size={18} color={colors.textSecondary} style={{ opacity: 0.5 }} />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
 
           <View style={styles.card}>
             <Text style={styles.inputLabel}>Annual Insurance</Text>
-            <TextInput
-              style={styles.input}
-              value={annualIns}
-              onChangeText={(text) => setAnnualIns(formatNumberWithCommas(text))}
-              keyboardType="numeric"
-              placeholder="2,400"
-              placeholderTextColor={colors.textSecondary}
-            />
+            <View style={{ position: 'relative' }}>
+              <TextInput
+                style={[styles.input, { paddingRight: 36 }]}
+                value={annualIns}
+                onChangeText={(text) => setAnnualIns(formatNumberWithCommas(text))}
+                keyboardType="numeric"
+                              />
+              {annualIns && annualIns !== '0' && (
+                <TouchableOpacity
+                  onPress={() => setAnnualIns('')}
+                  style={{ position: 'absolute', right: 10, top: 0, bottom: 0, justifyContent: 'center' }}
+                >
+                  <Ionicons name="close-circle-outline" size={18} color={colors.textSecondary} style={{ opacity: 0.5 }} />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.inputLabel}>Monthly HOA</Text>
+            <View style={{ position: 'relative' }}>
+              <TextInput
+                style={[styles.input, { paddingRight: 36 }]}
+                value={monthlyHOA}
+                onChangeText={(text) => setMonthlyHOA(formatNumberWithCommas(text))}
+                keyboardType="numeric"
+              />
+              {monthlyHOA && (
+                <TouchableOpacity
+                  onPress={() => setMonthlyHOA('')}
+                  style={{ position: 'absolute', right: 10, top: 0, bottom: 0, justifyContent: 'center' }}
+                >
+                  <Ionicons name="close-circle-outline" size={18} color={colors.textSecondary} style={{ opacity: 0.5 }} />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
 
@@ -1142,7 +1242,54 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
                   ]}
                   onPress={() => {
                     setLoanType(type);
-                    setDownPct(MIN_DOWN_BY_LOAN[type].toString());
+                    // Calculate required down payment considering DPA and 105% CLTV limit
+                    const minDown = MIN_DOWN_BY_LOAN[type];
+                    if (totalDPAAmount > 0) {
+                      // Calculate what down payment is needed to keep CLTV <= 105%
+                      const feeMultiplier = type === 'FHA' ? 1.0175 : type === 'VA' ? 1.023 : 1;
+                      const requiredDownPctForCLTV = 100 * (1 - (1.05 - totalDPAAmount / priceValue) / feeMultiplier);
+                      let adjustedDown = Math.max(minDown, Math.ceil(requiredDownPctForCLTV * 4) / 4);
+                      
+                      // Iteratively find down payment that keeps cash to close >= 0
+                      // Use actual closing costs calculation with safety buffer
+                      const annualTaxValue = parseFloat(annualTax.replace(/[^0-9.]/g, '')) || 6000;
+                      const annualInsValue = parseFloat(annualIns.replace(/[^0-9.]/g, '')) || 2400;
+                      const sellerCreditValue = parseFloat(sellerCredit.replace(/[^0-9.]/g, '')) || 0;
+                      const sellerCreditAmount = sellerCreditType === 'percentage' 
+                        ? priceValue * (sellerCreditValue / 100) 
+                        : sellerCreditValue;
+                      const discountPtsValue = parseFloat(discountPoints) || 0;
+                      
+                      const baseFees = 10000; // Conservative estimate for fixed closing fees
+                      const monthlyTaxEst = annualTaxValue / 12;
+                      const monthlyInsEst = annualInsValue / 12;
+                      const prepaidEst = (monthlyTaxEst * 3) + (monthlyInsEst * 15);
+                      
+                      // Iterate to find minimum down payment for positive CTC (with $2000 safety buffer)
+                      for (let testDown = adjustedDown; testDown <= 50; testDown += 0.25) {
+                        const testDownPayment = priceValue * (testDown / 100);
+                        const testBaseLoan = (priceValue - testDownPayment) * feeMultiplier;
+                        const testPrepaidInterest = testBaseLoan * (0.07 / 365) * 15; // ~7% rate estimate
+                        const testDiscountPts = testBaseLoan * (discountPtsValue / 100);
+                        
+                        // Estimate intangible + doc stamps (unless waived)
+                        const testIntangible = hasWaivedTaxProgram ? 0 : testBaseLoan * 0.002;
+                        const testDocStamps = hasWaivedTaxProgram ? 0 : testBaseLoan * 0.0035;
+                        
+                        // Full CTC calculation with $2000 safety buffer
+                        const totalCosts = baseFees + prepaidEst + testPrepaidInterest + testIntangible + testDocStamps + testDiscountPts + 2000;
+                        const testCTC = testDownPayment + totalCosts - sellerCreditAmount - totalDPAAmount + totalDPAFees;
+                        
+                        if (testCTC >= 0) {
+                          adjustedDown = testDown;
+                          break;
+                        }
+                      }
+                      
+                      setDownPct(Math.max(minDown, adjustedDown).toFixed(2).replace(/\.?0+$/, ''));
+                    } else {
+                      setDownPct(minDown.toString());
+                    }
                   }}
                 >
                   <Text
@@ -1290,14 +1437,24 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
                 )}
               </View>
             </View>
-            <TextInput
-              style={styles.input}
-              value={customRate}
-              onChangeText={setCustomRate}
-              keyboardType="decimal-pad"
-              placeholder={rates ? getRateForLoanType(rates, loanType).toFixed(3) : '7.5'}
-              placeholderTextColor={colors.textSecondary}
-            />
+            <View style={{ position: 'relative' }}>
+              <TextInput
+                style={[styles.input, { paddingRight: 36 }]}
+                value={customRate}
+                onChangeText={setCustomRate}
+                keyboardType="decimal-pad"
+                placeholder={rates ? getRateForLoanType(rates, loanType).toFixed(3) : '7.5'}
+                placeholderTextColor={colors.textSecondary}
+              />
+              {customRate && (
+                <TouchableOpacity
+                  onPress={() => setCustomRate('')}
+                  style={{ position: 'absolute', right: 10, top: 0, bottom: 0, justifyContent: 'center' }}
+                >
+                  <Ionicons name="close-circle-outline" size={18} color={colors.textSecondary} style={{ opacity: 0.5 }} />
+                </TouchableOpacity>
+              )}
+            </View>
             <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
               {customRate ? 'Custom rate - edit as needed' : 'Live market rate - tap to customize'}
             </Text>
@@ -1312,12 +1469,15 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
                 </Text>
               )}
             </View>
-            <TextInput
-              style={styles.input}
-              value={discountPoints}
-              onChangeText={(text) => {
+            <View style={{ position: 'relative' }}>
+              <TextInput
+                style={[styles.input, { paddingRight: 36 }]}
+                value={discountPoints}
+                onChangeText={(text) => {
                 // Allow up to 2 decimal places
-                const cleaned = text.replace(/[^0-9.]/g, '');
+                let cleaned = text.replace(/[^0-9.]/g, '');
+                // Remove leading zeros (but keep "0." for decimals)
+                cleaned = cleaned.replace(/^0+(?=\d)/, '');
                 const parts = cleaned.split('.');
                 if (parts.length > 2) return;
                 if (parts[1] && parts[1].length > 2) return;
@@ -1326,10 +1486,17 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
                   setDiscountPoints(cleaned);
                 }
               }}
-              keyboardType="decimal-pad"
-              placeholder="0"
-              placeholderTextColor={colors.textSecondary}
-            />
+                keyboardType="decimal-pad"
+                />
+              {discountPoints && (
+                <TouchableOpacity
+                  onPress={() => setDiscountPoints('')}
+                  style={{ position: 'absolute', right: 10, top: 0, bottom: 0, justifyContent: 'center' }}
+                >
+                  <Ionicons name="close-circle-outline" size={18} color={colors.textSecondary} style={{ opacity: 0.5 }} />
+                </TouchableOpacity>
+              )}
+            </View>
             <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 4 }}>
               Points paid upfront to lower rate (added to prepaids)
             </Text>
@@ -1396,25 +1563,35 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               {sellerCreditType === 'dollar' && (
                 <Text style={{ fontSize: 18, fontWeight: '600', color: colors.textPrimary, marginRight: 4 }}>$</Text>
               )}
-              <TextInput
-                style={[styles.input, { flex: 1 }]}
-                value={sellerCredit}
-                onChangeText={(text) => {
-                  if (sellerCreditType === 'percentage') {
-                    // Strip commas and limit to reasonable percentage (0-10)
-                    const numericValue = text.replace(/[^0-9.]/g, '');
-                    const num = parseFloat(numericValue) || 0;
-                    if (num <= 10) {
-                      setSellerCredit(numericValue);
+              <View style={{ flex: 1, position: 'relative' }}>
+                <TextInput
+                  style={[styles.input, { paddingRight: 36 }]}
+                  value={sellerCredit}
+                  onChangeText={(text) => {
+                    if (sellerCreditType === 'percentage') {
+                      // Strip commas and limit to reasonable percentage (0-10)
+                      let numericValue = text.replace(/[^0-9.]/g, '');
+                      // Remove leading zeros (but keep "0." for decimals)
+                      numericValue = numericValue.replace(/^0+(?=\d)/, '');
+                      const num = parseFloat(numericValue) || 0;
+                      if (num <= 10) {
+                        setSellerCredit(numericValue);
+                      }
+                    } else {
+                      setSellerCredit(formatNumberWithCommas(text));
                     }
-                  } else {
-                    setSellerCredit(formatNumberWithCommas(text));
-                  }
-                }}
-                keyboardType="decimal-pad"
-                placeholder={sellerCreditType === 'percentage' ? '0' : '0'}
-                placeholderTextColor={colors.textSecondary}
-              />
+                  }}
+                  keyboardType="decimal-pad"
+                                  />
+                {sellerCredit && (
+                  <TouchableOpacity
+                    onPress={() => setSellerCredit('')}
+                    style={{ position: 'absolute', right: 10, top: 0, bottom: 0, justifyContent: 'center' }}
+                  >
+                    <Ionicons name="close-circle-outline" size={18} color={colors.textSecondary} style={{ opacity: 0.5 }} />
+                  </TouchableOpacity>
+                )}
+              </View>
               {sellerCreditType === 'percentage' && (
                 <Text style={{ fontSize: 18, fontWeight: '600', color: colors.textPrimary, marginLeft: 4 }}>%</Text>
               )}
