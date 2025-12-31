@@ -379,8 +379,8 @@ export default function DPAEntryModal({
               <View style={styles.radioGroup}>
                 {[
                   { value: 'salesPrice', label: 'Sales Price %' },
-                  { value: 'loanAmount', label: 'Loan Amount %' },
-                  { value: 'fixed', label: 'Fixed Amount' },
+                  { value: 'loanAmount', label: 'Loan Amt %' },
+                  { value: 'fixed', label: 'Fixed Amt' },
                 ].map((option) => (
                   <TouchableOpacity
                     key={option.value}
@@ -436,7 +436,7 @@ export default function DPAEntryModal({
               <Text style={styles.label}>Payment Type</Text>
               <View style={styles.radioGroup}>
                 {[
-                  { value: 'none', label: 'None (Forgivable)' },
+                  { value: 'none', label: 'None' },
                   { value: 'fixed', label: 'Fixed' },
                   { value: 'loanPI', label: 'Loan (P&I)' },
                   { value: 'loanIO', label: 'Loan (I/O)' },

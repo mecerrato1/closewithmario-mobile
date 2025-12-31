@@ -43,7 +43,7 @@ export const createEmptyDPA = (): DPAEntry => ({
 // Preset DPA programs - ordered by most used
 export const DPA_PRESETS: DPAPreset[] = [
   {
-    label: 'Hometown Heroes (5% of Loan)',
+    label: 'HTH (5% of Loan)',
     entry: {
       name: 'Hometown Heroes',
       type: 'loanAmount',
@@ -56,7 +56,7 @@ export const DPA_PRESETS: DPAPreset[] = [
     },
   },
   {
-    label: 'FL Assist ($10,000)',
+    label: 'FL Assist (10k)',
     entry: {
       name: 'FL Assist',
       type: 'fixed',
@@ -82,7 +82,7 @@ export const DPA_PRESETS: DPAPreset[] = [
     },
   },
   {
-    label: 'PHCD 80k (HLP) 2% Rate',
+    label: 'PHCD 80k (HLP)',
     entry: {
       name: 'PHCD 80k',
       type: 'fixed',
@@ -95,7 +95,7 @@ export const DPA_PRESETS: DPAPreset[] = [
     },
   },
   {
-    label: 'PHCD 100k (HLP) 1% Rate',
+    label: 'PHCD 100k (HLP)',
     entry: {
       name: 'PHCD 100k',
       type: 'fixed',
@@ -108,7 +108,7 @@ export const DPA_PRESETS: DPAPreset[] = [
     },
   },
   {
-    label: 'Access Zero 5% (5% of Sales Price)',
+    label: 'AccessZero 5%',
     entry: {
       name: 'Access Zero 5%',
       type: 'salesPrice',
@@ -122,7 +122,7 @@ export const DPA_PRESETS: DPAPreset[] = [
     rateOffset: 2, // 2 points above first mortgage
   },
   {
-    label: 'Access Zero 3.5% (3.5% of Sales Price)',
+    label: 'Access Zero 3.5%',
     entry: {
       name: 'Access Zero 3.5%',
       type: 'salesPrice',
@@ -137,7 +137,7 @@ export const DPA_PRESETS: DPAPreset[] = [
   },
   // === FL HLP ===
   {
-    label: 'FL HLP ($12,500)',
+    label: 'FL HLP ($12.5k)',
     entry: {
       name: 'FL HLP',
       type: 'fixed',
@@ -151,7 +151,7 @@ export const DPA_PRESETS: DPAPreset[] = [
   },
   // === FHFC HFA PLUS GRANTS ===
   {
-    label: 'FHFC HFA Plus Grant (3% of Loan)',
+    label: 'FHFC Grant (3%)',
     entry: {
       name: 'FHFC HFA Plus',
       type: 'loanAmount',
@@ -164,7 +164,7 @@ export const DPA_PRESETS: DPAPreset[] = [
     },
   },
   {
-    label: 'FHFC HFA Plus Grant (4% of Loan)',
+    label: 'FHFC Grant (4%)',
     entry: {
       name: 'FHFC HFA Plus',
       type: 'loanAmount',
@@ -177,7 +177,7 @@ export const DPA_PRESETS: DPAPreset[] = [
     },
   },
   {
-    label: 'FHFC HFA Plus Grant (5% of Loan)',
+    label: 'FHFC Grant (5%)',
     entry: {
       name: 'FHFC HFA Plus',
       type: 'loanAmount',

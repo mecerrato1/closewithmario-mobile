@@ -13,6 +13,7 @@ import {
   PanResponder,
   Linking,
   Alert,
+  Clipboard,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -349,24 +350,31 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
     }).format(value);
   };
 
-  const handleTextResults = async () => {
-    const priceValue = parseFloat(price.replace(/[^0-9.]/g, '')) || 0;
-    const downPaymentAmount = results.actualDownPayment;
-    const downPaymentPct = parseFloat(downPct) || 0;
+  const formatCurrencyDetailed = (value: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  };
 
+  // Generate results message for text/copy
+  const textMessage = useMemo(() => {
     const financedFeeBlurb = results.financedFee > 0 
       ? loanType === 'FHA'
         ? `\n• UFMIP (1.75%): ${formatCurrency(results.financedFee)} (financed)`
         : `\n• VA Funding Fee (${(results.feeRate * 100).toFixed(2)}%): ${formatCurrency(results.financedFee)} (financed)`
       : '';
 
-    const message = `Hi,
+    return `Hi,
 
-🏠 Mortgage Illustration
+🏠 See Mortgage Illustration:
 
 📍 ${county} County, FL
 💰 Sales Price: ${formatCurrency(priceValue)}
-💵 Down Payment: ${formatCurrency(downPaymentAmount)} (${downPaymentPct}%)
+💵 Down Payment: ${formatCurrency(results.actualDownPayment)} (${parseFloat(downPct) || 0}%)
+📊 LTV: ${ltv.toFixed(2)}%${totalDPAAmount > 0 ? ` | CLTV: ${cltv.toFixed(2)}%` : ''}
 
 📋 Loan Details
 • Type: ${loanType}${dpaEntries.length > 0 ? ` + ${dpaEntries.map(e => e.name || 'DPA').join(', ')}` : ''}
@@ -385,10 +393,12 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
 • Prepaids: ${formatCurrency(results.prepaids)}${discountPointsAmount > 0 ? `\n• Discount Points (${discountPoints}%): ${formatCurrency(discountPointsAmount)}` : ''}${totalDPAAmount > 0 ? `\n• DPA Credit: -${formatCurrency(totalDPAAmount)}` : ''}${totalDPAFees > 0 ? `\n• DPA Fees: ${formatCurrency(totalDPAFees)}` : ''}${results.sellerCreditAmount > 0 ? `\n• Seller Credit: -${formatCurrency(results.sellerCreditAmount)}` : ''}
 
 ⚠️ This is an illustration only and not a commitment to lend. Actual rates, payments, and costs may vary. Please contact me for a personalized quote.`;
+  }, [results, loanType, county, priceValue, downPct, termYears, dpaEntries, totalMonthlyWithDPA, monthlyHOAAmount, totalDPAPayment, adjustedCashToClose, discountPointsAmount, discountPoints, totalDPAAmount, totalDPAFees, ltv, cltv]);
 
+  const handleTextResults = async () => {
     const smsUrl = Platform.OS === 'ios' 
-      ? `sms:&body=${encodeURIComponent(message)}`
-      : `sms:?body=${encodeURIComponent(message)}`;
+      ? `sms:&body=${encodeURIComponent(textMessage)}`
+      : `sms:?body=${encodeURIComponent(textMessage)}`;
 
     try {
       const canOpen = await Linking.canOpenURL(smsUrl);
@@ -401,15 +411,6 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       console.log('Error opening SMS:', error);
       Alert.alert('Error', 'Could not open messaging app.');
     }
-  };
-
-  const formatCurrencyDetailed = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(value);
   };
 
   // Format number with commas for display
@@ -697,14 +698,16 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingVertical: 12,
+      paddingVertical: 14,
       paddingHorizontal: 16,
-      backgroundColor: isDark ? '#1F2937' : '#F8FAFC',
-      borderRadius: 8,
-      marginTop: 8,
+      backgroundColor: isDark ? '#1F2937' : '#F3F0FF',
+      borderRadius: 10,
+      marginTop: 12,
+      borderWidth: 1,
+      borderColor: isDark ? '#374151' : '#E9E3FF',
     },
     expandButtonText: {
-      fontSize: 14,
+      fontSize: 15,
       fontWeight: '600',
       color: '#7C3AED',
     },
@@ -883,25 +886,50 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
             )}
           </View>
 
-          {/* Text Results Button */}
-          <TouchableOpacity
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: '#10B981',
-              borderRadius: 12,
-              paddingVertical: 14,
-              marginTop: 16,
-              gap: 8,
-            }}
-            onPress={handleTextResults}
-          >
-            <Ionicons name="chatbubble-outline" size={20} color="#FFFFFF" />
-            <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>
-              Text Results
-            </Text>
-          </TouchableOpacity>
+          {/* Action Buttons Row */}
+          <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+            <TouchableOpacity
+              style={{
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: '#10B981',
+                borderRadius: 12,
+                paddingVertical: 14,
+                gap: 8,
+              }}
+              onPress={handleTextResults}
+            >
+              <Ionicons name="chatbubble-outline" size={20} color="#FFFFFF" />
+              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>
+                Text
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{
+                flex: 1,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: '#7C3AED',
+                borderRadius: 12,
+                paddingVertical: 14,
+                gap: 8,
+                borderWidth: 1.5,
+                borderColor: 'rgba(255, 255, 255, 0.3)',
+              }}
+              onPress={() => {
+                Clipboard.setString(textMessage);
+                Alert.alert('Copied!', 'Results copied to clipboard');
+              }}
+            >
+              <Ionicons name="copy-outline" size={20} color="#FFFFFF" />
+              <Text style={{ color: '#FFFFFF', fontSize: 16, fontWeight: '600' }}>
+                Copy
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Cash to Close Card */}
