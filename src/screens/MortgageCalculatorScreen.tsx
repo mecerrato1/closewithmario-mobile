@@ -857,8 +857,28 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               </View>
             )}
           </View>
-          <Text style={styles.resultValue}>{formatCurrencyDetailed(adjustedCashToClose)}</Text>
+          <Text style={[styles.resultValue, results.sellerCreditAmount > 0 && { marginBottom: 6 }]}>{formatCurrencyDetailed(adjustedCashToClose)}</Text>
           
+          {/* Seller Credit Indicator */}
+          {results.sellerCreditAmount > 0 && (
+            <View style={{ 
+              backgroundColor: 'rgba(16, 185, 129, 0.25)', 
+              paddingHorizontal: 10, 
+              paddingVertical: 6, 
+              borderRadius: 8,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              marginBottom: 12,
+            }}>
+              <Ionicons name="gift-outline" size={14} color="#10B981" />
+              <Text style={{ fontSize: 13, color: '#10B981', fontWeight: '600' }}>
+                Seller Credit Applied: -{formatCurrency(results.sellerCreditAmount)}
+              </Text>
+            </View>
+          )}
+
           <View style={styles.resultBreakdown}>
             <View style={styles.resultBreakdownItem}>
               <Text style={styles.resultBreakdownLabel}>Down Pmt</Text>
@@ -1185,9 +1205,10 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               {price && price !== '0' && (
                 <TouchableOpacity
                   onPress={() => setPrice('')}
-                  style={{ position: 'absolute', right: 10, top: 0, bottom: 0, justifyContent: 'center' }}
+                  style={{ position: 'absolute', right: 4, top: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 8 }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <Ionicons name="close-circle-outline" size={18} color={colors.textSecondary} style={{ opacity: 0.5 }} />
+                  <Ionicons name="close-circle-outline" size={22} color={colors.textSecondary} style={{ opacity: 0.6 }} />
                 </TouchableOpacity>
               )}
             </View>
@@ -1205,9 +1226,10 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               {annualTax && annualTax !== '0' && (
                 <TouchableOpacity
                   onPress={() => setAnnualTax('')}
-                  style={{ position: 'absolute', right: 10, top: 0, bottom: 0, justifyContent: 'center' }}
+                  style={{ position: 'absolute', right: 4, top: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 8 }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <Ionicons name="close-circle-outline" size={18} color={colors.textSecondary} style={{ opacity: 0.5 }} />
+                  <Ionicons name="close-circle-outline" size={22} color={colors.textSecondary} style={{ opacity: 0.6 }} />
                 </TouchableOpacity>
               )}
             </View>
@@ -1225,9 +1247,10 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               {annualIns && annualIns !== '0' && (
                 <TouchableOpacity
                   onPress={() => setAnnualIns('')}
-                  style={{ position: 'absolute', right: 10, top: 0, bottom: 0, justifyContent: 'center' }}
+                  style={{ position: 'absolute', right: 4, top: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 8 }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <Ionicons name="close-circle-outline" size={18} color={colors.textSecondary} style={{ opacity: 0.5 }} />
+                  <Ionicons name="close-circle-outline" size={22} color={colors.textSecondary} style={{ opacity: 0.6 }} />
                 </TouchableOpacity>
               )}
             </View>
@@ -1245,9 +1268,10 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               {monthlyHOA && (
                 <TouchableOpacity
                   onPress={() => setMonthlyHOA('')}
-                  style={{ position: 'absolute', right: 10, top: 0, bottom: 0, justifyContent: 'center' }}
+                  style={{ position: 'absolute', right: 4, top: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 8 }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <Ionicons name="close-circle-outline" size={18} color={colors.textSecondary} style={{ opacity: 0.5 }} />
+                  <Ionicons name="close-circle-outline" size={22} color={colors.textSecondary} style={{ opacity: 0.6 }} />
                 </TouchableOpacity>
               )}
             </View>
@@ -1477,9 +1501,10 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               {customRate && (
                 <TouchableOpacity
                   onPress={() => setCustomRate('')}
-                  style={{ position: 'absolute', right: 10, top: 0, bottom: 0, justifyContent: 'center' }}
+                  style={{ position: 'absolute', right: 4, top: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 8 }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <Ionicons name="close-circle-outline" size={18} color={colors.textSecondary} style={{ opacity: 0.5 }} />
+                  <Ionicons name="close-circle-outline" size={22} color={colors.textSecondary} style={{ opacity: 0.6 }} />
                 </TouchableOpacity>
               )}
             </View>
@@ -1519,9 +1544,10 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               {discountPoints && (
                 <TouchableOpacity
                   onPress={() => setDiscountPoints('')}
-                  style={{ position: 'absolute', right: 10, top: 0, bottom: 0, justifyContent: 'center' }}
+                  style={{ position: 'absolute', right: 4, top: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 8 }}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <Ionicons name="close-circle-outline" size={18} color={colors.textSecondary} style={{ opacity: 0.5 }} />
+                  <Ionicons name="close-circle-outline" size={22} color={colors.textSecondary} style={{ opacity: 0.6 }} />
                 </TouchableOpacity>
               )}
             </View>
@@ -1614,9 +1640,10 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
                 {sellerCredit && (
                   <TouchableOpacity
                     onPress={() => setSellerCredit('')}
-                    style={{ position: 'absolute', right: 10, top: 0, bottom: 0, justifyContent: 'center' }}
+                    style={{ position: 'absolute', right: 4, top: 0, bottom: 0, justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 8 }}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   >
-                    <Ionicons name="close-circle-outline" size={18} color={colors.textSecondary} style={{ opacity: 0.5 }} />
+                    <Ionicons name="close-circle-outline" size={22} color={colors.textSecondary} style={{ opacity: 0.6 }} />
                   </TouchableOpacity>
                 )}
               </View>

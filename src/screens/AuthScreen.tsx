@@ -19,6 +19,7 @@ import Constants from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as AppleAuthentication from 'expo-apple-authentication';
 
 // This must match:
 // - app.json: "scheme": "com.closewithmario.mobile"
@@ -117,6 +118,53 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
       }
     } catch (e: any) {
       setAuthError(e?.message || 'Unexpected error');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    setAuthError(null);
+    setAuthLoading(true);
+
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (!credential.identityToken) {
+        setAuthError('No identity token returned from Apple.');
+        return;
+      }
+
+      // Sign in with Supabase using the Apple ID token
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: credential.identityToken,
+      });
+
+      if (error) {
+        console.log('Supabase Apple auth error:', error.message);
+        setAuthError(error.message);
+        return;
+      }
+
+      if (data.session) {
+        onAuth(data.session);
+      } else {
+        setAuthError('Apple sign-in did not complete.');
+      }
+    } catch (err: any) {
+      if (err.code === 'ERR_REQUEST_CANCELED') {
+        // User canceled the sign-in flow
+        console.log('Apple sign-in canceled by user');
+      } else {
+        console.error('Apple sign-in error:', err);
+        setAuthError(err?.message || 'Apple sign-in failed.');
+      }
     } finally {
       setAuthLoading(false);
     }
@@ -305,6 +353,16 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
             <Text style={styles.authGoogleIconNew}>G</Text>
             <Text style={[styles.authGoogleButtonTextNew, { color: colors.textPrimary }]}>Continue with Google</Text>
           </TouchableOpacity>
+
+          {Platform.OS === 'ios' && (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={isDark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              cornerRadius={14}
+              style={styles.authAppleButton}
+              onPress={handleAppleSignIn}
+            />
+          )}
 
           <Text style={[styles.authCreateAccountHint, { color: colors.textSecondary }]}>
             Don't have an account? Create one at closewithmario.com
@@ -499,5 +557,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 12,
     fontWeight: '400',
+  },
+  authAppleButton: {
+    width: '100%',
+    height: 50,
+    marginTop: 8,
   },
 });

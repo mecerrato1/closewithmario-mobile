@@ -2,7 +2,7 @@
   "expo": {
     "name": "closewithmario-mobile",
     "slug": "closewithmario-mobile",
-    "version": "1.1.58",
+    "version": "1.1.60",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -17,7 +17,8 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.closewithmario.mobile",
-      "buildNumber": "75", 
+      "buildNumber": "77", 
+      "usesAppleSignIn": true,
       "associatedDomains": [
         "applinks:hxpvcaspgdgsehrehbhl.supabase.co",
         "webcredentials:closewithmario.com"
@@ -104,7 +105,9 @@
           "photosPermission": "Close With Mario uses your photo library only when you choose an image for your profile picture — for example selecting a headshot.",
           "cameraPermission": "Close With Mario uses your camera only to take a profile picture so your teammates can recognize your account."
         }
-      ]
+      ],
+
+      "expo-apple-authentication"
     ]
   }
 }
