@@ -159,10 +159,10 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
     }
   };
 
-  // Check if Hometown Heroes, FL Assist, or FHFC HFA Plus is in DPA (waives intangible & doc stamps)
+  // Check if Hometown Heroes, FL Assist, FHFC HFA Plus, or FL HLP is in DPA (waives intangible & doc stamps)
   const hasWaivedTaxProgram = useMemo(() => {
     return dpaEntries.some(e => 
-      e.name === 'Hometown Heroes' || e.name === 'FL Assist' || e.name === 'FHFC HFA Plus'
+      e.name === 'Hometown Heroes' || e.name === 'FL Assist' || e.name === 'FHFC HFA Plus' || e.name === 'FL HLP'
     );
   }, [dpaEntries]);
 
@@ -1079,7 +1079,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               </View>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Doc Stamps (Mortgage)</Text>
-                <Text style={styles.detailValue}>{formatCurrencyDetailed(results.baseLoan * 0.0035)}</Text>
+                <Text style={styles.detailValue}>{formatCurrencyDetailed(hasWaivedTaxProgram ? 0 : results.baseLoan * 0.0035)}</Text>
               </View>
               {buyerPaysSellerTransfer && (
                 <View style={styles.detailRow}>

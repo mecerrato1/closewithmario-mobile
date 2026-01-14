@@ -1,4 +1,13 @@
 🚀 Expo & EAS Workflow Cheat Sheet
+For local development:
+eas build -p ios --profile development
+npx expo start --tunnel --dev-client
+
+To send to testflight:
+eas build -p ios --profile production
+eas submit -p ios --latest
+
+
 Dev Client • TestFlight • Tunnel Mode • Google OAuth Support
 
 This guide explains the full workflow for building, installing, and running your Expo/React Native app on iOS — including how to test Google OAuth using a dev client.
