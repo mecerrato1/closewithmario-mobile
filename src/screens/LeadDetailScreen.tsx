@@ -23,7 +23,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { Session } from '@supabase/supabase-js';
 import { Audio, InterruptionModeIOS } from 'expo-av';
-import type { Lead, MetaLead, SelectedLeadRef, Activity, LoanOfficer, Realtor } from '../lib/types/leads';
+import type { Lead, MetaLead, SelectedLeadRef, Activity, LoanOfficer, Realtor, TrackingReason } from '../lib/types/leads';
 import type { UserRole } from '../lib/roles';
 import { supabase } from '../lib/supabase';
 import { getUserRole, getUserTeamMemberId, canSeeAllLeads } from '../lib/roles';
@@ -37,6 +37,7 @@ import { useThemeColors } from '../styles/theme';
 import { parseRecordingUrl } from '../utils/parseRecordingUrl';
 import { saveContact } from '../utils/vcard';
 import { SmsMessaging } from '../components/SmsMessaging';
+import { toggleLeadTracking, updateTrackingNote, getTrackingReasonLabel } from '../lib/supabase/leadTracking';
 
 export type LeadDetailViewProps = {
   selected: SelectedLeadRef;
@@ -118,6 +119,19 @@ export function LeadDetailView({
   const [showCustomMessage, setShowCustomMessage] = useState(false);
   const [customMessageText, setCustomMessageText] = useState('');
   const [showAiRecommendation, setShowAiRecommendation] = useState(false);
+  
+  // Tracking state
+  const [isTracked, setIsTracked] = useState(false);
+  const [trackingReason, setTrackingReason] = useState<TrackingReason>(null);
+  const [trackingNote, setTrackingNote] = useState('');
+  const [updatingTracking, setUpdatingTracking] = useState(false);
+  const [savingTrackingNote, setSavingTrackingNote] = useState(false);
+  const [showTrackingInfo, setShowTrackingInfo] = useState(false);
+  
+  // Partner Update state
+  const [showPartnerUpdateModal, setShowPartnerUpdateModal] = useState(false);
+  const [partnerUpdateMessage, setPartnerUpdateMessage] = useState('');
+  const [sendingPartnerUpdate, setSendingPartnerUpdate] = useState(false);
   
   // Voice notes state (expo-av)
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -277,6 +291,128 @@ export function LeadDetailView({
   };
   
   const adImage = getAdImage();
+
+  // Initialize tracking state from record
+  useEffect(() => {
+    if (record) {
+      setIsTracked(record.is_tracked || false);
+      setTrackingReason(record.tracking_reason || null);
+      setTrackingNote(record.tracking_note || '');
+    }
+  }, [record?.id, record?.is_tracked, record?.tracking_reason, record?.tracking_note]);
+
+  // Handle tracking toggle
+  const handleToggleTracking = async () => {
+    if (!record) return;
+    setUpdatingTracking(true);
+    const newTracked = !isTracked;
+    const result = await toggleLeadTracking(
+      record.id,
+      isMeta ? 'meta' : 'lead',
+      newTracked,
+      newTracked ? 'manual' : null
+    );
+    if (result.success) {
+      setIsTracked(newTracked);
+      setTrackingReason(newTracked ? 'manual' : null);
+      // Update parent state
+      const updatedRecord = { ...record, is_tracked: newTracked, tracking_reason: newTracked ? 'manual' : null } as Lead | MetaLead;
+      onLeadUpdate(updatedRecord, isMeta ? 'meta' : 'lead');
+    } else {
+      Alert.alert('Error', result.error || 'Failed to update tracking');
+    }
+    setUpdatingTracking(false);
+  };
+
+  // Handle tracking note save
+  const handleSaveTrackingNote = async () => {
+    if (!record) return;
+    setSavingTrackingNote(true);
+    const result = await updateTrackingNote(record.id, isMeta ? 'meta' : 'lead', trackingNote);
+    if (result.success) {
+      const updatedRecord = { ...record, tracking_note: trackingNote, tracking_note_updated_at: new Date().toISOString() } as Lead | MetaLead;
+      onLeadUpdate(updatedRecord, isMeta ? 'meta' : 'lead');
+    } else {
+      Alert.alert('Error', result.error || 'Failed to save note');
+    }
+    setSavingTrackingNote(false);
+    Keyboard.dismiss();
+  };
+
+  // Handle sending partner update
+  const handleSendPartnerUpdate = async () => {
+    if (!record || !partnerUpdateMessage.trim()) return;
+    
+    setSendingPartnerUpdate(true);
+    try {
+      // API base URL (must use www to avoid redirect issues)
+      const API_BASE_URL = 'https://www.closewithmario.com';
+      
+      // Create abort controller for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
+      
+      const url = `${API_BASE_URL}/api/leads/partner-update`;
+      console.log('📧 Sending partner update:', {
+        url,
+        leadId: record.id,
+        source: isMeta ? 'meta' : 'organic',
+        messageLength: partnerUpdateMessage.trim().length
+      });
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          leadId: record.id,
+          message: partnerUpdateMessage.trim(),
+          source: isMeta ? 'meta' : 'organic'
+        }),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      console.log('📧 Partner update response:', response.status);
+
+      if (response.ok) {
+        const now = new Date().toISOString();
+        // Update local state
+        const updatedRecord = { 
+          ...record, 
+          last_referral_update_at: now,
+          last_referral_update_summary: partnerUpdateMessage.trim()
+        } as Lead | MetaLead;
+        onLeadUpdate(updatedRecord, isMeta ? 'meta' : 'lead');
+        
+        Alert.alert('Success', 'Partner update sent successfully!');
+        setShowPartnerUpdateModal(false);
+        setPartnerUpdateMessage('');
+      } else {
+        const errorText = await response.text().catch(() => '');
+        console.error('📧 Partner update error response:', errorText);
+        let errorMessage = 'Failed to send partner update';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorMessage;
+        } catch {}
+        Alert.alert('Error', errorMessage);
+      }
+    } catch (error: any) {
+      console.error('📧 Error sending partner update:', error);
+      if (error.name === 'AbortError') {
+        Alert.alert('Timeout', 'Request timed out. Please check your connection and try again.');
+      } else {
+        Alert.alert('Error', `Failed to send partner update: ${error.message || 'Unknown error'}`);
+      }
+    } finally {
+      setSendingPartnerUpdate(false);
+    }
+  };
+
+  // Check if partner update is available (has referral email or linked realtor)
+  const hasPartnerEmail = record?.referral_source_email || (record?.realtor_id && currentRealtorName);
+  const partnerName = record?.referral_source_name || currentRealtorName || 'Partner';
 
   const hasPrevious = currentIndex > 0;
   const hasNext = currentIndex < navigableList.length - 1;
@@ -1759,6 +1895,108 @@ export function LeadDetailView({
             </TouchableOpacity>
           </View>
 
+          {/* Tracking Section */}
+          <View style={trackingStyles.container}>
+            <View style={trackingStyles.headerRow}>
+              <TouchableOpacity 
+                style={[
+                  trackingStyles.trackButton,
+                  isTracked && trackingStyles.trackButtonActive
+                ]}
+                onPress={handleToggleTracking}
+                disabled={updatingTracking}
+              >
+                {updatingTracking ? (
+                  <ActivityIndicator size="small" color={isTracked ? '#FFFFFF' : '#7C3AED'} />
+                ) : (
+                  <>
+                    <Ionicons 
+                      name={isTracked ? 'pin' : 'pin-outline'} 
+                      size={16} 
+                      color={isTracked ? '#FFFFFF' : '#7C3AED'} 
+                    />
+                    <Text style={[
+                      trackingStyles.trackButtonText,
+                      isTracked && trackingStyles.trackButtonTextActive
+                    ]}>
+                      {isTracked ? 'Tracked' : 'Track'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={trackingStyles.infoButton}
+                onPress={() => setShowTrackingInfo(true)}
+              >
+                <Ionicons name="information-circle-outline" size={18} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+            {isTracked && trackingReason && (
+              <Text style={trackingStyles.reasonText}>
+                {getTrackingReasonLabel(trackingReason)}
+              </Text>
+            )}
+            {isTracked && (
+              <View style={trackingStyles.noteContainer}>
+                <TextInput
+                  style={[trackingStyles.noteInput, { color: colors.textPrimary, borderColor: colors.border }]}
+                  placeholder="Add a tracking note..."
+                  placeholderTextColor="#94A3B8"
+                  value={trackingNote}
+                  onChangeText={setTrackingNote}
+                  multiline
+                  numberOfLines={2}
+                />
+                <TouchableOpacity 
+                  style={[
+                    trackingStyles.saveNoteButton,
+                    savingTrackingNote && trackingStyles.saveNoteButtonDisabled
+                  ]}
+                  onPress={handleSaveTrackingNote}
+                  disabled={savingTrackingNote}
+                >
+                  {savingTrackingNote ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={trackingStyles.saveNoteButtonText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
+          {/* Partner Update Section */}
+          {hasPartnerEmail && (
+            <View style={partnerUpdateStyles.container}>
+              <View style={partnerUpdateStyles.headerRow}>
+                <View style={partnerUpdateStyles.labelRow}>
+                  <Ionicons name="people-outline" size={16} color="#7C3AED" />
+                  <Text style={[partnerUpdateStyles.label, { color: colors.textPrimary }]}>
+                    Partner: {partnerName}
+                  </Text>
+                </View>
+                <TouchableOpacity 
+                  style={partnerUpdateStyles.sendButton}
+                  onPress={() => setShowPartnerUpdateModal(true)}
+                >
+                  <Ionicons name="mail-outline" size={16} color="#FFFFFF" />
+                  <Text style={partnerUpdateStyles.sendButtonText}>Send Update</Text>
+                </TouchableOpacity>
+              </View>
+              {record?.last_referral_update_at && (
+                <Text style={[partnerUpdateStyles.lastUpdate, { color: colors.textSecondary }]}>
+                  Last update: {new Date(record.last_referral_update_at).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit'
+                  })}
+                </Text>
+              )}
+            </View>
+          )}
+
           {/* Status Picker Modal */}
           <Modal
             visible={showStatusPicker}
@@ -2985,6 +3223,116 @@ export function LeadDetailView({
         </TouchableWithoutFeedback>
       </Modal>
 
+      {/* Partner Update Modal */}
+      <Modal visible={showPartnerUpdateModal} transparent animationType="fade">
+        <TouchableOpacity 
+          style={partnerUpdateStyles.modalOverlay} 
+          activeOpacity={1}
+          onPress={() => setShowPartnerUpdateModal(false)}
+        >
+          <TouchableWithoutFeedback onPress={() => {}}>
+            <View style={[partnerUpdateStyles.modalContent, { backgroundColor: colors.cardBackground }]}>
+              <View style={partnerUpdateStyles.modalHeader}>
+                <Text style={[partnerUpdateStyles.modalTitle, { color: colors.textPrimary }]}>
+                  Send Partner Update
+                </Text>
+                <TouchableOpacity onPress={() => setShowPartnerUpdateModal(false)}>
+                  <Ionicons name="close" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              
+              <Text style={[partnerUpdateStyles.modalSubtitle, { color: colors.textSecondary }]}>
+                Send an email update to {partnerName} about {fullName}'s loan progress.
+              </Text>
+              
+              <TextInput
+                style={[partnerUpdateStyles.messageInput, { 
+                  color: colors.textPrimary, 
+                  borderColor: colors.border,
+                  backgroundColor: colors.background 
+                }]}
+                placeholder="Enter your update message..."
+                placeholderTextColor="#94A3B8"
+                value={partnerUpdateMessage}
+                onChangeText={setPartnerUpdateMessage}
+                multiline
+                numberOfLines={5}
+                textAlignVertical="top"
+              />
+              
+              <TouchableOpacity 
+                style={[
+                  partnerUpdateStyles.sendModalButton,
+                  (!partnerUpdateMessage.trim() || sendingPartnerUpdate) && partnerUpdateStyles.sendModalButtonDisabled
+                ]}
+                onPress={handleSendPartnerUpdate}
+                disabled={!partnerUpdateMessage.trim() || sendingPartnerUpdate}
+              >
+                {sendingPartnerUpdate ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="send" size={18} color="#FFFFFF" />
+                    <Text style={partnerUpdateStyles.sendModalButtonText}>Send Update</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Tracking Info Modal */}
+      <Modal visible={showTrackingInfo} transparent animationType="fade">
+        <TouchableOpacity 
+          style={trackingInfoStyles.overlay} 
+          activeOpacity={1}
+          onPress={() => setShowTrackingInfo(false)}
+        >
+          <View style={[trackingInfoStyles.content, { backgroundColor: colors.cardBackground }]}>
+            <Text style={[trackingInfoStyles.title, { color: colors.textPrimary }]}>Lead Tracking</Text>
+            <Text style={[trackingInfoStyles.subtitle, { color: colors.textSecondary }]}>
+              Track important leads to monitor their progress
+            </Text>
+            
+            <View style={trackingInfoStyles.ruleRow}>
+              <Text style={trackingInfoStyles.ruleIcon}>📌</Text>
+              <Text style={[trackingInfoStyles.ruleText, { color: colors.textPrimary }]}>
+                <Text style={{ fontWeight: '600' }}>Manual:</Text> Pin leads you want to follow closely
+              </Text>
+            </View>
+            
+            <View style={trackingInfoStyles.ruleRow}>
+              <Text style={trackingInfoStyles.ruleIcon}>📄</Text>
+              <Text style={[trackingInfoStyles.ruleText, { color: colors.textPrimary }]}>
+                <Text style={{ fontWeight: '600' }}>Auto:</Text> Leads are auto-tracked when status changes to "Gathering Docs"
+              </Text>
+            </View>
+            
+            <View style={trackingInfoStyles.ruleRow}>
+              <Text style={trackingInfoStyles.ruleIcon}>✅</Text>
+              <Text style={[trackingInfoStyles.ruleText, { color: colors.textPrimary }]}>
+                <Text style={{ fontWeight: '600' }}>Auto:</Text> Leads are auto-tracked when status changes to "Qualified"
+              </Text>
+            </View>
+            
+            <View style={trackingInfoStyles.ruleRow}>
+              <Text style={trackingInfoStyles.ruleIcon}>🔓</Text>
+              <Text style={[trackingInfoStyles.ruleText, { color: colors.textPrimary }]}>
+                <Text style={{ fontWeight: '600' }}>Auto-untrack:</Text> When status is "Closed" or "Unqualified"
+              </Text>
+            </View>
+
+            <TouchableOpacity 
+              style={trackingInfoStyles.closeButton}
+              onPress={() => setShowTrackingInfo(false)}
+            >
+              <Text style={trackingInfoStyles.closeButtonText}>Got it</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* AI Recommendation Modal */}
       <Modal
         visible={showAiRecommendation}
@@ -3113,6 +3461,234 @@ const aiRecommendationStyles = StyleSheet.create({
     alignItems: 'center',
   },
   closeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});
+
+// Styles for Tracking Section
+const trackingStyles = StyleSheet.create({
+  container: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  trackButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#7C3AED',
+    backgroundColor: 'transparent',
+  },
+  trackButtonActive: {
+    backgroundColor: '#7C3AED',
+    borderColor: '#7C3AED',
+  },
+  trackButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#7C3AED',
+  },
+  trackButtonTextActive: {
+    color: '#FFFFFF',
+  },
+  infoButton: {
+    padding: 4,
+  },
+  reasonText: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 8,
+  },
+  noteContainer: {
+    marginTop: 12,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  noteInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  saveNoteButton: {
+    backgroundColor: '#7C3AED',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+  },
+  saveNoteButtonDisabled: {
+    opacity: 0.6,
+  },
+  saveNoteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+});
+
+// Styles for Tracking Info Modal
+const trackingInfoStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  content: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: 16,
+    padding: 20,
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  ruleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  ruleIcon: {
+    width: 24,
+    marginRight: 10,
+  },
+  ruleText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  closeButton: {
+    backgroundColor: '#7C3AED',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  closeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+});
+
+// Styles for Partner Update Section
+const partnerUpdateStyles = StyleSheet.create({
+  container: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  sendButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#7C3AED',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  sendButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  lastUpdate: {
+    fontSize: 12,
+    marginTop: 8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 16,
+    padding: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  messageInput: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 15,
+    minHeight: 120,
+    marginBottom: 16,
+  },
+  sendModalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#7C3AED',
+    paddingVertical: 14,
+    borderRadius: 10,
+  },
+  sendModalButtonDisabled: {
+    opacity: 0.5,
+  },
+  sendModalButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',

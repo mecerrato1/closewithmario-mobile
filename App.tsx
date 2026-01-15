@@ -104,6 +104,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
   const [attentionFilter, setAttentionFilter] = useState(false);
   const [unreadFilter, setUnreadFilter] = useState(false);
+  const [trackedFilter, setTrackedFilter] = useState(false);
   const [hasManuallySelectedTab, setHasManuallySelectedTab] = useState(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [loanOfficers, setLoanOfficers] = useState<Array<{ id: string; name: string }>>([]);
@@ -374,14 +375,14 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         let leadsQuery = supabase
           .from('leads')
           .select(
-            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id, source, source_detail'
+            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id, source, source_detail, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary'
           )
           .order('created_at', { ascending: false });
 
         let metaQuery = supabase
           .from('meta_ads')
           .select(
-            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id'
+            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary'
           )
           .order('created_at', { ascending: false });
 
@@ -675,12 +676,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       
       let leadsQuery = supabase
         .from('leads')
-        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id, source, source_detail')
+        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id, source, source_detail, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary')
         .order('created_at', { ascending: false });
 
       let metaQuery = supabase
         .from('meta_ads')
-        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id')
+        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary')
         .order('created_at', { ascending: false});
 
       if (!canSeeAllLeads(userRole)) {
@@ -785,10 +786,37 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         }
       }
 
+      // Determine auto-tracking changes based on new status
+      const shouldAutoTrack = newStatus === 'gathering_docs' || newStatus === 'qualified';
+      const shouldAutoUntrack = newStatus === 'closed' || newStatus === 'unqualified';
+      const getAutoTrackingReason = (status: string) => {
+        if (status === 'gathering_docs') return 'auto_docs_requested';
+        if (status === 'qualified') return 'auto_qualified';
+        return null;
+      };
+
       if (source === 'lead') {
+        const currentLead = leads.find(l => l.id === id);
+        const currentIsTracked = currentLead?.is_tracked || false;
+        const currentReason = currentLead?.tracking_reason || null;
+
+        // Build update object
+        const updateData: any = { status: newStatus };
+        
+        // Auto-track if moving to gathering_docs or qualified
+        if (shouldAutoTrack && !currentIsTracked) {
+          updateData.is_tracked = true;
+          updateData.tracking_reason = getAutoTrackingReason(newStatus);
+        }
+        // Auto-untrack if moving to closed/unqualified (only if auto-tracked, not manual)
+        else if (shouldAutoUntrack && currentIsTracked && currentReason !== 'manual') {
+          updateData.is_tracked = false;
+          updateData.tracking_reason = null;
+        }
+
         const { error } = await supabase
           .from('leads')
-          .update({ status: newStatus })
+          .update(updateData)
           .eq('id', id);
 
         if (error) {
@@ -798,13 +826,31 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
         setLeads((prev) =>
           prev.map((l) =>
-            l.id === id ? { ...l, status: newStatus } : l
+            l.id === id ? { ...l, ...updateData } : l
           )
         );
       } else {
+        const currentLead = metaLeads.find(l => l.id === id);
+        const currentIsTracked = currentLead?.is_tracked || false;
+        const currentReason = currentLead?.tracking_reason || null;
+
+        // Build update object
+        const updateData: any = { status: newStatus };
+        
+        // Auto-track if moving to gathering_docs or qualified
+        if (shouldAutoTrack && !currentIsTracked) {
+          updateData.is_tracked = true;
+          updateData.tracking_reason = getAutoTrackingReason(newStatus);
+        }
+        // Auto-untrack if moving to closed/unqualified (only if auto-tracked, not manual)
+        else if (shouldAutoUntrack && currentIsTracked && currentReason !== 'manual') {
+          updateData.is_tracked = false;
+          updateData.tracking_reason = null;
+        }
+
         const { error } = await supabase
           .from('meta_ads')
-          .update({ status: newStatus })
+          .update(updateData)
           .eq('id', id);
 
         if (error) {
@@ -814,7 +860,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
         setMetaLeads((prev) =>
           prev.map((m) =>
-            m.id === id ? { ...m, status: newStatus } : m
+            m.id === id ? { ...m, ...updateData } : m
           )
         );
       }
@@ -1185,7 +1231,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     // Use AI attention if available, fallback to rule-based
     const aiAttention = attentionMap.get(lead.id);
     if (aiAttention) return aiAttention.needsAttention;
-    return !!getLeadAlert(lead);
+    return getLeadAlert(lead) !== null;
+  };
+
+  // Tracked filter: when enabled, only show tracked leads
+  const matchesTrackedFilter = (lead: Lead | MetaLead) => {
+    if (!trackedFilter) return true;
+    return lead.is_tracked === true;
   };
 
   // Unread messages filter: when enabled, only show leads with unread messages
@@ -1282,6 +1334,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         >
           <View style={styles.leadHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
+              {item.is_tracked && (
+                <Ionicons name="pin" size={14} color="#7C3AED" style={{ marginRight: 4 }} />
+              )}
               <Text style={[styles.leadName, { color: colors.textPrimary }]} numberOfLines={1}>
                 {fullName}
               </Text>
@@ -1506,6 +1561,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         >
           <View style={styles.leadHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
+              {item.is_tracked && (
+                <Ionicons name="pin" size={14} color="#7C3AED" style={{ marginRight: 4 }} />
+              )}
               <Text style={[styles.leadName, { color: colors.textPrimary }]} numberOfLines={1}>
                 {fullName}
               </Text>
@@ -1667,7 +1725,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       const loMatch = matchesLOFilter(lead);
       const attentionMatch = matchesAttentionFilter(lead);
       const sourceMatch = matchesSourceFilter(lead);
-      return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch;
+      const trackedMatch = matchesTrackedFilter(lead);
+      return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch && trackedMatch;
     });
 
     let filteredMetaLeads = metaLeads.filter(lead => {
@@ -1676,7 +1735,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       const loMatch = matchesLOFilter(lead);
       const attentionMatch = matchesAttentionFilter(lead);
       const sourceMatch = matchesSourceFilter(lead);
-      return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch;
+      const trackedMatch = matchesTrackedFilter(lead);
+      return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch && trackedMatch;
     });
 
     // Keep the currently selected lead available in detail view even if a state update
@@ -2329,6 +2389,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   triggerListAnimation();
                   setAttentionFilter(true);
                   setUnreadFilter(false);
+                  setTrackedFilter(false);
                   setActiveTab('all');
                   setSelectedStatusFilter('all');
                   setSelectedSourceFilter('all');
@@ -2338,6 +2399,24 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               >
                 <Text style={[styles.perfNumber, { color: colors.textPrimary }]}>⚠️ {attentionLeadsCount}</Text>
                 <Text style={[styles.perfLabel, { color: colors.textSecondary }]}>Needs Attention</Text>
+              </TouchableOpacity>
+              {/* Tracked Leads card */}
+              <TouchableOpacity 
+                style={[styles.performanceCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
+                onPress={() => {
+                  triggerListAnimation();
+                  setAttentionFilter(false);
+                  setUnreadFilter(false);
+                  setTrackedFilter(true);
+                  setActiveTab('all');
+                  setSelectedStatusFilter('all');
+                  setSelectedSourceFilter('all');
+                  setSelectedLOFilter(null);
+                  setShowDashboard(false);
+                }}
+              >
+                <Text style={[styles.perfNumber, { color: colors.textPrimary }]}>📌 {[...leads, ...metaLeads].filter(l => l.is_tracked).length}</Text>
+                <Text style={[styles.perfLabel, { color: colors.textSecondary }]}>Tracked</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -3192,21 +3271,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               const loMatch = matchesLOFilter(lead);
               const attentionMatch = matchesAttentionFilter(lead);
               const sourceMatch = matchesSourceFilter(lead);
+              const trackedMatch = matchesTrackedFilter(lead);
               
-              console.log('📋 Leads tab filter', {
-                leadId: lead.id,
-                leadName: `${lead.first_name} ${lead.last_name}`,
-                statusMatch,
-                searchMatch,
-                loMatch,
-                attentionMatch,
-                sourceMatch,
-                selectedStatusFilter,
-                attentionFilter,
-                selectedSourceFilter,
-              });
-              
-              return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch;
+              return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch && trackedMatch;
             })}
             renderItem={renderLeadItem}
             keyExtractor={(item) => item.id}
@@ -3235,23 +3302,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               const attentionMatch = matchesAttentionFilter(lead);
               const sourceMatch = matchesSourceFilter(lead);
               const unreadMatch = matchesUnreadFilter(lead);
+              const trackedMatch = matchesTrackedFilter(lead);
               
-              console.log('📋 Meta tab filter', {
-                leadId: lead.id,
-                leadName: `${lead.first_name} ${lead.last_name}`,
-                statusMatch,
-                searchMatch,
-                loMatch,
-                attentionMatch,
-                sourceMatch,
-                unreadMatch,
-                selectedStatusFilter,
-                attentionFilter,
-                selectedSourceFilter,
-                unreadFilter,
-              });
-              
-              return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch && unreadMatch;
+              return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch && unreadMatch && trackedMatch;
             })}
             renderItem={renderMetaLeadItem}
             keyExtractor={(item) => item.id}
@@ -3280,7 +3333,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 const loMatch = matchesLOFilter(lead);
                 const attentionMatch = matchesAttentionFilter(lead);
                 const sourceMatch = matchesSourceFilter(lead);
-                return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch;
+                const trackedMatch = matchesTrackedFilter(lead);
+                return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch && trackedMatch;
               }).map(lead => ({ ...lead, _tableType: 'meta' as const }));
               
               const leadsArr = leads.filter(lead => {
@@ -3289,21 +3343,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 const loMatch = matchesLOFilter(lead);
                 const attentionMatch = matchesAttentionFilter(lead);
                 const sourceMatch = matchesSourceFilter(lead);
-                return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch;
+                const trackedMatch = matchesTrackedFilter(lead);
+                return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch && trackedMatch;
               }).map(lead => ({ ...lead, _tableType: 'lead' as const }));
               
               const combined = [...metaArr, ...leadsArr].sort(
                 (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
               );
-              
-              console.log('📋 All tab data', {
-                totalMeta: metaLeads.length,
-                totalLeads: leads.length,
-                afterFilters: combined.length,
-                selectedStatusFilter,
-                attentionFilter,
-                activeTab,
-              });
               
               return combined;
             })()}

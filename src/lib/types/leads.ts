@@ -1,4 +1,6 @@
 // Lead type definitions extracted from App.tsx
+export type TrackingReason = 'manual' | 'auto_docs_requested' | 'auto_qualified' | null;
+
 export type Lead = {
   id: string;
   created_at: string;
@@ -17,6 +19,16 @@ export type Lead = {
   message?: string | null;
   source?: string | null; // e.g., 'My Lead', 'CTA Form', etc.
   source_detail?: string | null; // Referral source for self-created leads
+  // Tracking fields
+  is_tracked?: boolean;
+  tracking_reason?: TrackingReason;
+  tracking_note?: string | null;
+  tracking_note_updated_at?: string | null;
+  // Referral partner fields
+  referral_source_name?: string | null;
+  referral_source_email?: string | null;
+  last_referral_update_at?: string | null;
+  last_referral_update_summary?: string | null;
 };
 
 export type MetaLead = {
@@ -45,6 +57,16 @@ export type MetaLead = {
   county_interest?: string | null;
   monthly_income?: string | null;
   meta_ad_notes?: string | null;
+  // Tracking fields
+  is_tracked?: boolean;
+  tracking_reason?: TrackingReason;
+  tracking_note?: string | null;
+  tracking_note_updated_at?: string | null;
+  // Referral partner fields
+  referral_source_name?: string | null;
+  referral_source_email?: string | null;
+  last_referral_update_at?: string | null;
+  last_referral_update_summary?: string | null;
 };
 
 export type SelectedLeadRef =
