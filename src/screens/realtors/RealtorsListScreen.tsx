@@ -1,5 +1,5 @@
 // src/screens/realtors/RealtorsListScreen.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Platform,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../../styles/theme';
@@ -43,6 +44,8 @@ export default function RealtorsListScreen({
     onRefresh,
   } = useRealtors({ userId });
 
+  const [showStageInfo, setShowStageInfo] = useState(false);
+
   const FILTER_OPTIONS: { key: RelationshipStage | 'all'; label: string }[] = [
     { key: 'all', label: 'All' },
     { key: 'hot', label: 'Hot' },
@@ -71,6 +74,12 @@ export default function RealtorsListScreen({
             </TouchableOpacity>
           );
         })}
+        <TouchableOpacity 
+          style={styles.infoButton} 
+          onPress={() => setShowStageInfo(true)}
+        >
+          <Ionicons name="information-circle-outline" size={20} color={colors.textSecondary} />
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -180,6 +189,59 @@ export default function RealtorsListScreen({
           showsVerticalScrollIndicator={false}
         />
       )}
+
+      {/* Stage Info Modal */}
+      <Modal visible={showStageInfo} transparent animationType="fade">
+        <TouchableOpacity 
+          style={styles.modalOverlay} 
+          activeOpacity={1}
+          onPress={() => setShowStageInfo(false)}
+        >
+          <View style={[styles.modalContent, { backgroundColor: colors.cardBackground }]}>
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Relationship Stages</Text>
+            <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
+              Stages are automatically updated based on lead assignments, but can be manually overridden in the realtor detail screen.
+            </Text>
+            
+            <View style={styles.stageExplanation}>
+              <View style={[styles.stageDot, { backgroundColor: '#DC2626' }]} />
+              <View style={styles.stageTextContainer}>
+                <Text style={[styles.stageLabel, { color: colors.textPrimary }]}>Hot</Text>
+                <Text style={[styles.stageDescription, { color: colors.textSecondary }]}>
+                  2 or more leads assigned
+                </Text>
+              </View>
+            </View>
+            
+            <View style={styles.stageExplanation}>
+              <View style={[styles.stageDot, { backgroundColor: '#D97706' }]} />
+              <View style={styles.stageTextContainer}>
+                <Text style={[styles.stageLabel, { color: colors.textPrimary }]}>Warm</Text>
+                <Text style={[styles.stageDescription, { color: colors.textSecondary }]}>
+                  1 lead assigned
+                </Text>
+              </View>
+            </View>
+            
+            <View style={styles.stageExplanation}>
+              <View style={[styles.stageDot, { backgroundColor: '#2563EB' }]} />
+              <View style={styles.stageTextContainer}>
+                <Text style={[styles.stageLabel, { color: colors.textPrimary }]}>Cold</Text>
+                <Text style={[styles.stageDescription, { color: colors.textSecondary }]}>
+                  No leads assigned
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity 
+              style={styles.modalCloseButton}
+              onPress={() => setShowStageInfo(false)}
+            >
+              <Text style={styles.modalCloseButtonText}>Got it</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -326,6 +388,68 @@ const styles = StyleSheet.create({
     borderRadius: 24,
   },
   emptyButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  infoButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: 16,
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  stageExplanation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  stageDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  stageTextContainer: {
+    flex: 1,
+  },
+  stageLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  stageDescription: {
+    fontSize: 13,
+  },
+  modalCloseButton: {
+    backgroundColor: '#7C3AED',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  modalCloseButtonText: {
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '600',

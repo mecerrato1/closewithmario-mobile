@@ -1,6 +1,6 @@
 // src/components/realtors/RealtorCard.tsx
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../../styles/theme';
 import { AssignedRealtor, getRealtorFullName, getRealtorInitials, STAGE_CONFIG } from '../../lib/types/realtors';
@@ -24,30 +24,37 @@ export default function RealtorCard({ realtor, onPress }: RealtorCardProps) {
     >
       {/* Avatar with stage indicator */}
       <View style={styles.avatarContainer}>
-        <View style={[styles.avatar, { backgroundColor: stageConfig.color }]}>
-          <Text style={styles.avatarText}>{initials}</Text>
-        </View>
+        {realtor.profile_picture_url ? (
+          <Image 
+            source={{ uri: realtor.profile_picture_url }} 
+            style={styles.avatarImage}
+          />
+        ) : (
+          <View style={[styles.avatar, { backgroundColor: stageConfig.color }]}>
+            <Text style={styles.avatarText}>{initials}</Text>
+          </View>
+        )}
       </View>
 
       {/* Info */}
       <View style={styles.info}>
-        <View style={styles.nameRow}>
-          <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={1}>
-            {fullName}
-          </Text>
-          {(realtor.lead_count ?? 0) > 0 && (
-            <View style={styles.leadBadge}>
-              <Ionicons name="people" size={12} color="#FFFFFF" />
-              <Text style={styles.leadBadgeText}>{realtor.lead_count}</Text>
-            </View>
-          )}
-        </View>
+        <Text style={[styles.name, { color: colors.textPrimary }]} numberOfLines={1}>
+          {fullName}
+        </Text>
         {realtor.brokerage && (
           <Text style={[styles.brokerage, { color: colors.textSecondary }]} numberOfLines={1}>
             {realtor.brokerage}
           </Text>
         )}
       </View>
+
+      {/* Lead count badge - right aligned */}
+      {(realtor.lead_count ?? 0) > 0 && (
+        <View style={styles.leadBadge}>
+          <Ionicons name="people" size={12} color="#FFFFFF" />
+          <Text style={styles.leadBadgeText}>{realtor.lead_count}</Text>
+        </View>
+      )}
 
       {/* Chevron */}
       <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
@@ -79,6 +86,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  avatarImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
   info: {
     flex: 1,
   },
@@ -90,11 +102,6 @@ const styles = StyleSheet.create({
   brokerage: {
     fontSize: 13,
   },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   leadBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -103,6 +110,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 10,
     gap: 3,
+    marginRight: 8,
   },
   leadBadgeText: {
     color: '#FFFFFF',

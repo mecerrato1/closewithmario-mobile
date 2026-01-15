@@ -47,6 +47,7 @@ export async function fetchAssignedRealtors(
           email_opt_out,
           preferred_language,
           secondary_language,
+          profile_picture_url,
           created_at
         )
       `)
@@ -135,6 +136,7 @@ export async function fetchAssignedRealtors(
         preferred_language: row.realtors.preferred_language || 'en',
         secondary_language: row.realtors.secondary_language || null,
         realtor_created_at: row.realtors.created_at,
+        profile_picture_url: row.realtors.profile_picture_url || null,
         lead_count: leadCountMap[row.realtors.id] || 0,
       }))
       // Sort: realtors with leads first, then alphabetically by last name, first name
@@ -238,6 +240,7 @@ export async function fetchRealtorById(
       preferred_language: row.realtors.preferred_language || 'en',
       secondary_language: row.realtors.secondary_language || null,
       realtor_created_at: row.realtors.created_at,
+      profile_picture_url: row.realtors.profile_picture_url || null,
     };
 
     return { data: realtor, error: null };
@@ -318,6 +321,7 @@ export async function createRealtorAndAssign(
       preferred_language: newRealtor.preferred_language || 'en',
       secondary_language: newRealtor.secondary_language || null,
       realtor_created_at: newRealtor.created_at,
+      profile_picture_url: newRealtor.profile_picture_url || null,
     };
 
     return { data: result, error: null };
@@ -373,6 +377,8 @@ export async function updateAssignment(
     const updateData: any = {};
     if (patch.relationship_stage !== undefined) {
       updateData.relationship_stage = patch.relationship_stage;
+      // Mark as manually set so auto-demotion doesn't override LO's choice
+      updateData.stage_manually_set = true;
     }
     if (patch.notes !== undefined) {
       updateData.notes = patch.notes;
@@ -488,18 +494,34 @@ export async function fetchLeadsByRealtor(
   realtorId: string
 ): Promise<{ data: any[] | null; error: Error | null }> {
   try {
-    const { data, error } = await supabase
-      .from('leads')
-      .select('id, first_name, last_name, email, phone, status, created_at')
-      .eq('realtor_id', realtorId)
-      .order('created_at', { ascending: false });
+    // Fetch from both leads and meta_ads tables
+    const [leadsResult, metaResult] = await Promise.all([
+      supabase
+        .from('leads')
+        .select('id, first_name, last_name, email, phone, status, created_at')
+        .eq('realtor_id', realtorId)
+        .order('created_at', { ascending: false }),
+      supabase
+        .from('meta_ads')
+        .select('id, first_name, last_name, email, phone, status, created_at')
+        .eq('realtor_id', realtorId)
+        .order('created_at', { ascending: false }),
+    ]);
 
-    if (error) {
-      console.error('[realtors] fetchLeadsByRealtor error:', error.message);
-      return { data: null, error: new Error(error.message) };
+    if (leadsResult.error) {
+      console.error('[realtors] fetchLeadsByRealtor leads error:', leadsResult.error.message);
+    }
+    if (metaResult.error) {
+      console.error('[realtors] fetchLeadsByRealtor meta_ads error:', metaResult.error.message);
     }
 
-    return { data: data || [], error: null };
+    // Combine and sort by created_at
+    const combined = [
+      ...(leadsResult.data || []).map(l => ({ ...l, source: 'lead' as const })),
+      ...(metaResult.data || []).map(m => ({ ...m, source: 'meta' as const })),
+    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    return { data: combined, error: null };
   } catch (err: any) {
     console.error('[realtors] fetchLeadsByRealtor exception:', err);
     return { data: null, error: err };
@@ -536,6 +558,7 @@ export async function fetchNeedsLoveRealtors(
           email_opt_out,
           preferred_language,
           secondary_language,
+          profile_picture_url,
           created_at
         )
       `)
@@ -569,6 +592,7 @@ export async function fetchNeedsLoveRealtors(
         preferred_language: row.realtors.preferred_language || 'en',
         secondary_language: row.realtors.secondary_language || null,
         realtor_created_at: row.realtors.created_at,
+        profile_picture_url: row.realtors.profile_picture_url || null,
       }));
 
     return { data: realtors, error: null };

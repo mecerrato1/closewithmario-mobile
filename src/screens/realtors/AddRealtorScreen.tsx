@@ -14,12 +14,18 @@ import {
   Switch,
   Modal,
   FlatList,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../../styles/theme';
 import { createRealtorAndAssign, fetchBrokerages } from '../../lib/supabase/realtors';
 import { RelationshipStage, STAGE_CONFIG, LanguageCode, LANGUAGE_OPTIONS } from '../../lib/types/realtors';
 import { formatPhoneNumber } from '../../lib/textTemplates';
+import { 
+  pickProfileImage, 
+  requestMediaLibraryPermission, 
+  uploadRealtorProfilePicture 
+} from '../../utils/profilePicture';
 
 interface AddRealtorScreenProps {
   userId: string;
@@ -54,6 +60,10 @@ export default function AddRealtorScreen({ userId, onBack, onSuccess }: AddRealt
   // Language picker modals
   const [showPrimaryLanguagePicker, setShowPrimaryLanguagePicker] = useState(false);
   const [showSecondaryLanguagePicker, setShowSecondaryLanguagePicker] = useState(false);
+  
+  // Profile picture state
+  const [profilePictureUri, setProfilePictureUri] = useState<string | null>(null);
+  const [uploadingPicture, setUploadingPicture] = useState(false);
 
   // Fetch brokerages on mount
   useEffect(() => {
@@ -82,6 +92,27 @@ export default function AddRealtorScreen({ userId, onBack, onSuccess }: AddRealt
   const isValidPhone = (phoneStr: string) => {
     const digits = phoneStr.replace(/\D/g, '');
     return digits.length === 10;
+  };
+
+  // Handle profile picture selection
+  const handleSelectProfilePicture = async () => {
+    const hasPermission = await requestMediaLibraryPermission();
+    if (!hasPermission) {
+      Alert.alert('Permission Required', 'Please allow access to your photo library to upload a profile picture.');
+      return;
+    }
+    
+    const result = await pickProfileImage();
+    if (result && !result.canceled && result.assets[0]) {
+      setProfilePictureUri(result.assets[0].uri);
+    }
+  };
+
+  // Get initials for avatar placeholder
+  const getInitials = () => {
+    const first = firstName.trim()[0] || '';
+    const last = lastName.trim()[0] || '';
+    return `${first}${last}`.toUpperCase() || '?';
   };
 
   // All required fields must be filled
@@ -129,13 +160,27 @@ export default function AddRealtorScreen({ userId, onBack, onSuccess }: AddRealt
       notes: notes.trim() || undefined,
       relationship_stage: stage,
     });
-    setSaving(false);
 
     if (error) {
+      setSaving(false);
       Alert.alert('Error', error.message || 'Failed to create realtor');
-    } else {
-      onSuccess();
+      return;
     }
+
+    // Upload profile picture if one was selected
+    if (profilePictureUri && data) {
+      setUploadingPicture(true);
+      const uploadResult = await uploadRealtorProfilePicture(data.realtor_id, profilePictureUri);
+      setUploadingPicture(false);
+      
+      if (!uploadResult.success) {
+        // Realtor was created but picture upload failed - still proceed but warn user
+        Alert.alert('Note', 'Realtor created but profile picture upload failed. You can add it later from the realtor detail screen.');
+      }
+    }
+
+    setSaving(false);
+    onSuccess();
   };
 
   return (
@@ -164,6 +209,34 @@ export default function AddRealtorScreen({ userId, onBack, onSuccess }: AddRealt
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          {/* Profile Picture Section */}
+          <View style={[styles.section, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+              Profile Picture
+            </Text>
+            <View style={styles.profilePictureContainer}>
+              <TouchableOpacity onPress={handleSelectProfilePicture} disabled={uploadingPicture}>
+                {uploadingPicture ? (
+                  <View style={styles.avatarPlaceholder}>
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  </View>
+                ) : profilePictureUri ? (
+                  <Image source={{ uri: profilePictureUri }} style={styles.avatarImage} />
+                ) : (
+                  <View style={styles.avatarPlaceholder}>
+                    <Text style={styles.avatarText}>{getInitials()}</Text>
+                  </View>
+                )}
+                <View style={styles.avatarEditBadge}>
+                  <Ionicons name="camera" size={12} color="#FFFFFF" />
+                </View>
+              </TouchableOpacity>
+              <Text style={[styles.profilePictureHint, { color: colors.textSecondary }]}>
+                Tap to add a photo
+              </Text>
+            </View>
+          </View>
+
           {/* Name Section */}
           <View style={[styles.section, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
@@ -786,5 +859,44 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 32,
+  },
+  profilePictureContainer: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  avatarPlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#7C3AED',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
+  avatarText: {
+    color: '#FFFFFF',
+    fontSize: 28,
+    fontWeight: '700',
+  },
+  avatarEditBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: -4,
+    backgroundColor: '#7C3AED',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  profilePictureHint: {
+    fontSize: 13,
+    marginTop: 8,
   },
 });

@@ -15,7 +15,7 @@ type ScreenState =
 interface RealtorsTabScreenProps {
   session?: Session | null;
   onClose?: () => void;
-  onNavigateToLead?: (leadId: string) => void;
+  onNavigateToLead?: (leadId: string, source: 'lead' | 'meta') => void;
 }
 
 export default function RealtorsTabScreen({ session, onClose, onNavigateToLead }: RealtorsTabScreenProps) {

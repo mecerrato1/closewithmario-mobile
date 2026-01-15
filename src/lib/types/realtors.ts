@@ -20,6 +20,7 @@ export interface Realtor {
   email_opt_out: boolean;
   created_by_user_id: string | null;
   user_id: string | null;
+  profile_picture_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -65,6 +66,7 @@ export interface AssignedRealtor {
   preferred_language: LanguageCode;
   secondary_language: LanguageCode | null;
   realtor_created_at: string;
+  profile_picture_url: string | null;
   // Computed fields
   lead_count?: number;
 }

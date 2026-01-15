@@ -27,7 +27,7 @@ import type { Lead, MetaLead, SelectedLeadRef, Activity, LoanOfficer, Realtor } 
 import type { UserRole } from '../lib/roles';
 import { supabase } from '../lib/supabase';
 import { getUserRole, getUserTeamMemberId, canSeeAllLeads } from '../lib/roles';
-import { TEXT_TEMPLATES, fillTemplate, getTemplateText, getTemplateName, getTemplateSubject, type TemplateVariables } from '../lib/textTemplates';
+import { TEXT_TEMPLATES, fillTemplate, getTemplateText, getTemplateName, getTemplateSubject, formatPhoneNumber, type TemplateVariables } from '../lib/textTemplates';
 import { STATUSES, STATUS_DISPLAY_MAP, STATUS_COLOR_MAP, getLeadAlert, formatStatus, getTimeAgo } from '../lib/leadsHelpers';
 import { scheduleLeadCallback } from '../lib/callbacks';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -98,6 +98,12 @@ export function LeadDetailView({
   const [deletingActivityId, setDeletingActivityId] = useState<string | null>(null);
   const [showLOPicker, setShowLOPicker] = useState(false);
   const [updatingLO, setUpdatingLO] = useState(false);
+  const [showRealtorPicker, setShowRealtorPicker] = useState(false);
+  const [updatingRealtor, setUpdatingRealtor] = useState(false);
+  const [realtorSearchQuery, setRealtorSearchQuery] = useState('');
+  const [availableRealtors, setAvailableRealtors] = useState<Array<{ id: string; first_name: string; last_name: string; brokerage?: string }>>([]);
+  const [loadingRealtors, setLoadingRealtors] = useState(false);
+  const [currentRealtorName, setCurrentRealtorName] = useState<string | null>(null);
   const [showAdImage, setShowAdImage] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [currentLOInfo, setCurrentLOInfo] = useState<{ firstName: string; lastName: string; phone: string; email: string } | null>(null);
@@ -1308,6 +1314,92 @@ export function LeadDetailView({
     }
   };
 
+  // Fetch realtors for the picker with server-side search
+  const fetchRealtorsForPicker = async (searchQuery: string = '') => {
+    setLoadingRealtors(true);
+    try {
+      let query = supabase
+        .from('realtors')
+        .select('id, first_name, last_name, brokerage')
+        .eq('active', true)
+        .order('last_name', { ascending: true })
+        .limit(50);
+
+      // Apply server-side search if query provided
+      if (searchQuery.trim()) {
+        const search = searchQuery.trim().toLowerCase();
+        query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,brokerage.ilike.%${search}%`);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching realtors:', error);
+      } else {
+        setAvailableRealtors(data || []);
+      }
+    } catch (e) {
+      console.error('Unexpected error fetching realtors:', e);
+    } finally {
+      setLoadingRealtors(false);
+    }
+  };
+
+  // Fetch current realtor name when record changes
+  useEffect(() => {
+    const fetchCurrentRealtor = async () => {
+      if (record?.realtor_id) {
+        const { data } = await supabase
+          .from('realtors')
+          .select('first_name, last_name')
+          .eq('id', record.realtor_id)
+          .single();
+        
+        if (data) {
+          setCurrentRealtorName(`${data.first_name} ${data.last_name}`);
+        }
+      } else {
+        setCurrentRealtorName(null);
+      }
+    };
+    fetchCurrentRealtor();
+  }, [record?.realtor_id]);
+
+  // Handle realtor assignment
+  const handleUpdateRealtor = async (newRealtorId: string | null) => {
+    if (!record) {
+      alert('Unable to update: lead not found.');
+      return;
+    }
+
+    try {
+      setUpdatingRealtor(true);
+      
+      const tableName = isMeta ? 'meta_ads' : 'leads';
+      
+      const { data, error } = await supabase
+        .from(tableName)
+        .update({ realtor_id: newRealtorId })
+        .eq('id', record.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating realtor:', error);
+        alert('Failed to update realtor assignment. Please try again.');
+      } else if (data) {
+        onLeadUpdate(data, isMeta ? 'meta' : 'lead');
+        setShowRealtorPicker(false);
+        setRealtorSearchQuery('');
+      }
+    } catch (e) {
+      console.error('Unexpected error updating realtor:', e);
+      alert('Failed to update realtor assignment. Please try again.');
+    } finally {
+      setUpdatingRealtor(false);
+    }
+  };
+
   const handleUpdateLO = async (newLOId: string | null) => {
     if (!propUserRole || propUserRole !== 'super_admin') {
       alert('Only super admins can change LO assignments.');
@@ -1649,6 +1741,22 @@ export function LeadDetailView({
                 <Text style={styles.statusDropdownArrow}>▼</Text>
               </TouchableOpacity>
             )}
+
+            {/* Realtor Assignment */}
+            <TouchableOpacity
+              style={styles.loDropdownButton}
+              onPress={() => {
+                fetchRealtorsForPicker();
+                setShowRealtorPicker(true);
+              }}
+              disabled={updatingRealtor}
+            >
+              <Text style={styles.loDropdownLabel}>🏠 Realtor:</Text>
+              <Text style={styles.loDropdownValue} numberOfLines={1}>
+                {currentRealtorName || 'None'}
+              </Text>
+              <Text style={styles.statusDropdownArrow}>▼</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Status Picker Modal */}
@@ -1833,11 +1941,128 @@ export function LeadDetailView({
               </Modal>
           )}
 
+          {/* Realtor Picker Modal */}
+          <Modal
+            visible={showRealtorPicker}
+            transparent={true}
+            animationType="fade"
+            onRequestClose={() => {
+              setShowRealtorPicker(false);
+              setRealtorSearchQuery('');
+            }}
+          >
+            <TouchableOpacity 
+              style={styles.modalOverlay}
+              activeOpacity={1}
+              onPress={() => {
+                setShowRealtorPicker(false);
+                setRealtorSearchQuery('');
+              }}
+            >
+              <View style={[styles.statusPickerContainer, { maxHeight: '70%' }]}>
+                <View style={styles.statusPickerHeader}>
+                  <Text style={styles.statusPickerTitle}>Assign Realtor</Text>
+                  <TouchableOpacity onPress={() => {
+                    setShowRealtorPicker(false);
+                    setRealtorSearchQuery('');
+                  }}>
+                    <Text style={styles.statusPickerClose}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {/* Search Input */}
+                <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
+                  <TextInput
+                    style={{
+                      backgroundColor: '#F5F5F5',
+                      borderRadius: 8,
+                      paddingHorizontal: 12,
+                      paddingVertical: 10,
+                      fontSize: 15,
+                    }}
+                    placeholder="Type to search realtors..."
+                    value={realtorSearchQuery}
+                    onChangeText={(text) => {
+                      setRealtorSearchQuery(text);
+                      // Debounced server-side search
+                      if (text.trim().length >= 2) {
+                        fetchRealtorsForPicker(text);
+                      } else if (text.trim().length === 0) {
+                        fetchRealtorsForPicker('');
+                      }
+                    }}
+                    autoCapitalize="none"
+                  />
+                </View>
+
+                {loadingRealtors ? (
+                  <ActivityIndicator size="small" color="#7C3AED" style={{ padding: 20 }} />
+                ) : availableRealtors.length === 0 && realtorSearchQuery.trim().length < 2 ? (
+                  <View style={{ padding: 20, alignItems: 'center' }}>
+                    <Text style={{ color: '#888', textAlign: 'center' }}>
+                      Type at least 2 characters to search realtors
+                    </Text>
+                  </View>
+                ) : (
+                  <ScrollView style={styles.statusPickerScroll}>
+                    {/* None option */}
+                    <TouchableOpacity
+                      style={[
+                        styles.statusPickerItem,
+                        !record.realtor_id && styles.statusPickerItemActive,
+                      ]}
+                      onPress={() => handleUpdateRealtor(null)}
+                      disabled={updatingRealtor}
+                    >
+                      <Text style={[
+                        styles.statusPickerItemText,
+                        !record.realtor_id && styles.statusPickerItemTextActive,
+                      ]}>None</Text>
+                      {!record.realtor_id && (
+                        <Text style={styles.statusPickerCheck}>✓</Text>
+                      )}
+                    </TouchableOpacity>
+                    
+                    {/* Realtors from server search */}
+                    {availableRealtors.map((realtor) => (
+                      <TouchableOpacity
+                        key={realtor.id}
+                        style={[
+                          styles.statusPickerItem,
+                          record.realtor_id === realtor.id && styles.statusPickerItemActive,
+                        ]}
+                        onPress={() => handleUpdateRealtor(realtor.id)}
+                        disabled={updatingRealtor}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={[
+                            styles.statusPickerItemText,
+                            record.realtor_id === realtor.id && styles.statusPickerItemTextActive,
+                          ]}>
+                            {realtor.first_name} {realtor.last_name}
+                          </Text>
+                          {realtor.brokerage && (
+                            <Text style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
+                              {realtor.brokerage}
+                            </Text>
+                          )}
+                        </View>
+                        {record.realtor_id === realtor.id && (
+                          <Text style={styles.statusPickerCheck}>✓</Text>
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                )}
+              </View>
+            </TouchableOpacity>
+          </Modal>
+
           {/* Basic fields */}
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>ℹ️ Details</Text>
           <Text style={[styles.detailFieldBlock, { color: colors.textPrimary }]} selectable={true}>
             Email: {email || 'N/A'}{'\n'}
-            Phone: {phone || 'N/A'}
+            Phone: {phone ? formatPhoneNumber(phone) : 'N/A'}
           </Text>
 
           {!isMeta && (record as Lead).source && (

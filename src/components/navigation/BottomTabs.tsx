@@ -1,6 +1,6 @@
 // src/components/navigation/BottomTabs.tsx
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Image, ImageSourcePropType } from 'react-native';
 import { useThemeColors } from '../../styles/theme';
 
 export type TabKey = 'leads' | 'scenarios' | 'realtors' | 'calculator';
@@ -8,14 +8,15 @@ export type TabKey = 'leads' | 'scenarios' | 'realtors' | 'calculator';
 interface Tab {
   key: TabKey;
   label: string;
-  icon: string;
+  icon?: string;
+  iconImage?: ImageSourcePropType;
 }
 
 const TABS: Tab[] = [
-  { key: 'leads', label: 'Dashboard', icon: '🗂️' },
+  { key: 'leads', label: 'Leads', icon: '📋' },
   { key: 'scenarios', label: 'Scenarios', icon: '🧾' },
-  { key: 'realtors', label: 'Realtors', icon: '🤝' },
-  { key: 'calculator', label: 'Calculator', icon: '🧮' },
+  { key: 'realtors', label: 'Realtors', icon: '🧑‍💼' },
+  { key: 'calculator', label: 'Calculator', iconImage: require('../../../assets/MortgageCalc.png') },
 ];
 
 interface BottomTabsProps {
@@ -37,7 +38,11 @@ export default function BottomTabs({ activeTab, onTabChange }: BottomTabsProps) 
             onPress={() => onTabChange(tab.key)}
             activeOpacity={0.7}
           >
-            <Text style={styles.icon}>{tab.icon}</Text>
+            {tab.iconImage ? (
+              <Image source={tab.iconImage} style={styles.iconImage} />
+            ) : (
+              <Text style={styles.icon}>{tab.icon}</Text>
+            )}
             <Text
               style={[
                 styles.label,
@@ -71,6 +76,11 @@ const styles = StyleSheet.create({
   },
   icon: {
     fontSize: 22,
+    marginBottom: 2,
+  },
+  iconImage: {
+    width: 24,
+    height: 24,
     marginBottom: 2,
   },
   label: {

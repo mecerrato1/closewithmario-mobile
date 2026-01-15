@@ -18,6 +18,7 @@ interface AuthenticatedRootProps {
     notificationLead?: { id: string; source: 'lead' | 'meta'; openToMessages?: boolean } | null;
     onNotificationHandled?: () => void;
     defaultToMyLeads?: boolean;
+    skipDashboard?: boolean;
   }>;
 }
 
@@ -33,14 +34,24 @@ export default function AuthenticatedRoot({
 }: AuthenticatedRootProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('leads');
   const [pendingLeadNav, setPendingLeadNav] = useState<PendingLeadNavigation>(null);
+  const [hasClickedLeadsTab, setHasClickedLeadsTab] = useState(false);
 
   const handleTabChange = (tab: TabKey) => {
+    if (tab === 'leads') {
+      setHasClickedLeadsTab(true);
+    }
     setActiveTab(tab);
   };
 
+  // Navigate to dashboard (resets hasClickedLeadsTab so dashboard shows)
+  const handleNavigateToDashboard = () => {
+    setHasClickedLeadsTab(false);
+    setActiveTab('leads');
+  };
+
   // Handle navigation to a specific lead from other tabs
-  const handleNavigateToLead = (leadId: string) => {
-    setPendingLeadNav({ id: leadId, source: 'lead' });
+  const handleNavigateToLead = (leadId: string, source: 'lead' | 'meta' = 'lead') => {
+    setPendingLeadNav({ id: leadId, source });
     setActiveTab('leads');
   };
 
@@ -64,20 +75,21 @@ export default function AuthenticatedRoot({
             notificationLead={effectiveNotificationLead}
             onNotificationHandled={effectiveHandler}
             defaultToMyLeads={true}
+            skipDashboard={hasClickedLeadsTab}
           />
         );
       case 'scenarios':
-        return <ScenariosTabScreen onClose={() => setActiveTab('leads')} />;
+        return <ScenariosTabScreen onClose={handleNavigateToDashboard} />;
       case 'realtors':
         return (
           <RealtorsTabScreen 
             session={session} 
-            onClose={() => setActiveTab('leads')} 
+            onClose={handleNavigateToDashboard} 
             onNavigateToLead={handleNavigateToLead}
           />
         );
       case 'calculator':
-        return <CalculatorTabScreen onNavigateToLeads={() => setActiveTab('leads')} />;
+        return <CalculatorTabScreen onNavigateToLeads={handleNavigateToDashboard} />;
       default:
         return null;
     }

@@ -14,6 +14,7 @@ import {
   Switch,
   Modal,
   FlatList,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../../styles/theme';
@@ -39,13 +40,19 @@ import {
 import { LanguageCode } from '../../lib/types/realtors';
 import RealtorStageBadge from '../../components/realtors/RealtorStageBadge';
 import { saveContact } from '../../utils/vcard';
+import { 
+  pickProfileImage, 
+  requestMediaLibraryPermission, 
+  uploadRealtorProfilePicture, 
+  removeRealtorProfilePicture 
+} from '../../utils/profilePicture';
 
 interface RealtorDetailScreenProps {
   realtor: AssignedRealtor;
   userId: string;
   onBack: () => void;
   onUpdate: () => void;
-  onLeadSelect?: (leadId: string) => void;
+  onLeadSelect?: (leadId: string, source: 'lead' | 'meta') => void;
 }
 
 const STAGES: RelationshipStage[] = ['hot', 'warm', 'cold'];
@@ -98,6 +105,10 @@ export default function RealtorDetailScreen({
   // Language picker modals
   const [showPrimaryLanguagePicker, setShowPrimaryLanguagePicker] = useState(false);
   const [showSecondaryLanguagePicker, setShowSecondaryLanguagePicker] = useState(false);
+  
+  // Profile picture state
+  const [profilePictureUrl, setProfilePictureUrl] = useState<string | null>(realtor.profile_picture_url);
+  const [uploadingPicture, setUploadingPicture] = useState(false);
 
   const fullName = getRealtorFullName(realtor);
   const initials = getRealtorInitials(realtor);
@@ -283,6 +294,57 @@ export default function RealtorDetailScreen({
     );
   };
 
+  // Handle profile picture change
+  const handleChangeProfilePicture = async () => {
+    Alert.alert(
+      'Profile Picture',
+      'Choose an option',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Choose from Library',
+          onPress: async () => {
+            const hasPermission = await requestMediaLibraryPermission();
+            if (!hasPermission) {
+              Alert.alert('Permission Required', 'Please allow access to your photo library to upload a profile picture.');
+              return;
+            }
+            
+            const result = await pickProfileImage();
+            if (result && !result.canceled && result.assets[0]) {
+              setUploadingPicture(true);
+              const uploadResult = await uploadRealtorProfilePicture(realtor.realtor_id, result.assets[0].uri);
+              setUploadingPicture(false);
+              
+              if (uploadResult.success && uploadResult.url) {
+                setProfilePictureUrl(uploadResult.url);
+                onUpdate();
+              } else {
+                Alert.alert('Upload Failed', uploadResult.error || 'Failed to upload picture');
+              }
+            }
+          },
+        },
+        ...(profilePictureUrl ? [{
+          text: 'Remove Picture',
+          style: 'destructive' as const,
+          onPress: async () => {
+            setUploadingPicture(true);
+            const result = await removeRealtorProfilePicture(realtor.realtor_id, profilePictureUrl);
+            setUploadingPicture(false);
+            
+            if (result.success) {
+              setProfilePictureUrl(null);
+              onUpdate();
+            } else {
+              Alert.alert('Error', result.error || 'Failed to remove picture');
+            }
+          },
+        }] : []),
+      ]
+    );
+  };
+
   const formatActivityDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -327,9 +389,25 @@ export default function RealtorDetailScreen({
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Profile Card */}
         <View style={[styles.profileCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{initials}</Text>
-          </View>
+          <TouchableOpacity onPress={handleChangeProfilePicture} disabled={uploadingPicture}>
+            {uploadingPicture ? (
+              <View style={styles.avatar}>
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              </View>
+            ) : profilePictureUrl ? (
+              <Image 
+                source={{ uri: profilePictureUrl }} 
+                style={styles.avatarImage}
+              />
+            ) : (
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{initials}</Text>
+              </View>
+            )}
+            <View style={styles.avatarEditBadge}>
+              <Ionicons name="camera" size={12} color="#FFFFFF" />
+            </View>
+          </TouchableOpacity>
           <Text style={[styles.name, { color: colors.textPrimary }]}>{fullName}</Text>
           {realtor.brokerage && (
             <Text style={[styles.brokerage, { color: colors.textSecondary }]}>
@@ -673,7 +751,7 @@ export default function RealtorDetailScreen({
               <TouchableOpacity 
                 key={lead.id} 
                 style={styles.leadItem}
-                onPress={() => onLeadSelect?.(lead.id)}
+                onPress={() => onLeadSelect?.(lead.id, lead.source || 'lead')}
                 disabled={!onLeadSelect}
               >
                 <View style={styles.leadInfo}>
@@ -777,6 +855,25 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 28,
     fontWeight: '700',
+  },
+  avatarImage: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    marginBottom: 12,
+  },
+  avatarEditBadge: {
+    position: 'absolute',
+    bottom: 8,
+    right: -4,
+    backgroundColor: '#7C3AED',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
   },
   name: {
     fontSize: 22,

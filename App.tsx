@@ -84,9 +84,10 @@ type LeadsScreenProps = {
   notificationLead?: { id: string; source: 'lead' | 'meta'; openToMessages?: boolean } | null;
   onNotificationHandled?: () => void;
   defaultToMyLeads?: boolean;
+  skipDashboard?: boolean;
 };
 
-function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandled, defaultToMyLeads }: LeadsScreenProps) {
+function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandled, defaultToMyLeads, skipDashboard }: LeadsScreenProps) {
   const { colors, isDark } = useThemeColors();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [metaLeads, setMetaLeads] = useState<MetaLead[]>([]);
@@ -621,6 +622,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       onNotificationHandled?.();
     }
   }, [notificationLead, loading, onNotificationHandled]);
+
+  // Skip dashboard when user clicks Leads tab (not on initial login)
+  useEffect(() => {
+    if (skipDashboard) {
+      setShowDashboard(false);
+    }
+  }, [skipDashboard]);
 
   // Auto-switch tab based on available leads (only on initial load)
   // If defaultToMyLeads is true, prefer 'leads' tab (My Leads / Website leads)
