@@ -1,13 +1,14 @@
 # CloseWithMario Mobile - Codebase Summary
 
-**Last Updated:** December 11, 2025 at 3:00 PM EST  
+**Last Updated:** January 14, 2026 at 3:45 PM EST  
 **Platform:** iOS Mobile Application  
 **EAS Account:** mecerrato1  
 **Latest Build:** iOS Production Build 61 (v1.1.45, Dec 11, 2025)  
 **Major Refactor:** November 26, 2025 - Modular architecture with separated screens and styles  
 **Security Update:** November 29, 2025 - Face ID/Touch ID biometric authentication  
 **Feature Update:** December 11, 2025 - AI-powered lead attention badges, profile menu with notification bell, source filtering for super admins  
-**UI/UX Update:** December 11, 2025 - Profile menu modal, notification bell with unread count, AI badges from Supabase cache
+**UI/UX Update:** December 11, 2025 - Profile menu modal, notification bell with unread count, AI badges from Supabase cache  
+**Bug Fix:** January 14, 2026 - Mortgage calculator Doc Stamps (Mortgage) now zeroes out for FLHFC DPA programs
 
 ---
 
@@ -1012,7 +1013,23 @@ The codebase underwent a massive refactoring to improve maintainability, readabi
 
 ---
 
-## 📅 Recent Changes (November-December 2025)
+## 📅 Recent Changes (November 2025 - January 2026)
+
+### January 14, 2026 - Mortgage Calculator Tax Waiver Fix
+
+#### 🧮 Mortgage Calculator Bug Fix
+1. **Doc Stamps (Mortgage) Tax Waiver** - Fixed tax not zeroing out for FLHFC programs
+   - Doc Stamps (Mortgage) now displays $0 when DPA programs are selected
+   - Matches existing Intangible Tax waiver behavior
+   - Programs that waive both taxes:
+     - Hometown Heroes
+     - FL Assist
+     - FHFC HFA Plus
+     - FL HLP (newly added)
+   - Taxes reset to calculated values when DPA programs are removed
+   - Updated `hasWaivedTaxProgram` memo to include FL HLP
+
+---
 
 ### December 1, 2025 - "My Lead" Self-Created Leads & Voice Note Preview
 
@@ -1553,6 +1570,7 @@ npm start
 - ✅ **Notification bell with unread count (NEW Dec 11)**
 - ✅ **Source/ad name filtering for super admins (NEW Dec 3)**
 - ✅ **Smart tab switching based on source filter (NEW Dec 3)**
+- ✅ **Mortgage calculator Doc Stamps tax waiver for FLHFC programs (NEW Jan 14, 2026)**
 - ⚠️ Need to fix: Square logo for Android, duplicate dependencies
 - 🔜 Next: Push notifications, pagination, dark mode implementation
 

@@ -45,6 +45,7 @@ import { registerForPushNotifications } from './src/lib/notifications';
 import { styles } from './src/styles/appStyles';
 import { useThemeColors } from './src/styles/theme';
 import { getAvatarUrl } from './src/utils/profilePicture';
+import AuthenticatedRoot from './src/screens/AuthenticatedRoot';
 
 import * as WebBrowser from 'expo-web-browser';
 
@@ -82,9 +83,10 @@ type LeadsScreenProps = {
   session: Session | null;
   notificationLead?: { id: string; source: 'lead' | 'meta'; openToMessages?: boolean } | null;
   onNotificationHandled?: () => void;
+  defaultToMyLeads?: boolean;
 };
 
-function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandled }: LeadsScreenProps) {
+function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandled, defaultToMyLeads }: LeadsScreenProps) {
   const { colors, isDark } = useThemeColors();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [metaLeads, setMetaLeads] = useState<MetaLead[]>([]);
@@ -107,7 +109,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [userRole, setUserRole] = useState<UserRole>('buyer');
   const [searchQuery, setSearchQuery] = useState('');
   const [showTeamManagement, setShowTeamManagement] = useState(false);
-  const [showMortgageCalculator, setShowMortgageCalculator] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [teamMemberId, setTeamMemberId] = useState<string | null>(null);
@@ -622,9 +623,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   }, [notificationLead, loading, onNotificationHandled]);
 
   // Auto-switch tab based on available leads (only on initial load)
+  // If defaultToMyLeads is true, prefer 'leads' tab (My Leads / Website leads)
   useEffect(() => {
     if (!loading && !hasManuallySelectedTab) {
-      if (metaLeads.length === 0 && leads.length > 0) {
+      if (defaultToMyLeads) {
+        // Default to My Leads (website/organic leads) when coming from bottom tab
+        setActiveTab('leads');
+      } else if (metaLeads.length === 0 && leads.length > 0) {
         setActiveTab('leads');
       } else if (metaLeads.length > 0 && leads.length === 0) {
         setActiveTab('meta');
@@ -633,7 +638,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         setActiveTab('all');
       }
     }
-  }, [loading, leads.length, metaLeads.length, hasManuallySelectedTab]);
+  }, [loading, leads.length, metaLeads.length, hasManuallySelectedTab, defaultToMyLeads]);
 
   // Pull-to-refresh handler
   const onRefresh = async () => {
@@ -1635,14 +1640,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     );
   }
 
-  // Show Mortgage Calculator
-  if (showMortgageCalculator) {
-    return (
-      <MortgageCalculatorScreen
-        onClose={() => setShowMortgageCalculator(false)}
-      />
-    );
-  }
 
   if (showProfileSettings) {
     return (
@@ -1838,35 +1835,23 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             onPress={() => setShowProfileMenu(false)}
           >
             <View style={[styles.profileMenuContent, { backgroundColor: colors.cardBackground }]}>
-              <TouchableOpacity
-                style={styles.profileMenuItem}
-                onPress={() => {
-                  setShowProfileMenu(false);
-                  setShowMortgageCalculator(true);
-                }}
-              >
-                <View style={styles.profileMenuIconContainer}>
-                  <Ionicons name="calculator" size={20} color="#7C3AED" />
-                </View>
-                <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Payment Calculator</Text>
-              </TouchableOpacity>
-              
               {userRole === 'super_admin' && (
-                <TouchableOpacity
-                  style={styles.profileMenuItem}
-                  onPress={() => {
-                    setShowProfileMenu(false);
-                    setShowTeamManagement(true);
-                  }}
-                >
-                  <View style={styles.profileMenuIconContainer}>
-                    <Ionicons name="people" size={20} color="#7C3AED" />
-                  </View>
-                  <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Team Management</Text>
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity
+                    style={styles.profileMenuItem}
+                    onPress={() => {
+                      setShowProfileMenu(false);
+                      setShowTeamManagement(true);
+                    }}
+                  >
+                    <View style={styles.profileMenuIconContainer}>
+                      <Ionicons name="people" size={20} color="#7C3AED" />
+                    </View>
+                    <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Team Management</Text>
+                  </TouchableOpacity>
+                  <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
+                </>
               )}
-              
-              <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
 
               <TouchableOpacity
                 style={styles.profileMenuItem}
@@ -2461,35 +2446,23 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           onPress={() => setShowProfileMenu(false)}
         >
           <View style={[styles.profileMenuContent, { backgroundColor: colors.cardBackground }]}>
-            <TouchableOpacity
-              style={styles.profileMenuItem}
-              onPress={() => {
-                setShowProfileMenu(false);
-                setShowMortgageCalculator(true);
-              }}
-            >
-              <View style={styles.profileMenuIconContainer}>
-                <Ionicons name="calculator" size={20} color="#7C3AED" />
-              </View>
-              <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Payment Calculator</Text>
-            </TouchableOpacity>
-            
             {userRole === 'super_admin' && (
-              <TouchableOpacity
-                style={styles.profileMenuItem}
-                onPress={() => {
-                  setShowProfileMenu(false);
-                  setShowTeamManagement(true);
-                }}
-              >
-                <View style={styles.profileMenuIconContainer}>
-                  <Ionicons name="people" size={20} color="#7C3AED" />
-                </View>
-                <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Team Management</Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  style={styles.profileMenuItem}
+                  onPress={() => {
+                    setShowProfileMenu(false);
+                    setShowTeamManagement(true);
+                  }}
+                >
+                  <View style={styles.profileMenuIconContainer}>
+                    <Ionicons name="people" size={20} color="#7C3AED" />
+                  </View>
+                  <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Team Management</Text>
+                </TouchableOpacity>
+                <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
+              </>
             )}
-            
-            <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
 
             <TouchableOpacity
               style={styles.profileMenuItem}
@@ -3811,17 +3784,18 @@ function RootApp() {
     );
   }
 
-  // Have session and app is unlocked → show main Leads screen
+  // Have session and app is unlocked → show main app with bottom tabs
   return (
     <>
-      <LeadsScreen
+      <AuthenticatedRoot
+        session={session}
         onSignOut={async () => {
           await supabase.auth.signOut();
           setSession(null);
         }}
-        session={session}
         notificationLead={notificationLead}
         onNotificationHandled={() => setNotificationLead(null)}
+        LeadsScreenComponent={LeadsScreen}
       />
       <StatusBar style="auto" />
     </>
