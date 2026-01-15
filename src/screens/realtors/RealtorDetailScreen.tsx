@@ -20,6 +20,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../../styles/theme';
 import { formatPhoneNumber } from '../../lib/textTemplates';
 import {
+  REALTOR_TEXT_TEMPLATES,
+  fillRealtorTemplate,
+  getRealtorTemplateText,
+  getRealtorTemplateName,
+  getRealtorTemplateSubject,
+  type RealtorTemplateVariables,
+} from '../../lib/realtorTextTemplates';
+import {
   AssignedRealtor,
   RelationshipStage,
   RealtorActivity,
@@ -53,6 +61,7 @@ interface RealtorDetailScreenProps {
   onBack: () => void;
   onUpdate: () => void;
   onLeadSelect?: (leadId: string, source: 'lead' | 'meta') => void;
+  currentLOInfo?: { firstName: string; lastName: string; phone: string; email: string } | null;
 }
 
 const STAGES: RelationshipStage[] = ['hot', 'warm', 'cold'];
@@ -85,6 +94,7 @@ export default function RealtorDetailScreen({
   onBack,
   onUpdate,
   onLeadSelect,
+  currentLOInfo,
 }: RealtorDetailScreenProps) {
   const { colors } = useThemeColors();
   const [stage, setStage] = useState<RelationshipStage>(realtor.relationship_stage);
@@ -109,6 +119,13 @@ export default function RealtorDetailScreen({
   // Profile picture state
   const [profilePictureUrl, setProfilePictureUrl] = useState<string | null>(realtor.profile_picture_url);
   const [uploadingPicture, setUploadingPicture] = useState(false);
+  
+  // Text template state
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [templateMode, setTemplateMode] = useState<'text' | 'email'>('text');
+  const [useSpanishTemplates, setUseSpanishTemplates] = useState(false);
+  const [showCustomMessage, setShowCustomMessage] = useState(false);
+  const [customMessageText, setCustomMessageText] = useState('');
 
   const fullName = getRealtorFullName(realtor);
   const initials = getRealtorInitials(realtor);
@@ -228,10 +245,8 @@ export default function RealtorDetailScreen({
 
   const handleText = async () => {
     if (realtor.phone) {
-      Linking.openURL(`sms:${realtor.phone}`);
-      await logRealtorActivity(realtor.realtor_id, userId, 'text');
-      await touchRealtor(realtor.assignment_id);
-      onUpdate();
+      setTemplateMode('text');
+      setShowTemplateModal(true);
     } else {
       Alert.alert('No Phone', 'This realtor has no phone number on file.');
     }
@@ -239,12 +254,113 @@ export default function RealtorDetailScreen({
 
   const handleEmail = async () => {
     if (realtor.email) {
-      Linking.openURL(`mailto:${realtor.email}`);
+      setTemplateMode('email');
+      setShowTemplateModal(true);
+    } else {
+      Alert.alert('No Email', 'This realtor has no email on file.');
+    }
+  };
+
+  const handleTemplateSelect = async (templateId: string) => {
+    const template = REALTOR_TEXT_TEMPLATES.find(t => t.id === templateId);
+    if (!template) return;
+
+    const variables: RealtorTemplateVariables = {
+      realtorFname: realtor.first_name || 'there',
+      brokerage: realtor.brokerage || '[Brokerage]',
+      loFullname: currentLOInfo 
+        ? `${currentLOInfo.firstName} ${currentLOInfo.lastName}`.trim() 
+        : '[Loan Officer]',
+      loFname: currentLOInfo?.firstName || '[LO First Name]',
+      loPhone: currentLOInfo?.phone || '[LO Phone]',
+      loEmail: currentLOInfo?.email || '[LO Email]',
+    };
+
+    const templateText = getRealtorTemplateText(template, useSpanishTemplates);
+    const messageBody = fillRealtorTemplate(templateText, variables);
+    
+    setShowTemplateModal(false);
+
+    if (templateMode === 'text') {
+      const encodedBody = encodeURIComponent(messageBody);
+      await logRealtorActivity(realtor.realtor_id, userId, 'text');
+      await touchRealtor(realtor.assignment_id);
+      onUpdate();
+      Linking.openURL(`sms:${realtor.phone}?body=${encodedBody}`);
+    } else if (templateMode === 'email') {
+      const subject = encodeURIComponent(getRealtorTemplateSubject(template, useSpanishTemplates));
+      const body = encodeURIComponent(messageBody);
       await logRealtorActivity(realtor.realtor_id, userId, 'email');
       await touchRealtor(realtor.assignment_id);
       onUpdate();
-    } else {
-      Alert.alert('No Email', 'This realtor has no email on file.');
+      
+      // Try Outlook first, fallback to mailto
+      const outlookUrl = `ms-outlook://compose?to=${realtor.email}&subject=${subject}&body=${body}`;
+      const mailtoUrl = `mailto:${realtor.email}?subject=${subject}&body=${body}`;
+
+      try {
+        const canOpenOutlook = await Linking.canOpenURL(outlookUrl);
+        if (canOpenOutlook) {
+          await Linking.openURL(outlookUrl);
+        } else {
+          await Linking.openURL(mailtoUrl);
+        }
+      } catch (error) {
+        console.error('Error opening email client:', error);
+        try {
+          await Linking.openURL(mailtoUrl);
+        } catch (e) {
+          console.error('Error opening mailto:', e);
+        }
+      }
+    }
+  };
+
+  const handleCustomMessageSend = async () => {
+    if (!customMessageText.trim()) return;
+
+    const realtorFname = realtor.first_name || 'there';
+    const loPhone = currentLOInfo?.phone || '[LO Phone]';
+    const loEmail = currentLOInfo?.email || '[LO Email]';
+    
+    const messageBody = `Hi ${realtorFname} 👋\n\n${customMessageText.trim()}\n\nYou can reach me at:\n☎️ ${formatPhoneNumber(loPhone)}\n📧 ${loEmail}`;
+    
+    setShowTemplateModal(false);
+    setShowCustomMessage(false);
+    setCustomMessageText('');
+
+    if (templateMode === 'text') {
+      const encodedBody = encodeURIComponent(messageBody);
+      await logRealtorActivity(realtor.realtor_id, userId, 'text');
+      await touchRealtor(realtor.assignment_id);
+      onUpdate();
+      Linking.openURL(`sms:${realtor.phone}?body=${encodedBody}`);
+    } else if (templateMode === 'email') {
+      const subject = encodeURIComponent('Quick message');
+      const body = encodeURIComponent(messageBody);
+      await logRealtorActivity(realtor.realtor_id, userId, 'email');
+      await touchRealtor(realtor.assignment_id);
+      onUpdate();
+      
+      // Try Outlook first, fallback to mailto
+      const outlookUrl = `ms-outlook://compose?to=${realtor.email}&subject=${subject}&body=${body}`;
+      const mailtoUrl = `mailto:${realtor.email}?subject=${subject}&body=${body}`;
+
+      try {
+        const canOpenOutlook = await Linking.canOpenURL(outlookUrl);
+        if (canOpenOutlook) {
+          await Linking.openURL(outlookUrl);
+        } else {
+          await Linking.openURL(mailtoUrl);
+        }
+      } catch (error) {
+        console.error('Error opening email client:', error);
+        try {
+          await Linking.openURL(mailtoUrl);
+        } catch (e) {
+          console.error('Error opening mailto:', e);
+        }
+      }
     }
   };
 
@@ -637,6 +753,154 @@ export default function RealtorDetailScreen({
               />
             </View>
           </TouchableOpacity>
+        </Modal>
+
+        {/* Text Template Modal */}
+        <Modal
+          visible={showTemplateModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => {
+            setShowTemplateModal(false);
+            setShowCustomMessage(false);
+            setCustomMessageText('');
+          }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={[styles.templateModalContent, { backgroundColor: colors.cardBackground }]}>
+              <View style={styles.templateModalHeader}>
+                <Text style={[styles.templateModalTitle, { color: colors.textPrimary }]}>
+                  {showCustomMessage
+                    ? 'Write Custom Message'
+                    : templateMode === 'text'
+                      ? (useSpanishTemplates ? 'Elegir Plantilla de Texto' : 'Choose a Text Template')
+                      : (useSpanishTemplates ? 'Elegir Plantilla de Correo' : 'Choose an Email Template')}
+                </Text>
+                <TouchableOpacity 
+                  onPress={() => {
+                    setShowTemplateModal(false);
+                    setShowCustomMessage(false);
+                    setCustomMessageText('');
+                  }}
+                  style={styles.templateModalClose}
+                >
+                  <Text style={styles.templateModalCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              {!showCustomMessage ? (
+                <>
+                  {/* Language Toggle */}
+                  <View style={styles.languageToggleContainer}>
+                    <TouchableOpacity
+                      style={[
+                        styles.languageToggleButton,
+                        !useSpanishTemplates && styles.languageToggleButtonActive
+                      ]}
+                      onPress={() => setUseSpanishTemplates(false)}
+                    >
+                      <Text style={[
+                        styles.languageToggleText,
+                        !useSpanishTemplates && styles.languageToggleTextActive
+                      ]}>
+                        English
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.languageToggleButton,
+                        useSpanishTemplates && styles.languageToggleButtonActive
+                      ]}
+                      onPress={() => setUseSpanishTemplates(true)}
+                    >
+                      <Text style={[
+                        styles.languageToggleText,
+                        useSpanishTemplates && styles.languageToggleTextActive
+                      ]}>
+                        Español
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Custom Message Button at Top */}
+                  <TouchableOpacity
+                    style={styles.writeCustomButton}
+                    onPress={() => setShowCustomMessage(true)}
+                  >
+                    <Ionicons name="create-outline" size={20} color="#FFFFFF" />
+                    <Text style={styles.writeCustomButtonText}>
+                      {useSpanishTemplates ? '✏️ Escribir Mensaje Personalizado' : '✏️ Write Custom Message'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <ScrollView style={styles.templateList} showsVerticalScrollIndicator={false}>
+                    {REALTOR_TEXT_TEMPLATES.map((template) => (
+                      <TouchableOpacity
+                        key={template.id}
+                        style={[styles.templateOption, { borderColor: colors.border }]}
+                        onPress={() => handleTemplateSelect(template.id)}
+                      >
+                        <Text style={[styles.templateOptionTitle, { color: colors.textPrimary }]}>
+                          {getRealtorTemplateName(template, useSpanishTemplates)}
+                        </Text>
+                        <Text style={[styles.templateOptionPreview, { color: colors.textSecondary }]} numberOfLines={2}>
+                          {getRealtorTemplateText(template, useSpanishTemplates).substring(0, 80)}...
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </>
+              ) : (
+                /* Custom Message Input - matches Lead Detail style */
+                <ScrollView style={{ maxHeight: 500 }} contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
+                  <TouchableOpacity
+                    style={styles.backToTemplatesButton}
+                    onPress={() => {
+                      setShowCustomMessage(false);
+                      setCustomMessageText('');
+                    }}
+                  >
+                    <Text style={styles.backToTemplatesButtonText}>
+                      {useSpanishTemplates ? '← Volver a Plantillas' : '← Back to Templates'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <Text style={[styles.customMessagePreview, { color: colors.textPrimary }]}>
+                    Hi {realtor.first_name || 'there'} 👋{'\n\n'}
+                  </Text>
+
+                  <TextInput
+                    style={[styles.customMessageInput, { color: colors.textPrimary, borderColor: colors.border }]}
+                    placeholder={useSpanishTemplates ? "Escribe tu mensaje aquí..." : "Type your message here..."}
+                    placeholderTextColor="#999"
+                    value={customMessageText}
+                    onChangeText={setCustomMessageText}
+                    multiline
+                    autoFocus
+                  />
+
+                  <Text style={[styles.customMessagePreview, { color: colors.textPrimary }]}>
+                    {'\n'}You can reach me at:{'\n'}
+                    📞 {currentLOInfo?.phone ? formatPhoneNumber(currentLOInfo.phone) : '[Phone]'}{'\n'}
+                    📧 {currentLOInfo?.email || '[Email]'}
+                  </Text>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.sendCustomMessageButton,
+                      !customMessageText.trim() && styles.sendCustomMessageButtonDisabled
+                    ]}
+                    onPress={handleCustomMessageSend}
+                    disabled={!customMessageText.trim()}
+                  >
+                    <Text style={styles.sendCustomMessageButtonText}>
+                      {useSpanishTemplates ? 'Enviar' : 'Send'}
+                    </Text>
+                  </TouchableOpacity>
+                </ScrollView>
+              )}
+            </View>
+          </View>
         </Modal>
 
         {/* Relationship Stage */}
@@ -1162,5 +1426,140 @@ const styles = StyleSheet.create({
   },
   modalOptionText: {
     fontSize: 16,
+  },
+  // Template Modal styles
+  templateModalContent: {
+    width: '100%',
+    maxHeight: '80%',
+    borderRadius: 16,
+    padding: 16,
+  },
+  templateModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  templateModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    flex: 1,
+  },
+  templateModalClose: {
+    padding: 4,
+  },
+  templateModalCloseText: {
+    fontSize: 20,
+    color: '#9CA3AF',
+  },
+  languageToggleContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    padding: 4,
+    marginBottom: 16,
+  },
+  languageToggleButton: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: 6,
+  },
+  languageToggleButtonActive: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  languageToggleText: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  languageToggleTextActive: {
+    color: '#7C3AED',
+    fontWeight: '600',
+  },
+  templateList: {
+    maxHeight: 400,
+  },
+  templateOption: {
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 10,
+  },
+  templateOptionTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  templateOptionPreview: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  customTemplateOption: {
+    borderStyle: 'dashed',
+  },
+  customTemplateHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  customMessageContainer: {
+    flex: 1,
+  },
+  writeCustomButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#7C3AED',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    marginBottom: 16,
+    gap: 8,
+  },
+  writeCustomButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  backToTemplatesButton: {
+    marginBottom: 16,
+  },
+  backToTemplatesButtonText: {
+    color: '#7C3AED',
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  customMessagePreview: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  customMessageInput: {
+    minHeight: 180,
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 14,
+    fontSize: 15,
+    lineHeight: 22,
+    backgroundColor: '#F9FAFB',
+  },
+  sendCustomMessageButton: {
+    backgroundColor: '#10B981',
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  sendCustomMessageButtonDisabled: {
+    backgroundColor: '#D1D5DB',
+  },
+  sendCustomMessageButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
