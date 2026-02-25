@@ -145,6 +145,8 @@ export default function RealtorsListScreen({
             onChangeText={setSearchQuery}
             autoCapitalize="none"
             autoCorrect={false}
+            cursorColor="#FFFFFF"
+            selectionColor="rgba(255,255,255,0.4)"
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>

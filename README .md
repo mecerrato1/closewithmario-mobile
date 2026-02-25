@@ -1,4 +1,8 @@
 🚀 Expo & EAS Workflow Cheat Sheet
+To start it on a mac with the simulator:
+npx expo start --dev-client
+then press i to start the simulator
+
 For local development:
 eas build -p ios --profile development
 npx expo start --tunnel --dev-client

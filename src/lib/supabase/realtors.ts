@@ -158,12 +158,15 @@ export async function fetchAssignedRealtors(
     if (options.search) {
       const searchLower = options.search.toLowerCase();
       filtered = filtered.filter(
-        (r) =>
-          r.first_name?.toLowerCase().includes(searchLower) ||
-          r.last_name?.toLowerCase().includes(searchLower) ||
-          r.brokerage?.toLowerCase().includes(searchLower) ||
-          r.phone?.includes(options.search!) ||
-          r.email?.toLowerCase().includes(searchLower)
+        (r) => {
+          const fullName = `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase();
+          return (
+            fullName.includes(searchLower) ||
+            r.brokerage?.toLowerCase().includes(searchLower) ||
+            r.phone?.includes(options.search!) ||
+            r.email?.toLowerCase().includes(searchLower)
+          );
+        }
       );
     }
 

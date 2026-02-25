@@ -26,6 +26,7 @@ import {
   requestMediaLibraryPermission, 
   uploadRealtorProfilePicture 
 } from '../../utils/profilePicture';
+import { getDeviceContacts, PickedContact } from '../../utils/vcard';
 
 interface AddRealtorScreenProps {
   userId: string;
@@ -64,6 +65,12 @@ export default function AddRealtorScreen({ userId, onBack, onSuccess }: AddRealt
   // Profile picture state
   const [profilePictureUri, setProfilePictureUri] = useState<string | null>(null);
   const [uploadingPicture, setUploadingPicture] = useState(false);
+
+  // Contact picker state
+  const [showContactPicker, setShowContactPicker] = useState(false);
+  const [deviceContacts, setDeviceContacts] = useState<PickedContact[]>([]);
+  const [contactSearch, setContactSearch] = useState('');
+  const [loadingContacts, setLoadingContacts] = useState(false);
 
   // Fetch brokerages on mount
   useEffect(() => {
@@ -114,6 +121,47 @@ export default function AddRealtorScreen({ userId, onBack, onSuccess }: AddRealt
     const last = lastName.trim()[0] || '';
     return `${first}${last}`.toUpperCase() || '?';
   };
+
+  // Handle importing from device contacts
+  const handleImportFromContacts = async () => {
+    setLoadingContacts(true);
+    const contacts = await getDeviceContacts();
+    setLoadingContacts(false);
+    if (contacts && contacts.length > 0) {
+      setDeviceContacts(contacts);
+      setContactSearch('');
+      setShowContactPicker(true);
+    }
+  };
+
+  // Handle selecting a contact from the picker
+  const handleContactSelected = (contact: PickedContact) => {
+    setFirstName(contact.firstName || '');
+    setLastName(contact.lastName || '');
+    if (contact.email) {
+      setEmail(contact.email);
+    }
+    if (contact.phone) {
+      const digits = contact.phone.replace(/\D/g, '');
+      // Handle US numbers with country code prefix
+      const normalizedDigits = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+      setPhone(formatPhoneNumber(normalizedDigits) || normalizedDigits);
+    }
+    if (contact.imageUri) {
+      setProfilePictureUri(contact.imageUri);
+    }
+    setShowContactPicker(false);
+  };
+
+  // Filter device contacts based on search
+  const filteredContacts = useMemo(() => {
+    if (!contactSearch.trim()) return deviceContacts;
+    const search = contactSearch.toLowerCase();
+    return deviceContacts.filter((c) => {
+      const fullName = `${c.firstName} ${c.lastName}`.toLowerCase();
+      return fullName.includes(search) || c.email?.toLowerCase().includes(search) || c.phone?.includes(search);
+    });
+  }, [contactSearch, deviceContacts]);
 
   // All required fields must be filled
   const isValid = 
@@ -236,6 +284,22 @@ export default function AddRealtorScreen({ userId, onBack, onSuccess }: AddRealt
               </Text>
             </View>
           </View>
+
+          {/* Import from Contacts Button */}
+          <TouchableOpacity
+            style={[styles.importContactsButton, { backgroundColor: colors.cardBackground, borderColor: '#7C3AED' }]}
+            onPress={handleImportFromContacts}
+            disabled={loadingContacts}
+          >
+            {loadingContacts ? (
+              <ActivityIndicator size="small" color="#7C3AED" />
+            ) : (
+              <Ionicons name="person-add-outline" size={20} color="#7C3AED" />
+            )}
+            <Text style={styles.importContactsText}>
+              {loadingContacts ? 'Loading Contacts...' : 'Import from Contacts'}
+            </Text>
+          </TouchableOpacity>
 
           {/* Name Section */}
           <View style={[styles.section, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
@@ -600,6 +664,75 @@ export default function AddRealtorScreen({ userId, onBack, onSuccess }: AddRealt
           <View style={styles.bottomSpacer} />
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Contact Picker Modal */}
+      <Modal visible={showContactPicker} animationType="slide" presentationStyle="pageSheet">
+        <View style={[styles.contactPickerContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.contactPickerHeader, { backgroundColor: colors.headerBackground }]}>
+            <TouchableOpacity onPress={() => setShowContactPicker(false)}>
+              <Ionicons name="close" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+            <Text style={styles.contactPickerTitle}>Select Contact</Text>
+            <View style={{ width: 24 }} />
+          </View>
+          <View style={[styles.contactSearchContainer, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+            <Ionicons name="search" size={18} color={colors.textSecondary} />
+            <TextInput
+              style={[styles.contactSearchInput, { color: colors.textPrimary }]}
+              placeholder="Search contacts..."
+              placeholderTextColor={colors.textSecondary}
+              value={contactSearch}
+              onChangeText={setContactSearch}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {contactSearch.length > 0 && (
+              <TouchableOpacity onPress={() => setContactSearch('')}>
+                <Ionicons name="close-circle" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
+          </View>
+          <FlatList
+            data={filteredContacts}
+            keyExtractor={(_, index) => index.toString()}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={[styles.contactItem, { borderBottomColor: colors.border }]}
+                onPress={() => handleContactSelected(item)}
+              >
+                {item.imageUri ? (
+                  <Image source={{ uri: item.imageUri }} style={styles.contactAvatar} />
+                ) : (
+                  <View style={styles.contactAvatarPlaceholder}>
+                    <Text style={styles.contactAvatarText}>
+                      {((item.firstName?.[0] || '') + (item.lastName?.[0] || '')).toUpperCase() || '?'}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.contactInfo}>
+                  <Text style={[styles.contactName, { color: colors.textPrimary }]}>
+                    {`${item.firstName} ${item.lastName}`.trim() || 'No Name'}
+                  </Text>
+                  {item.phone && (
+                    <Text style={[styles.contactDetail, { color: colors.textSecondary }]}>{item.phone}</Text>
+                  )}
+                  {item.email && (
+                    <Text style={[styles.contactDetail, { color: colors.textSecondary }]}>{item.email}</Text>
+                  )}
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              <View style={styles.contactEmptyContainer}>
+                <Text style={[styles.contactEmptyText, { color: colors.textSecondary }]}>
+                  No contacts found
+                </Text>
+              </View>
+            }
+          />
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -898,5 +1031,98 @@ const styles = StyleSheet.create({
   profilePictureHint: {
     fontSize: 13,
     marginTop: 8,
+  },
+  // Import from Contacts button
+  importContactsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  importContactsText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#7C3AED',
+  },
+  // Contact Picker Modal
+  contactPickerContainer: {
+    flex: 1,
+  },
+  contactPickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
+  },
+  contactPickerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  contactSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 8,
+  },
+  contactSearchInput: {
+    flex: 1,
+    fontSize: 15,
+    padding: 0,
+  },
+  contactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  contactAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  contactAvatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#7C3AED',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  contactAvatarText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  contactInfo: {
+    flex: 1,
+  },
+  contactName: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  contactDetail: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  contactEmptyContainer: {
+    padding: 32,
+    alignItems: 'center',
+  },
+  contactEmptyText: {
+    fontSize: 15,
   },
 });

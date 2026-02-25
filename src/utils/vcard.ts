@@ -10,6 +10,66 @@ export interface ContactInfo {
   notes?: string;
 }
 
+export interface PickedContact {
+  firstName: string;
+  lastName: string;
+  phone?: string;
+  email?: string;
+  imageUri?: string;
+}
+
+/**
+ * Fetch all device contacts for display in a searchable picker.
+ * Returns an array of PickedContact or null on failure.
+ */
+export async function getDeviceContacts(): Promise<PickedContact[] | null> {
+  if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
+    Alert.alert('Not supported', 'Contacts are only available on iOS and Android devices.');
+    return null;
+  }
+
+  try {
+    const { status } = await Contacts.requestPermissionsAsync();
+    if (status !== Contacts.PermissionStatus.GRANTED) {
+      Alert.alert(
+        'Permission required',
+        'Please allow access to your contacts to import a realtor.'
+      );
+      return null;
+    }
+
+    const { data } = await Contacts.getContactsAsync({
+      fields: [
+        Contacts.Fields.FirstName,
+        Contacts.Fields.LastName,
+        Contacts.Fields.PhoneNumbers,
+        Contacts.Fields.Emails,
+        Contacts.Fields.Image,
+      ],
+      sort: Contacts.SortTypes.FirstName,
+    });
+
+    if (!data || data.length === 0) {
+      Alert.alert('No Contacts', 'No contacts found on this device.');
+      return null;
+    }
+
+    return data
+      .filter((c) => c.firstName || c.lastName)
+      .map((c) => ({
+        firstName: c.firstName || '',
+        lastName: c.lastName || '',
+        phone: c.phoneNumbers?.[0]?.number || undefined,
+        email: c.emails?.[0]?.email || undefined,
+        imageUri: c.image?.uri || undefined,
+      }));
+  } catch (error: any) {
+    console.error('[Contacts] Error fetching contacts:', error);
+    Alert.alert('Error', 'Failed to access contacts. Please try again.');
+    return null;
+  }
+}
+
 /**
  * Save contact to phone's contacts with native UI.
  * iOS & Android: Opens native contact form for user to review and save.
