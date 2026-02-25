@@ -48,6 +48,7 @@ import { getAvatarUrl } from './src/utils/profilePicture';
 import AuthenticatedRoot from './src/screens/AuthenticatedRoot';
 
 import * as WebBrowser from 'expo-web-browser';
+import QuickCaptureTab from './src/features/quickCapture/QuickCaptureTab';
 
 // Enable LayoutAnimation on Android
 if (
@@ -85,9 +86,10 @@ type LeadsScreenProps = {
   onNotificationHandled?: () => void;
   defaultToMyLeads?: boolean;
   skipDashboard?: boolean;
+  onNavigateToCapture?: (captureId: string) => void;
 };
 
-function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandled, defaultToMyLeads, skipDashboard }: LeadsScreenProps) {
+function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandled, defaultToMyLeads, skipDashboard, onNavigateToCapture }: LeadsScreenProps) {
   const { colors, isDark } = useThemeColors();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [metaLeads, setMetaLeads] = useState<MetaLead[]>([]);
@@ -130,6 +132,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const { fetchBatchAttention, getAttention, invalidateAttention, attentionMap } = useAiLeadAttention();
   const [aiDataLoaded, setAiDataLoaded] = useState(0); // Counter to force re-render when AI data loads
   
+  // Quick Capture state
+  const [showQuickCaptures, setShowQuickCaptures] = useState(false);
+  const [quickCaptureStartOnAdd, setQuickCaptureStartOnAdd] = useState(false);
+  const [showFabActionSheet, setShowFabActionSheet] = useState(false);
+
   // Add Lead Modal state
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
   const [savingNewLead, setSavingNewLead] = useState(false);
@@ -1717,6 +1724,20 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     );
   }
 
+  // Quick Captures View
+  if (showQuickCaptures) {
+    return (
+      <QuickCaptureTab
+        userId={session?.user?.id || ''}
+        onBack={() => {
+          setShowQuickCaptures(false);
+          setQuickCaptureStartOnAdd(false);
+        }}
+        startOnAdd={quickCaptureStartOnAdd}
+      />
+    );
+  }
+
   if (selectedLead) {
     // Apply the same filters to leads/metaLeads that are used in the list view
     let filteredLeads = leads.filter(lead => {
@@ -1794,7 +1815,14 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         onMarkMessagesRead={markMessagesAsRead}
         onInvalidateAttention={invalidateAttention}
         aiAttention={attentionMap.get(selectedLead.id) || null}
+        onNavigateToCapture={onNavigateToCapture}
         onDeleteLead={async (leadId: string) => {
+          // Clear any quick_captures referencing this lead before deleting
+          await supabase
+            .from('quick_captures')
+            .update({ converted_lead_id: null, status: 'open' })
+            .eq('converted_lead_id', leadId);
+
           // Delete from database
           const { error } = await supabase
             .from('leads')
@@ -2446,6 +2474,27 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 </TouchableOpacity>
               </View>
             </View>
+          )}
+
+          {/* Quick Captures Shortcut */}
+          {(userRole === 'loan_officer' || userRole === 'super_admin') && (
+            <TouchableOpacity
+              style={[styles.recentLeadsSection, { backgroundColor: colors.cardBackground, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, gap: 12 }]}
+              onPress={() => {
+                setQuickCaptureStartOnAdd(false);
+                setShowQuickCaptures(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#F5F3FF', justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="camera-outline" size={18} color="#7C3AED" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[{ fontSize: 15, fontWeight: '600' }, { color: colors.textPrimary }]}>Quick Captures</Text>
+                <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 1 }}>View your captured leads & notebook photos</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+            </TouchableOpacity>
           )}
 
           {/* Recent Leads Section */}
@@ -3375,19 +3424,66 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         </Animated.View>
       )}
 
-      {/* FAB - Add Lead Button (for LOs and Super Admins) */}
+      {/* FAB - Quick Actions (for LOs and Super Admins) */}
       {(userRole === 'loan_officer' || userRole === 'super_admin') && !showDashboard && (
         <TouchableOpacity
           style={styles.fab}
-          onPress={() => {
-            setAddLeadError(null);
-            setShowAddLeadModal(true);
-          }}
+          onPress={() => setShowFabActionSheet(true)}
           activeOpacity={0.8}
         >
           <Ionicons name="add" size={28} color="#FFFFFF" />
         </TouchableOpacity>
       )}
+
+      {/* FAB ActionSheet Modal */}
+      <Modal
+        visible={showFabActionSheet}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowFabActionSheet(false)}
+      >
+        <TouchableOpacity
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}
+          activeOpacity={1}
+          onPress={() => setShowFabActionSheet(false)}
+        >
+          <View style={{ backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: Platform.OS === 'ios' ? 34 : 16, paddingTop: 12 }}>
+            <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#D1D5DB', alignSelf: 'center', marginBottom: 16 }} />
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, gap: 14 }}
+              onPress={() => {
+                setShowFabActionSheet(false);
+                setQuickCaptureStartOnAdd(true);
+                setShowQuickCaptures(true);
+              }}
+            >
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#F5F3FF', justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="camera-outline" size={20} color="#7C3AED" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: '600', color: '#111827' }}>Quick Capture</Text>
+                <Text style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>Photo + name for fast lead capture</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, gap: 14 }}
+              onPress={() => {
+                setShowFabActionSheet(false);
+                setAddLeadError(null);
+                setShowAddLeadModal(true);
+              }}
+            >
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#ECFDF5', justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="person-add-outline" size={20} color="#059669" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: '600', color: '#111827' }}>Add My Lead</Text>
+                <Text style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>Full lead with all details</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Add Lead Modal */}
       <Modal

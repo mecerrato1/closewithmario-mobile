@@ -3,7 +3,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform, Image, ImageSourcePropType } from 'react-native';
 import { useThemeColors } from '../../styles/theme';
 
-export type TabKey = 'leads' | 'scenarios' | 'realtors' | 'calculator';
+export type TabKey = 'leads' | 'captures' | 'realtors' | 'calculator';
 
 interface Tab {
   key: TabKey;
@@ -14,7 +14,7 @@ interface Tab {
 
 const TABS: Tab[] = [
   { key: 'leads', label: 'Leads', icon: '📋' },
-  { key: 'scenarios', label: 'Scenarios', icon: '🧾' },
+  { key: 'captures', label: 'Quick Leads', icon: '⚡' },
   { key: 'realtors', label: 'Realtors', icon: '🧑‍💼' },
   { key: 'calculator', label: 'Calculator', iconImage: require('../../../assets/MortgageCalc.png') },
 ];

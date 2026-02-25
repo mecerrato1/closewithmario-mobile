@@ -64,6 +64,7 @@ export type LeadDetailViewProps = {
   onMarkMessagesRead?: (leadId: string) => void;
   onInvalidateAttention?: (leadId: string) => Promise<void>;
   aiAttention?: { needsAttention: boolean; priority: number; badge: string; reason?: string; suggestedAction?: string } | null;
+  onNavigateToCapture?: (captureId: string) => void;
 };
 
 export function LeadDetailView({
@@ -87,6 +88,7 @@ export function LeadDetailView({
   onMarkMessagesRead,
   onInvalidateAttention,
   aiAttention,
+  onNavigateToCapture,
 }: LeadDetailViewProps) {
   const { colors, isDark } = useThemeColors();
   const [activeDetailTab, setActiveDetailTab] = useState<'details' | 'messages'>('details');
@@ -2380,7 +2382,30 @@ export function LeadDetailView({
                   )}
                 </View>
               )}
-              {(record as Lead).source_detail && (
+              {(record as Lead).source_detail && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((record as Lead).source_detail!) && onNavigateToCapture && (
+                <TouchableOpacity
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: '#F5F3FF',
+                    paddingHorizontal: 14,
+                    paddingVertical: 10,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: '#DDD6FE',
+                    marginBottom: 8,
+                  }}
+                  onPress={() => onNavigateToCapture((record as Lead).source_detail!)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="camera-outline" size={18} color="#7C3AED" style={{ marginRight: 8 }} />
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#7C3AED', flex: 1 }}>
+                    View Quick Capture & Photos
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color="#7C3AED" />
+                </TouchableOpacity>
+              )}
+              {(record as Lead).source_detail && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((record as Lead).source_detail!) && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
                   <Ionicons name="megaphone-outline" size={16} color="#16A34A" style={{ marginRight: 8 }} />
                   <Text style={[styles.detailField, { color: '#16A34A', marginBottom: 0 }]} selectable={true}>

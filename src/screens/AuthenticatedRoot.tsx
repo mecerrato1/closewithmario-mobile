@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Session } from '@supabase/supabase-js';
 import BottomTabs, { TabKey } from '../components/navigation/BottomTabs';
-import ScenariosTabScreen from './tabs/ScenariosTabScreen';
+import QuickCaptureTab from '../features/quickCapture/QuickCaptureTab';
 import RealtorsTabScreen from './tabs/RealtorsTabScreen';
 import CalculatorTabScreen from './tabs/CalculatorTabScreen';
 
@@ -19,11 +19,14 @@ interface AuthenticatedRootProps {
     onNotificationHandled?: () => void;
     defaultToMyLeads?: boolean;
     skipDashboard?: boolean;
+    onNavigateToCapture?: (captureId: string) => void;
   }>;
 }
 
 // State for navigating to a specific lead from other tabs
 type PendingLeadNavigation = { id: string; source: 'lead' | 'meta' } | null;
+// State for navigating to a specific quick capture from other tabs
+type PendingCaptureNavigation = string | null;
 
 export default function AuthenticatedRoot({
   session,
@@ -34,6 +37,7 @@ export default function AuthenticatedRoot({
 }: AuthenticatedRootProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('leads');
   const [pendingLeadNav, setPendingLeadNav] = useState<PendingLeadNavigation>(null);
+  const [pendingCaptureId, setPendingCaptureId] = useState<PendingCaptureNavigation>(null);
   const [hasClickedLeadsTab, setHasClickedLeadsTab] = useState(false);
 
   const handleTabChange = (tab: TabKey) => {
@@ -55,9 +59,19 @@ export default function AuthenticatedRoot({
     setActiveTab('leads');
   };
 
+  // Handle navigation to a specific quick capture from other tabs
+  const handleNavigateToCapture = (captureId: string) => {
+    setPendingCaptureId(captureId);
+    setActiveTab('captures');
+  };
+
   // Clear pending navigation after it's been handled
   const handlePendingLeadHandled = () => {
     setPendingLeadNav(null);
+  };
+
+  const handlePendingCaptureHandled = () => {
+    setPendingCaptureId(null);
   };
 
   const renderContent = () => {
@@ -76,10 +90,18 @@ export default function AuthenticatedRoot({
             onNotificationHandled={effectiveHandler}
             defaultToMyLeads={true}
             skipDashboard={hasClickedLeadsTab}
+            onNavigateToCapture={handleNavigateToCapture}
           />
         );
-      case 'scenarios':
-        return <ScenariosTabScreen onClose={handleNavigateToDashboard} />;
+      case 'captures':
+        return (
+          <QuickCaptureTab
+            userId={session?.user?.id || ''}
+            onBack={handleNavigateToDashboard}
+            initialCaptureId={pendingCaptureId}
+            onInitialCaptureHandled={handlePendingCaptureHandled}
+          />
+        );
       case 'realtors':
         return (
           <RealtorsTabScreen 

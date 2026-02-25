@@ -1,13 +1,13 @@
 # CloseWithMario Mobile - Codebase Summary
 
-**Last Updated:** January 14, 2026 at 3:45 PM EST  
+**Last Updated:** February 25, 2026 at 1:00 PM EST  
 **Platform:** iOS Mobile Application  
 **EAS Account:** mecerrato1  
-**Latest Build:** iOS Production Build 61 (v1.1.45, Dec 11, 2025)  
+**Latest Build:** iOS Production Build 82 (v1.1.65, Feb 25, 2026)  
 **Major Refactor:** November 26, 2025 - Modular architecture with separated screens and styles  
 **Security Update:** November 29, 2025 - Face ID/Touch ID biometric authentication  
-**Feature Update:** December 11, 2025 - AI-powered lead attention badges, profile menu with notification bell, source filtering for super admins  
-**UI/UX Update:** December 11, 2025 - Profile menu modal, notification bell with unread count, AI badges from Supabase cache  
+**Architecture Update:** Post-Jan 2026 - Bottom tab navigation, Realtor CRM, Mortgage Calculator, Push Notifications  
+**Feature Update:** February 25, 2026 - Quick Capture (Quick Leads) feature with photo attachments, convert-to-lead, cross-tab navigation  
 **Bug Fix:** January 14, 2026 - Mortgage calculator Doc Stamps (Mortgage) now zeroes out for FLHFC DPA programs
 
 ---
@@ -49,41 +49,97 @@
 
 ```
 closewithmario-mobile/
-├── App.tsx                          # Main application entry point (~1500 lines) ✨ REFACTORED
+├── App.tsx                          # Main application entry point (~2500+ lines)
 ├── index.ts                         # Expo entry file
-├── app.json                         # Expo configuration
+├── app.json                         # Expo configuration (v1.1.65, build 82)
 ├── package.json                     # Dependencies and scripts
 ├── .env                             # Environment variables (Supabase credentials)
 ├── src/
-│   ├── components/                  # ✨ NEW - Reusable components
-│   │   └── dashboard/
-│   │       └── QuoteOfTheDay.tsx   # Daily motivational quote component (~72 lines)
-│   ├── constants/                   # ✨ NEW - App constants
+│   ├── components/
+│   │   ├── dashboard/
+│   │   │   └── QuoteOfTheDay.tsx   # Daily motivational quote component (~72 lines)
+│   │   ├── navigation/
+│   │   │   └── BottomTabs.tsx      # ✨ Bottom tab bar (Leads, Quick Leads, Realtors, Calculator)
+│   │   ├── realtors/               # ✨ Realtor CRM components
+│   │   │   ├── RealtorCard.tsx     # Realtor list card with avatar, brokerage, lead count
+│   │   │   ├── RealtorFilters.tsx  # Stage filter chips (All/Hot/Warm/Cold)
+│   │   │   ├── RealtorStageBadge.tsx # Color-coded stage badge
+│   │   │   └── NeedsLoveSection.tsx  # Horizontal "needs love" realtor cards
+│   │   ├── DPAEntryModal.tsx       # ✨ Down Payment Assistance entry/edit modal
+│   │   └── SmsMessaging.tsx        # ✨ In-app SMS messaging component (Twilio-backed)
+│   ├── constants/
 │   │   └── salesQuotes.ts          # Sales motivation quotes (~171 lines, 40 quotes)
-│   ├── contexts/                    # ✨ NEW - React contexts
-│   │   └── AppLockContext.tsx      # Biometric authentication context (~112 lines)
-│   ├── screens/                     # ✨ NEW - Screen components
-│   │   ├── AuthScreen.tsx          # Login/signup screen with OAuth (~440 lines)
-│   │   ├── LeadDetailScreen.tsx    # Lead detail view with activities (~1700 lines)
-│   │   ├── LockScreen.tsx          # ✨ Face ID/Touch ID lock screen (~79 lines)
-│   │   └── TeamManagementScreen.tsx # Team management for admins (~490 lines)
-│   ├── styles/                      # ✨ NEW - Centralized styles
+│   ├── contexts/
+│   │   └── AppLockContext.tsx       # Biometric authentication context (~112 lines)
+│   ├── screens/
+│   │   ├── AuthScreen.tsx          # Login/signup screen with OAuth
+│   │   ├── AuthenticatedRoot.tsx   # ✨ Tab-based navigation container
+│   │   ├── LeadDetailScreen.tsx    # Lead detail view with activities (~3700+ lines)
+│   │   ├── LockScreen.tsx          # Face ID/Touch ID lock screen
+│   │   ├── MortgageCalculatorScreen.tsx # ✨ Full mortgage calculator (~1900 lines)
+│   │   ├── ProfileSettingsScreen.tsx # ✨ Profile settings (avatar, sign out)
+│   │   ├── TeamManagementScreen.tsx # Team management for admins
+│   │   ├── realtors/               # ✨ Realtor CRM screens
+│   │   │   ├── AddRealtorScreen.tsx     # Add realtor form + import from contacts
+│   │   │   ├── RealtorDetailScreen.tsx  # Realtor detail, activity log, templates
+│   │   │   └── RealtorsListScreen.tsx   # Searchable realtor list with filters
+│   │   └── tabs/                   # ✨ Tab screen wrappers
+│   │       ├── CalculatorTabScreen.tsx  # Calculator tab wrapper
+│   │       ├── MyLeadsTabScreen.tsx     # Leads tab wrapper
+│   │       ├── RealtorsTabScreen.tsx    # Realtors tab with list/detail/add navigation
+│   │       └── ScenariosTabScreen.tsx   # Scenarios tab (placeholder)
+│   ├── styles/
 │   │   ├── appStyles.ts            # All app styles in one place (~2120 lines)
-│   │   └── theme.ts                # Theme colors (light/dark mode support) (~27 lines)
-│   ├── utils/                       # ✨ NEW - Utility functions
-│   │   └── getQuoteOfTheDay.ts     # Quote selection logic (~25 lines)
-│   └── lib/                         # Utilities and helpers
+│   │   └── theme.ts                # Theme colors (light/dark mode support)
+│   ├── features/
+│   │   └── quickCapture/            # ✨ Quick Capture (Quick Leads) feature
+│   │       ├── QuickCaptureTab.tsx  # Tab container with list/add/detail navigation
+│   │       ├── types.ts             # QuickCapture, QuickCaptureAttachment, payload types
+│   │       ├── services/
+│   │       │   └── quickCaptureService.ts  # Supabase CRUD, attachments, convert-to-lead
+│   │       ├── screens/
+│   │       │   ├── QuickCapturesListScreen.tsx  # Searchable list with status filters
+│   │       │   ├── AddQuickCaptureScreen.tsx    # Add form with photo attachments
+│   │       │   └── QuickCaptureDetailScreen.tsx # Detail/edit view with convert button
+│   │       └── components/
+│   │           └── SelectRealtorModal.tsx  # Realtor picker modal with search
+│   ├── hooks/                      # ✨ Custom React hooks
+│   │   ├── useAiLeadAttention.ts   # AI attention badge data hook
+│   │   └── useRealtors.ts          # Realtor list state, search, filters, refresh
+│   ├── utils/
+│   │   ├── calculateMI.ts          # ✨ Mortgage insurance calculator (Conv/FHA/VA)
+│   │   ├── dpaCalculations.ts      # ✨ DPA amount, payment, LTV/CLTV calculations
+│   │   ├── dpaTypes.ts             # ✨ DPA types, presets (HTH, FL Assist, FHFC, etc.)
+│   │   ├── floridaCounties.ts      # ✨ Florida county list for tax calculations
+│   │   ├── floridaTaxes.ts         # ✨ FL lender's title, intangible tax, doc stamps
+│   │   ├── getQuoteOfTheDay.ts     # Quote selection logic
+│   │   ├── mortgageCalculations.ts # ✨ Full mortgage calculation engine
+│   │   ├── outlookCalendar.ts      # ✨ Open Outlook calendar events from app
+│   │   ├── parseRecordingUrl.ts    # Audio recording URL parser
+│   │   ├── profilePicture.ts       # ✨ Profile picture upload/remove (user + realtor)
+│   │   ├── rateService.ts          # ✨ FRED API mortgage rate fetching with cache
+│   │   ├── vcard.ts                # ✨ Contact save + import from device contacts
+│   │   └── __tests__/              # Test folder
+│   └── lib/
 │       ├── supabase.ts             # Supabase client configuration
+│       ├── supabase/               # ✨ Supabase data access modules
+│       │   ├── realtors.ts         # Realtor CRUD, assignments, activities, brokerages
+│       │   └── leadTracking.ts     # ✨ Lead tracking (auto-track/untrack by status)
 │       ├── roles.ts                # RBAC role management utilities
 │       ├── textTemplates.ts        # SMS/Email templates with variables (~417 lines)
+│       ├── realtorTextTemplates.ts # ✨ 7 bilingual realtor communication templates
 │       ├── callbacks.ts            # Notification scheduling utilities
-│       ├── leadsHelpers.ts         # ✨ NEW - Lead helper functions and constants
+│       ├── notifications.ts        # ✨ Push notification registration (Expo Push Tokens)
+│       ├── featureFlags.ts         # ✨ Feature flags (ALLOW_SIGNUP)
+│       ├── leadsHelpers.ts         # Lead helper functions and constants
 │       └── types/
-│           └── leads.ts            # TypeScript type definitions (expanded)
-├── docs/                            # Documentation folder
+│           ├── leads.ts            # TypeScript type definitions (leads, meta, activity)
+│           └── realtors.ts         # ✨ Realtor CRM types (Realtor, Assignment, Activity)
+├── docs/
 │   └── CODEBASE_SUMMARY.md         # This file
-├── assets/                          # App icons and images
-│   ├── CWMLogo.png                 # Main logo (7099x5584)
+├── assets/
+│   ├── CWMLogo.png                 # Main logo
+│   ├── MortgageCalc.png            # ✨ Calculator tab icon
 │   ├── BrowardHPA_Ad.jpg           # Ad image for Broward HPA campaign
 │   ├── Fl_Renter_Ad.png            # Ad image for FL Renter campaign
 │   ├── Condo_Ad.jpg                # Ad image for Condo campaign
@@ -93,6 +149,7 @@ closewithmario-mobile/
 │   ├── splash-icon.png
 │   ├── adaptive-icon.png
 │   └── favicon.png
+├── ios/                             # iOS native project files
 └── android/                         # Android native project files
 ```
 
@@ -144,7 +201,7 @@ type Lead = {
   credit_score?: number | null;
   message?: string | null;
   source?: string | null;        // 'My Lead', 'CTA Form', 'Referral', etc.
-  source_detail?: string | null; // Referral source for self-created leads
+  source_detail?: string | null; // Referral text OR quick_captures.id UUID (for converted captures)
   lo_id?: string | null;         // For LO assignment
   realtor_id?: string | null;    // For RBAC filtering
 };
@@ -183,6 +240,40 @@ type ActivityLog = {
   note: string | null;
   user_id: string;
   user_email?: string;
+};
+```
+
+### Quick Capture Type (from `quick_captures` table)
+```typescript
+type QuickCapture = {
+  id: string;
+  created_at: string;
+  created_by_user_id: string;
+  first_name: string;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  realtor_id: string | null;
+  notes: string | null;
+  status: 'open' | 'converted' | 'archived';
+  converted_lead_id: string | null;
+  last_touched_at: string;
+};
+```
+
+### Quick Capture Attachment Type (from `quick_capture_attachments` table)
+```typescript
+type QuickCaptureAttachment = {
+  id: string;
+  created_at: string;
+  quick_capture_id: string;
+  file_path: string;
+  file_url: string;
+  mime_type: string | null;
+  width: number | null;
+  height: number | null;
+  size_bytes: number | null;
+  sort_order: number;
 };
 ```
 
@@ -721,7 +812,8 @@ Comprehensive lead detail view:
 - Activity history display with voice note playback
 - **"My Lead" badge** with green styling for self-created leads
 - **Delete button** for "My Lead" leads (red, with confirmation)
-- **Referral source display** when `source_detail` exists
+- **Referral source display** when `source_detail` is text
+- **"View Quick Capture & Photos" link** when lead was converted from a quick capture (detects UUID in `source_detail`, navigates cross-tab to captures)
 - Text template modal with bilingual support
 - Callback scheduling
 - Ad image viewer for Meta leads
@@ -881,7 +973,7 @@ Environment variables for Supabase connection.
    - Columns: id, created_at, first_name, last_name, email, phone, status, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id, source, source_detail
    - Used for general lead management (website leads + LO self-created leads)
    - `source`: Origin of lead ('My Lead', 'CTA Form', 'Referral', 'Preapproval Wizard', etc.)
-   - `source_detail`: Referral info for self-created leads
+   - `source_detail`: Referral text for self-created leads, OR `quick_captures.id` UUID for converted captures
    - RBAC: Filtered by lo_id or realtor_id for non-admin users
    - LO assignment via lo_id foreign key
    - **Delete RLS policy** requires `source = 'My Lead'` for LO deletion
@@ -904,20 +996,45 @@ Environment variables for Supabase connection.
    - lead_eligible: Determines if LO can receive auto-assigned leads
 
 5. **`realtors` table:**
-   - Manages realtor team members
-   - Columns: id, first_name, last_name, email, phone, active, created_at
+   - Manages realtor contacts in the CRM
+   - Columns: id, first_name, last_name, email, phone, brokerage, active, campaign_eligible, email_opt_out, preferred_language, secondary_language, profile_picture_url, created_by_user_id, user_id, created_at, updated_at
 
-6. **`lead_activities` table:**
+6. **`realtor_assignments` table:**
+   - Links realtors to loan officers (many-to-many)
+   - Columns: id, realtor_id, lo_user_id, relationship_stage (hot/warm/cold), notes, last_touched_at, created_at
+
+7. **`realtor_activities` table:**
+   - Tracks interactions with realtors
+   - Columns: id, realtor_id, lo_user_id, activity_type (note/call/text/email/meeting), content, created_at
+
+8. **`lead_activities` table:**
    - Tracks interactions for website leads
    - Columns: id, created_at, lead_id, activity_type, notes, created_by, user_email, audio_url
    - Activity types: 'call', 'text', 'email', 'note'
    - `audio_url` stores voice note recordings
 
-9. **Supabase Storage Bucket:**
+9. **Supabase Storage Buckets:**
    - **`activity-voice-notes`** - Stores voice note audio files
-   - Public read access for playback
-   - Authenticated upload/delete access
-   - Files organized by lead ID
+     - Public read access for playback
+     - Authenticated upload/delete access
+     - Files organized by lead ID
+   - **`quick-capture-attachments`** - Stores quick capture photo attachments
+     - Signed URL access (1-hour expiry)
+     - Authenticated upload/delete access
+     - Files organized by capture ID
+
+10. **`quick_captures` table:**
+    - Columns: id, created_at, created_by_user_id, first_name, last_name, email, phone, realtor_id, notes, status, converted_lead_id, last_touched_at
+    - Quick lead capture for fast data entry with photo attachments
+    - `status`: 'open' | 'converted' | 'archived'
+    - `converted_lead_id`: FK to `leads.id` (set when converted, cleared on lead delete)
+    - RLS: Filtered by `created_by_user_id`
+
+11. **`quick_capture_attachments` table:**
+    - Columns: id, created_at, quick_capture_id, file_path, file_url, mime_type, width, height, size_bytes, sort_order
+    - Stores photo attachments for quick captures
+    - `file_path`: Path in `quick-capture-attachments` storage bucket
+    - `quick_capture_id`: FK to `quick_captures.id`
 
 7. **`meta_ad_activities` table:**
    - Tracks interactions for meta leads
@@ -929,6 +1046,23 @@ Environment variables for Supabase connection.
    - Stores scheduled callback reminders
    - Columns: id, created_at, lead_id, meta_ad_id, callback_time, note, user_id, completed
    - Used with Expo Notifications for reminders
+
+9. **`sms_messages` table:**
+   - Stores SMS conversation history (Twilio-backed)
+   - Columns: id, direction (inbound/outbound), from_number, to_number, message_text, created_at, sent_at, received_at, status
+   - Used by `SmsMessaging.tsx` component for in-app messaging
+
+10. **`expo_push_tokens` table:**
+    - Stores device push notification tokens
+    - Columns: user_id, push_token, device_type, is_active
+    - Upsert on conflict (user_id, push_token)
+    - Token deactivated on sign out
+
+11. **Lead tracking columns** (on `leads` and `meta_ads` tables):
+    - `is_tracked` (boolean) - Whether lead is pinned for follow-up
+    - `tracking_reason` - 'manual' | 'auto_docs_requested' | 'auto_qualified'
+    - `tracking_note` - User-added note for tracked leads
+    - `tracking_note_updated_at` - Timestamp of last note update
 
 ### Authentication
 - Uses Supabase Auth with email/password and Google OAuth
@@ -1013,7 +1147,215 @@ The codebase underwent a massive refactoring to improve maintainability, readabi
 
 ---
 
-## 📅 Recent Changes (November 2025 - January 2026)
+## 📅 Recent Changes (November 2025 - February 2026)
+
+### February 25, 2026 - Quick Capture (Quick Leads) Feature (v1.1.65, Build 82)
+
+#### ⚡ Quick Capture Feature - Fast Lead Entry with Photo Attachments
+1. **Quick Capture CRUD** - Full create, read, update, delete for quick lead captures
+   - First name (required), last name, phone, email, notes, realtor link
+   - Phone validation (10-digit) and email validation (regex) on save
+   - Email normalized to lowercase before saving
+   - Status management: open → converted / archived
+   - Delete functionality with storage cleanup (removes attachments from bucket)
+
+2. **Photo Attachments**
+   - Attach photos during quick capture creation
+   - Photos uploaded to `quick-capture-attachments` Supabase Storage bucket
+   - Signed URL generation for secure viewing (1-hour expiry)
+   - Photos displayed in detail screen with full-size viewing
+   - Attachments cleaned up on capture deletion
+
+3. **Convert to Lead**
+   - "Convert to Lead" button on detail screen (only shown for non-converted captures)
+   - Maps fields: first_name, last_name, phone, email, notes → message, realtor_id
+   - Sets `source: 'My Lead'` and `source_detail: <capture_id>` (UUID) on the new lead
+   - Resolves `lo_id` from `loan_officers` table based on authenticated user
+   - Sets `loan_purpose: 'Home Buying'` and `status: 'new'`
+   - Updates quick capture status to 'converted' with `converted_lead_id` pointing to new lead
+   - Converted banner shown on capture detail after conversion
+
+4. **Lead → Quick Capture Navigation (Cross-Tab)**
+   - "View Quick Capture & Photos" purple banner on lead detail when `source_detail` is a UUID
+   - Clicking navigates from Leads tab → Quick Leads tab → opens the capture detail
+   - Uses `onNavigateToCapture` callback threaded through: `AuthenticatedRoot` → `LeadsScreen` → `LeadDetailView`
+   - `QuickCaptureTab` accepts `initialCaptureId` prop for cross-tab deep linking
+
+5. **Lead Delete Fix (FK Constraint)**
+   - Deleting a lead that was converted from a quick capture now clears `converted_lead_id` first
+   - Resets quick capture status back to 'open' so it can be re-converted
+   - Prevents FK constraint violation (`quick_captures_converted_lead_id_fkey`)
+
+6. **Quick Capture Screens**
+   - **`QuickCapturesListScreen`** - Searchable list with status filter chips (All/Open/Converted/Archived), color-coded status badges
+   - **`AddQuickCaptureScreen`** - Form with photo attachments, realtor picker, validation
+   - **`QuickCaptureDetailScreen`** - View/edit with KeyboardAvoidingView, convert/archive/delete actions
+   - **`SelectRealtorModal`** - Searchable realtor picker with KeyboardAvoidingView and `keyboardShouldPersistTaps`
+
+7. **Quick Capture Service** (`quickCaptureService.ts`)
+   - `fetchQuickCaptures()` - List with optional status/query filters
+   - `fetchQuickCapture()` - Single capture by ID
+   - `createQuickCapture()` - Insert with auto `created_by_user_id`
+   - `updateQuickCapture()` - Partial update
+   - `deleteQuickCapture()` - Delete with storage attachment cleanup
+   - `uploadAttachment()` - Upload photo to Supabase Storage
+   - `deleteAttachment()` - Remove photo from storage + DB
+   - `fetchAttachments()` - List attachments with signed URLs
+   - `convertQuickCaptureToLead()` - Full conversion flow
+
+---
+
+### February 24, 2026 - Import Realtor from Contacts & Search Fixes (v1.1.64, Build 81)
+
+#### 📇 Import Realtor from Device Contacts
+1. **Import from Contacts button** on Add Realtor screen
+   - Opens a searchable contact picker modal with all device contacts
+   - Auto-fills first name, last name, phone, email, and profile picture
+   - Uses existing `expo-contacts` dependency (already used for saving leads to contacts)
+   - Phone numbers normalized (strips country code prefix, formats to (xxx) xxx-xxxx)
+   - Brokerage and other fields remain manual (not available from contacts)
+
+2. **New utilities in `src/utils/vcard.ts`**
+   - `getDeviceContacts()` - Fetches all device contacts with permission handling
+   - `PickedContact` interface - firstName, lastName, phone, email, imageUri
+
+#### 🔍 Search Improvements
+3. **Full-name search fix** - Realtor search now matches partial full names
+   - "marlene h" now correctly finds "Marlene Howard"
+   - Changed from separate first_name/last_name matching to concatenated fullName matching
+   - Fix in `src/lib/supabase/realtors.ts`
+
+4. **Cursor visibility fix** - Search input cursor now visible
+   - Added `cursorColor="#FFFFFF"` and `selectionColor` to realtor list search box
+   - Fix in `src/screens/realtors/RealtorsListScreen.tsx`
+
+---
+
+### January 2026 – February 2026 - Bottom Tabs, Realtor CRM, Mortgage Calculator, Push Notifications, SMS Messaging
+
+#### 🗂️ Bottom Tab Navigation Architecture
+1. **`AuthenticatedRoot.tsx`** - New tab-based navigation container
+   - 4 tabs: **Leads**, **Scenarios**, **Realtors**, **Calculator**
+   - `BottomTabs.tsx` component with emoji + image icons and purple active indicator
+   - Cross-tab navigation (e.g., tap a lead from Realtor detail → navigates to Leads tab)
+   - Dashboard shows on first load; subsequent Leads tab clicks skip dashboard
+
+#### 🤝 Realtor CRM System (Full Feature)
+2. **Realtor Management** - Complete CRM for managing realtor partnerships
+   - **Database tables:** `realtors`, `realtor_assignments`, `realtor_activities`
+   - **Relationship stages:** Hot (🔴), Warm (🟠), Cold (🔵) with color-coded badges
+   - **Brokerage autocomplete** - Fetches existing brokerages to avoid name variations
+
+3. **Realtor Screens**
+   - **`RealtorsListScreen.tsx`** - Searchable list with stage filters (All/Hot/Warm/Cold)
+   - **`AddRealtorScreen.tsx`** - Full form with profile picture, contact info, brokerage autocomplete, language preferences, campaign eligibility, import from contacts
+   - **`RealtorDetailScreen.tsx`** (~1566 lines) - Comprehensive detail view with:
+     - Profile picture management (upload/remove)
+     - Contact buttons (Call, Text with templates, Email)
+     - Activity logging (note, call, text, email, meeting)
+     - Activity history display
+     - Assigned leads list with status badges (tappable → navigates to lead)
+     - Realtor text templates (7 bilingual templates)
+     - Stage management, settings toggles, language preferences
+     - Delete realtor functionality
+     - Save realtor to device contacts
+
+4. **Realtor Components**
+   - `RealtorCard.tsx` - List card with avatar (profile pic or initials), brokerage, lead count badge
+   - `RealtorStageBadge.tsx` - Color-coded Hot/Warm/Cold badge
+   - `RealtorFilters.tsx` - Horizontal stage filter chips
+   - `NeedsLoveSection.tsx` - Horizontal scroll of realtors not contacted in 14+ days with quick "Send Update" SMS button
+
+5. **Realtor Data Layer**
+   - `src/lib/supabase/realtors.ts` (~655 lines) - Full CRUD:
+     - `fetchAssignedRealtors()` - List with search, stage filter, lead counts
+     - `fetchNeedsLoveRealtors()` - Realtors with no recent activity
+     - `createRealtorAndAssign()` - Insert into `realtors` + `realtor_assignments`
+     - `updateRealtor()`, `updateAssignment()`, `deleteRealtor()`
+     - `logRealtorActivity()`, `fetchRealtorActivity()`
+     - `fetchLeadsByRealtor()` - Leads assigned to a realtor
+     - `touchRealtor()` - Update `last_touched_at` timestamp
+     - `fetchBrokerages()` - Distinct brokerage names via RPC
+   - `src/hooks/useRealtors.ts` - Hook with debounced search, stage filter, refresh
+   - `src/lib/types/realtors.ts` - Full type definitions (Realtor, AssignedRealtor, RealtorActivity, CreateRealtorPayload, etc.)
+
+6. **Realtor Text Templates** (`src/lib/realtorTextTemplates.ts`)
+   - 7 bilingual templates (English/Spanish):
+     - New Brokerage Welcome, Introduction/Partnership, Follow Up, Client Update, Preapproval Offer, Thank You for Referral, Check In
+   - Variable replacement: `{realtorFname}`, `{brokerage}`, `{LO fullname}`, `{LO phone}`, `{LO email}`
+
+#### 🧮 Mortgage Calculator (Full Feature)
+7. **`MortgageCalculatorScreen.tsx`** (~1910 lines) - Comprehensive mortgage calculator
+   - **Loan types:** Conventional, FHA, VA, DSCR
+   - **Inputs:** Sales price, down payment %, interest rate, credit score, county, loan term
+   - **Calculations:** Monthly P&I, MI, taxes, insurance, HOA, total payment
+   - **Florida-specific:** Doc stamps, intangible tax, lender's title, county-based owner's title
+   - **Closing costs breakdown:** Lender fees, title fees, government taxes, prepaid items
+   - **DPA (Down Payment Assistance):** Add multiple DPA programs with presets (Hometown Heroes, FL Assist, FHFC HFA Plus, FL HLP, etc.)
+   - **Live mortgage rates** from FRED API via `rateService.ts` (4-hour cache)
+   - **Copy to clipboard** - Formatted summary for sharing with leads
+   - **Persistent state** - Inputs saved to AsyncStorage, restored on reopen
+   - **VA funding fee** calculation based on first/subsequent use and disability exemption
+
+8. **Calculator Utilities**
+   - `mortgageCalculations.ts` - Core calculation engine with closing costs, MI, taxes
+   - `calculateMI.ts` - Mortgage insurance grid (Conventional by LTV+credit, FHA annual MIP)
+   - `floridaTaxes.ts` - FL doc stamps, intangible tax, lender's title, owner's title by county
+   - `floridaCounties.ts` - Complete Florida county list
+   - `dpaTypes.ts` - DPA entry types, presets for FL programs
+   - `dpaCalculations.ts` - DPA amount, payment (P&I, I/O, fixed), LTV/CLTV calculations
+   - `rateService.ts` - FRED API rate fetching with in-memory cache and fallback rates
+   - `DPAEntryModal.tsx` - Modal for adding/editing DPA programs
+
+#### 💬 In-App SMS Messaging
+9. **`SmsMessaging.tsx`** - Real-time SMS conversation view
+   - Fetches SMS history from `sms_messages` Supabase table
+   - Send messages via API endpoint (`closewithmario.com`)
+   - Chat bubble UI (inbound left, outbound right)
+   - Real-time polling for new messages
+   - Integrated into Lead Detail Screen
+
+#### 📱 Push Notifications
+10. **`src/lib/notifications.ts`** - Expo push notification system
+    - `registerForPushNotifications()` - Requests permission, gets Expo push token, stores in `expo_push_tokens` table
+    - `unregisterPushNotifications()` - Deactivates token on sign out
+    - Foreground notification handler (shows alerts even when app is open)
+    - Notification tap listeners for deep linking to specific leads
+
+#### 📌 Lead Tracking
+11. **`src/lib/supabase/leadTracking.ts`** - Lead tracking/pinning system
+    - `toggleLeadTracking()` - Pin/unpin leads for follow-up
+    - `updateTrackingNote()` - Add notes to tracked leads
+    - **Auto-tracking:** Automatically tracks leads when status changes to `gathering_docs` or `qualified`
+    - **Auto-untracking:** Automatically untracks when status changes to `closed` or `unqualified` (unless manually tracked)
+    - Tracking reason labels: manual, auto_docs_requested, auto_qualified
+
+#### 📅 Outlook Calendar Integration
+12. **`src/utils/outlookCalendar.ts`** - Create calendar events from app
+    - Opens Outlook mobile app with pre-filled event details
+    - Supports start time, duration, title, location, notes
+    - Includes lead details in event body
+    - Timezone-aware date formatting
+
+#### 👤 Profile Settings
+13. **`ProfileSettingsScreen.tsx`** - Dedicated profile settings screen
+    - View/change profile picture (upload from photo library)
+    - Remove custom profile picture
+    - Sign out button
+    - Uses `profilePicture.ts` utility for Supabase Storage upload
+
+#### 🖼️ Profile Pictures (User + Realtor)
+14. **`src/utils/profilePicture.ts`** - Shared image upload utilities
+    - `pickProfileImage()` - Launch image picker with square crop
+    - `uploadProfilePicture()` / `uploadRealtorProfilePicture()` - Upload to Supabase Storage
+    - `removeCustomProfilePicture()` / `removeRealtorProfilePicture()` - Remove from storage
+    - `getAvatarUrl()` - Get avatar URL from user metadata
+
+#### 🚩 Feature Flags
+15. **`src/lib/featureFlags.ts`** - Environment-based feature toggles
+    - `ALLOW_SIGNUP` - Controls whether new user registration is available
+
+---
 
 ### January 14, 2026 - Mortgage Calculator Tax Waiver Fix
 
@@ -1508,33 +1850,54 @@ npm start
 ### Key Technologies
 - **Frontend:** React Native 0.81.5 + Expo SDK 54 + TypeScript 5.9.2
 - **Backend:** Supabase (PostgreSQL + Auth + Storage)
+- **SMS:** Twilio via API (closewithmario.com backend)
 - **AI:** GPT-4o-mini for lead attention analysis (cached in Supabase)
+- **Rates:** FRED API for live mortgage rates
 - **Security:** Face ID/Touch ID biometric authentication
+- **Navigation:** Bottom tab bar (Leads, Quick Leads, Realtors, Calculator)
 - **Main File:** `App.tsx` (~2500+ lines - modular with imported screens)
 - **Color Scheme:** Purple (#7C3AED) + Green (#10B981)
-- **Version:** 1.1.45 (Build 61)
-- **Latest Update:** December 11, 2025
+- **Version:** 1.1.65 (Build 82)
+- **Latest Update:** February 25, 2026
 
 ### Main Components
 1. `LockScreen` - Face ID/Touch ID biometric authentication
 2. `AuthScreen` - Login with email/password and Google OAuth
-3. `TeamManagementScreen` - Manage loan officers and realtors (super admin only)
-4. `Dashboard` - Stats, Quote of the Day, performance cards, and recent leads (initial view)
-5. `QuoteOfTheDay` - Daily rotating motivational sales quotes (NEW Dec 2)
+3. `AuthenticatedRoot` - Tab-based navigation (Leads, Quick Leads, Realtors, Calculator) with cross-tab navigation
+4. `BottomTabs` - Bottom tab bar with 4 tabs
+5. `Dashboard` - Stats, Quote of the Day, performance cards, and recent leads
 6. `LeadsScreen` - Tabbed list view with search, filters, and pull-to-refresh
-7. `LeadDetailView` - Full lead details with activity logging, SMS/Email templates, voice notes, and callback scheduling
+7. `LeadDetailView` - Full lead details with activity logging, SMS/Email templates, voice notes, in-app SMS messaging, lead tracking, Quick Capture photo link
+8. `RealtorsListScreen` - Searchable realtor list with stage filters
+9. `AddRealtorScreen` - Add realtor form with import from contacts
+10. `RealtorDetailScreen` - Realtor detail with activity log, templates, assigned leads
+11. `MortgageCalculatorScreen` - Full mortgage calculator with DPA, closing costs, live rates
+12. `ProfileSettingsScreen` - Profile picture management and sign out
+13. `TeamManagementScreen` - Manage loan officers and realtors (super admin only)
+14. `SmsMessaging` - In-app SMS conversation view (Twilio-backed)
+15. `QuickCaptureTab` - Quick Leads tab container (list/add/detail navigation)
+16. `QuickCapturesListScreen` - Searchable quick capture list with status filters
+17. `AddQuickCaptureScreen` - Add quick capture form with photo attachments
+18. `QuickCaptureDetailScreen` - Quick capture detail/edit with convert-to-lead
 
 ### Database Tables
-- `leads` - Website leads with lo_id and realtor_id for RBAC
-- `meta_ads` - Meta advertising leads with lo_id, realtor_id, and preferred_language
+- `leads` - Website leads with lo_id, realtor_id, is_tracked, tracking_reason, tracking_note
+- `meta_ads` - Meta advertising leads with lo_id, realtor_id, preferred_language, is_tracked
 - `team_members` - User roles (super_admin/loan_officer/realtor/buyer)
 - `loan_officers` - LO team members with lead_eligible flag
-- `realtors` - Realtor team members
+- `realtors` - Realtor CRM contacts with brokerage, language prefs, campaign eligibility, profile picture
+- `realtor_assignments` - Links realtors to LOs with relationship stage (hot/warm/cold)
+- `realtor_activities` - Realtor interaction history (note/call/text/email/meeting)
 - `lead_activities` - Website lead interaction history
 - `meta_ad_activities` - Meta lead interaction history
 - `lead_callbacks` - Scheduled callback reminders
+- `lead_attention_cache` - AI-generated lead attention badges
+- `sms_messages` - SMS conversation history (Twilio-backed)
+- `expo_push_tokens` - Device push notification tokens
+- `quick_captures` - Quick lead captures with status (open/converted/archived), converted_lead_id FK
+- `quick_capture_attachments` - Photo attachments for quick captures (file_path in storage bucket)
 
-### Current State (Dec 11, 2025)
+### Current State (Feb 25, 2026)
 - ✅ Full CRUD for lead status and activities
 - ✅ RBAC with super_admin/loan_officer/realtor/buyer roles
 - ✅ Modern UI with brand colors (purple/green)
@@ -1542,62 +1905,64 @@ npm start
 - ✅ Face ID/Touch ID biometric authentication
 - ✅ Auto-lock after 10 minutes idle
 - ✅ Session persistence with AsyncStorage
-- ✅ iOS Production Build 61 deployed (v1.1.45)
-- ✅ SMS/Email templates with bilingual support (11 templates, English/Spanish)
+- ✅ iOS Production Build 82 deployed (v1.1.65)
+- ✅ **Bottom tab navigation** (Leads, Quick Leads, Realtors, Calculator)
+- ✅ **Realtor CRM** - Full realtor management with stages, activities, templates, brokerage autocomplete
+- ✅ **Import realtor from device contacts** with searchable picker
+- ✅ **Mortgage calculator** with DPA programs, closing costs, live FRED API rates, FL taxes
+- ✅ **In-app SMS messaging** via Twilio backend
+- ✅ **Push notifications** with Expo Push Tokens stored in Supabase
+- ✅ **Lead tracking/pinning** with auto-track on status change
+- ✅ **Outlook calendar integration** for scheduling appointments
+- ✅ **Profile picture management** for users and realtors
+- ✅ **Realtor text templates** (7 bilingual templates)
+- ✅ **Feature flags** (ALLOW_SIGNUP)
+- ✅ SMS/Email templates with bilingual support (11 lead templates + 7 realtor templates)
 - ✅ Voice notes recording with preview and playback
 - ✅ Unread lead indicator - blue dot
 - ✅ Document checklist templates with dynamic years
-- ✅ UI micro-animations
-- ✅ Advanced filtering (status, LO, search, attention, **source**)
+- ✅ Advanced filtering (status, LO, search, attention, source)
 - ✅ Smart navigation (respects all filters, tab-aware)
-- ✅ Team management screen
 - ✅ Callback scheduling with smart date formatting
-- ✅ Ad image viewer
-- ✅ Modular architecture (refactored from 6250 to 1500 lines)
-- ✅ "My Lead" self-created leads with green badge
-- ✅ LOs can delete their own leads (swipe + detail button)
-- ✅ LOs can delete activities on their own leads
-- ✅ Voice note preview before saving
-- ✅ Referral source tracking and display
+- ✅ AI-powered lead attention badges
+- ✅ Profile menu modal with avatar and notification bell
+- ✅ Source/ad name filtering for super admins
+- ✅ "My Lead" self-created leads with delete capability
 - ✅ Quote of the Day - 40 rotating motivational quotes
-- ✅ Dashboard performance cards with emojis
-- ✅ Email templates integration
-- ✅ Platform name formatting (FB→Facebook, IG→Instagram)
-- ✅ W2 Regular document template
-- ✅ Theme system foundation for dark mode
-- ✅ **AI-powered lead attention badges (NEW Dec 11)**
-- ✅ **Profile menu modal with avatar (NEW Dec 11)**
-- ✅ **Notification bell with unread count (NEW Dec 11)**
-- ✅ **Source/ad name filtering for super admins (NEW Dec 3)**
-- ✅ **Smart tab switching based on source filter (NEW Dec 3)**
-- ✅ **Mortgage calculator Doc Stamps tax waiver for FLHFC programs (NEW Jan 14, 2026)**
+- ✅ Mortgage calculator Doc Stamps tax waiver for FLHFC programs
+- ✅ **Quick Capture (Quick Leads)** - Fast lead entry with photo attachments, convert-to-lead, cross-tab navigation
+- ✅ **Quick Capture → Lead linking** - "View Quick Capture & Photos" banner on lead detail with cross-tab navigation
+- ✅ **Lead delete FK fix** - Clears quick capture reference before deleting converted leads
 - ⚠️ Need to fix: Square logo for Android, duplicate dependencies
-- 🔜 Next: Push notifications, pagination, dark mode implementation
+- 🔜 Next: Pagination, dark mode implementation
 
 ### Important Notes
-- Modular architecture with separated screens (~2268 line main file with imports)
+- **Bottom tab navigation** via `AuthenticatedRoot.tsx` + `BottomTabs.tsx`
 - **Face ID/Touch ID required** after 10 minutes of being backgrounded
 - Deep link scheme: `com.closewithmario.mobile://auth/callback`
 - Supabase URL must have this redirect URL configured
-- AsyncStorage used for session persistence
+- AsyncStorage used for session persistence and mortgage calculator state
 - RBAC filters leads by `lo_id` or `realtor_id` for non-admin users
 - Activity logging writes to `lead_activities` or `meta_ad_activities` tables
-- **SMS/Email templates** in `src/lib/textTemplates.ts` with **11 bilingual messages**
-- **Quote of the Day** - 40 rotating sales quotes personalized per user
+- **Lead templates** in `src/lib/textTemplates.ts` (11 bilingual messages)
+- **Realtor templates** in `src/lib/realtorTextTemplates.ts` (7 bilingual messages)
+- **Realtor CRM tables:** `realtors`, `realtor_assignments`, `realtor_activities`
+- **Brokerage autocomplete** fetches existing names via `get_all_brokerages` RPC to avoid variations
+- **Realtor search** matches concatenated full name (e.g., "marlene h" finds "Marlene Howard")
+- **Import from contacts** uses `expo-contacts` (also used for saving leads to contacts)
+- **Mortgage calculator** persists inputs to AsyncStorage, fetches live rates from FRED API (4hr cache)
+- **DPA presets:** Hometown Heroes, FL Assist, FHFC HFA Plus, FL HLP, Custom
+- **Lead tracking** auto-tracks on `gathering_docs`/`qualified`, auto-untracks on `closed`/`unqualified`
+- **Push notifications** registered on login, deactivated on logout, stored in `expo_push_tokens`
+- **SMS messaging** via `closewithmario.com` API endpoint (Twilio-backed)
+- **Outlook calendar** integration via `ms-outlook://` URL scheme
 - **"My Lead" leads** have `source: 'My Lead'` and can be deleted by the creating LO
-- **Loan purpose values** must match database constraint: 'Home Buying', 'Home Selling', 'Mortgage Refinance', 'Investment Property', 'General Real Estate'
-- **`_tableType`** field used internally to distinguish leads vs meta_ads (not `source`)
-- Templates auto-fill: {fname}, {loFullname}, {loFname}, {loPhone}, {loEmail}, {platform}, {recentYear}, {prevYear}, **{callbackTime}**
+- **Quick Capture** converted leads also have `source: 'My Lead'` with `source_detail` = capture UUID
+- **Lead delete** clears `quick_captures.converted_lead_id` FK before deleting to avoid constraint violations
+- **Cross-tab navigation:** Leads → Quick Captures via `onNavigateToCapture` callback chain
+- Templates auto-fill: {fname}, {loFullname}, {loFname}, {loPhone}, {loEmail}, {platform}, {recentYear}, {prevYear}, {callbackTime}
+- Realtor templates auto-fill: {realtorFname}, {brokerage}, {LO fullname}, {LO phone}, {LO email}
 - Voice notes stored in Supabase Storage bucket `activity-voice-notes`
-- Unread leads identified by `!last_contact_date && (status === 'new' || !status)`
-- Spanish templates auto-selected if `preferred_language === 'spanish'`
-- Navigation respects status filter, LO filter, search query, attention filter, and **source filter**
-- Unqualified leads excluded from default "all" view but accessible via filter
-- Tab-aware navigation combines meta + regular leads on "all" tab
-- **AI attention badges** read from `lead_attention_cache` Supabase table
-- **Profile menu** replaces sign out button with avatar and dropdown
-- **Notification bell** shows unread message count with red badge
-- **Source filter** for super admins to filter by ad name or lead source
 - Platform names formatted: FB→Facebook, IG→Instagram (case-insensitive)
 - Theme system foundation in place for future dark mode implementation
 
