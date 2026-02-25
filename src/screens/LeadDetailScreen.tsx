@@ -109,7 +109,7 @@ export function LeadDetailView({
   const [currentRealtorName, setCurrentRealtorName] = useState<string | null>(null);
   const [showAdImage, setShowAdImage] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [currentLOInfo, setCurrentLOInfo] = useState<{ firstName: string; lastName: string; phone: string; email: string } | null>(null);
+  const [currentLOInfo, setCurrentLOInfo] = useState<{ firstName: string; lastName: string; phone: string; email: string; aiDraftAccess?: boolean } | null>(null);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [showCallbackModal, setShowCallbackModal] = useState(false);
   const [callbackDate, setCallbackDate] = useState<Date | null>(null);
@@ -134,6 +134,13 @@ export function LeadDetailView({
   const [showPartnerUpdateModal, setShowPartnerUpdateModal] = useState(false);
   const [partnerUpdateMessage, setPartnerUpdateMessage] = useState('');
   const [sendingPartnerUpdate, setSendingPartnerUpdate] = useState(false);
+  
+  // AI Rewrite state
+  const [aiTone, setAiTone] = useState<'professional' | 'friendly' | 'concise' | 'detailed' | 'urgent'>('friendly');
+  const [rewriting, setRewriting] = useState(false);
+  const [rewrittenByAi, setRewrittenByAi] = useState(false);
+  const [partnerCursorPos, setPartnerCursorPos] = useState<number>(0);
+  const [showTonePicker, setShowTonePicker] = useState(false);
   
   // Voice notes state (expo-av)
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -409,6 +416,72 @@ export function LeadDetailView({
       }
     } finally {
       setSendingPartnerUpdate(false);
+    }
+  };
+
+  // Handle AI Rewrite
+  const handleAiRewrite = async () => {
+    if (!partnerUpdateMessage.trim() || partnerUpdateMessage.trim().length < 10) {
+      Alert.alert('Too Short', 'Please enter at least 10 characters before rewriting.');
+      return;
+    }
+    
+    setRewriting(true);
+    try {
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      if (!currentSession?.access_token) {
+        Alert.alert('Error', 'Not authenticated. Please sign in again.');
+        return;
+      }
+      
+      const API_BASE_URL = 'https://www.closewithmario.com';
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      
+      const response = await fetch(`${API_BASE_URL}/api/ai/rewrite-text`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentSession.access_token}`,
+        },
+        body: JSON.stringify({
+          text: partnerUpdateMessage.trim(),
+          tone: aiTone,
+          context: 'partner_update',
+        }),
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (response.status === 403) {
+        Alert.alert('Access Denied', 'AI rewrite access is not enabled for your account.');
+        return;
+      }
+      
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '');
+        let errorMessage = 'Failed to rewrite text';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorMessage;
+        } catch {}
+        throw new Error(errorMessage);
+      }
+      
+      const data = await response.json();
+      if (data.rewrittenText) {
+        setPartnerUpdateMessage(data.rewrittenText);
+        setRewrittenByAi(true);
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        Alert.alert('Timeout', 'Request timed out. Please try again.');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to rewrite text');
+      }
+    } finally {
+      setRewriting(false);
     }
   };
 
@@ -916,9 +989,9 @@ export function LeadDetailView({
       
       try {
         // Hardcoded contact info for super admins
-        const superAdminContacts: Record<string, { firstName: string; lastName: string; phone: string; email: string }> = {
-          'mario@closewithmario.com': { firstName: 'Mario', lastName: 'Cerrato', phone: '3052192788', email: 'mcerrato@loandepot.com' },
-          'mario@regallending.com': { firstName: 'Mario', lastName: 'Cerrato', phone: '3052192788', email: 'mario@regallending.com' },
+        const superAdminContacts: Record<string, { firstName: string; lastName: string; phone: string; email: string; aiDraftAccess: boolean }> = {
+          'mario@closewithmario.com': { firstName: 'Mario', lastName: 'Cerrato', phone: '3052192788', email: 'mcerrato@loandepot.com', aiDraftAccess: true },
+          'mario@regallending.com': { firstName: 'Mario', lastName: 'Cerrato', phone: '3052192788', email: 'mario@regallending.com', aiDraftAccess: true },
         };
         
         const emailLower = session.user.email.toLowerCase();
@@ -950,7 +1023,7 @@ export function LeadDetailView({
         if (memberId) {
           const { data, error } = await supabase
             .from('loan_officers')
-            .select('first_name, last_name, phone, email')
+            .select('first_name, last_name, phone, email, ai_draft_access')
             .eq('id', memberId)
             .single();
           
@@ -962,7 +1035,8 @@ export function LeadDetailView({
               firstName: data.first_name, 
               lastName: data.last_name,
               phone: data.phone || '',
-              email: data.email || ''
+              email: data.email || '',
+              aiDraftAccess: !!(data as any).ai_draft_access,
             };
             console.log('Setting LO Info:', loInfo);
             setCurrentLOInfo(loInfo);
@@ -3279,11 +3353,100 @@ export function LeadDetailView({
                 placeholder="Enter your update message..."
                 placeholderTextColor="#94A3B8"
                 value={partnerUpdateMessage}
-                onChangeText={setPartnerUpdateMessage}
+                onChangeText={(text) => {
+                  setPartnerUpdateMessage(text);
+                  if (rewrittenByAi) setRewrittenByAi(false);
+                }}
+                onSelectionChange={(e) => setPartnerCursorPos(e.nativeEvent.selection.end)}
                 multiline
                 numberOfLines={5}
                 textAlignVertical="top"
               />
+              
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={aiRewriteStyles.emojiRow} contentContainerStyle={aiRewriteStyles.emojiRowContent}>
+                {['👋', '🏠', '📋', '✅', '🎉', '📞', '💰', '🔑', '📄', '⏳'].map((emoji) => (
+                  <TouchableOpacity
+                    key={emoji}
+                    style={aiRewriteStyles.emojiButton}
+                    onPress={() => {
+                      setPartnerUpdateMessage((prev) => {
+                        const pos = partnerCursorPos;
+                        const newText = prev.slice(0, pos) + emoji + prev.slice(pos);
+                        setPartnerCursorPos(pos + emoji.length);
+                        return newText;
+                      });
+                      if (rewrittenByAi) setRewrittenByAi(false);
+                    }}
+                  >
+                    <Text style={aiRewriteStyles.emojiText}>{emoji}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              
+              {rewrittenByAi && (
+                <View style={aiRewriteStyles.badge}>
+                  <Ionicons name="sparkles" size={12} color="#7C3AED" />
+                  <Text style={aiRewriteStyles.badgeText}>Rewritten by AI</Text>
+                </View>
+              )}
+              
+              {currentLOInfo?.aiDraftAccess && (
+                <View style={aiRewriteStyles.container}>
+                  <View style={aiRewriteStyles.rewriteRow}>
+                    <TouchableOpacity
+                      style={aiRewriteStyles.toneDropdown}
+                      onPress={() => setShowTonePicker(!showTonePicker)}
+                    >
+                      <Text style={aiRewriteStyles.toneDropdownText}>
+                        {aiTone.charAt(0).toUpperCase() + aiTone.slice(1)}
+                      </Text>
+                      <Text style={aiRewriteStyles.toneDropdownArrow}>{showTonePicker ? '▲' : '▼'}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        aiRewriteStyles.rewriteButton,
+                        (rewriting || !partnerUpdateMessage.trim() || partnerUpdateMessage.trim().length < 10) && aiRewriteStyles.rewriteButtonDisabled,
+                      ]}
+                      onPress={handleAiRewrite}
+                      disabled={rewriting || !partnerUpdateMessage.trim() || partnerUpdateMessage.trim().length < 10}
+                    >
+                      {rewriting ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <>
+                          <Text style={aiRewriteStyles.rewriteButtonIcon}>✨</Text>
+                          <Text style={aiRewriteStyles.rewriteButtonText}>AI Rewrite</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                  {showTonePicker && (
+                    <View style={aiRewriteStyles.tonePickerList}>
+                      {(['professional', 'friendly', 'concise', 'detailed', 'urgent'] as const).map((tone) => (
+                        <TouchableOpacity
+                          key={tone}
+                          style={[
+                            aiRewriteStyles.tonePickerItem,
+                            aiTone === tone && aiRewriteStyles.tonePickerItemActive,
+                          ]}
+                          onPress={() => {
+                            setAiTone(tone);
+                            setShowTonePicker(false);
+                          }}
+                        >
+                          <Text style={[
+                            aiRewriteStyles.tonePickerItemText,
+                            aiTone === tone && aiRewriteStyles.tonePickerItemTextActive,
+                          ]}>
+                            {tone.charAt(0).toUpperCase() + tone.slice(1)}
+                          </Text>
+                          {aiTone === tone && <Text style={aiRewriteStyles.tonePickerCheck}>✓</Text>}
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              )}
               
               <TouchableOpacity 
                 style={[
@@ -3717,6 +3880,112 @@ const partnerUpdateStyles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+});
+
+// Styles for AI Rewrite section
+const aiRewriteStyles = StyleSheet.create({
+  container: {
+    marginBottom: 16,
+  },
+  rewriteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  toneDropdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F3E8FF',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 20,
+  },
+  toneDropdownText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#7C3AED',
+  },
+  toneDropdownArrow: {
+    fontSize: 8,
+    color: '#7C3AED',
+  },
+  tonePickerList: {
+    marginTop: 8,
+    backgroundColor: '#F8F5FF',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  tonePickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  tonePickerItemActive: {
+    backgroundColor: '#EDE9FE',
+  },
+  tonePickerItemText: {
+    fontSize: 14,
+    color: '#4B5563',
+  },
+  tonePickerItemTextActive: {
+    color: '#7C3AED',
+    fontWeight: '600',
+  },
+  tonePickerCheck: {
+    fontSize: 14,
+    color: '#7C3AED',
+    fontWeight: '700',
+  },
+  rewriteButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#7C3AED',
+    paddingVertical: 9,
+    borderRadius: 20,
+  },
+  rewriteButtonDisabled: {
+    opacity: 0.4,
+  },
+  rewriteButtonIcon: {
+    fontSize: 14,
+  },
+  rewriteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 10,
+    marginTop: -8,
+  },
+  badgeText: {
+    fontSize: 12,
+    color: '#7C3AED',
+    fontWeight: '500',
+  },
+  emojiRow: {
+    marginBottom: 12,
+    marginTop: -8,
+  },
+  emojiRowContent: {
+    flexDirection: 'row',
+    gap: 2,
+  },
+  emojiButton: {
+    padding: 3,
+  },
+  emojiText: {
+    fontSize: 18,
   },
 });
 
