@@ -1,13 +1,13 @@
 # CloseWithMario Mobile - Codebase Summary
 
-**Last Updated:** February 25, 2026 at 1:00 PM EST  
+**Last Updated:** February 25, 2026 at 3:00 PM EST  
 **Platform:** iOS Mobile Application  
 **EAS Account:** mecerrato1  
 **Latest Build:** iOS Production Build 82 (v1.1.65, Feb 25, 2026)  
 **Major Refactor:** November 26, 2025 - Modular architecture with separated screens and styles  
 **Security Update:** November 29, 2025 - Face ID/Touch ID biometric authentication  
 **Architecture Update:** Post-Jan 2026 - Bottom tab navigation, Realtor CRM, Mortgage Calculator, Push Notifications  
-**Feature Update:** February 25, 2026 - Quick Capture (Quick Leads) feature with photo attachments, convert-to-lead, cross-tab navigation  
+**Feature Update:** February 25, 2026 - Quick Capture (Quick Leads) feature with photo attachments, convert-to-lead, cross-tab navigation, OCR image scanning via OpenAI Vision  
 **Bug Fix:** January 14, 2026 - Mortgage calculator Doc Stamps (Mortgage) now zeroes out for FLHFC DPA programs
 
 ---
@@ -99,10 +99,13 @@ closewithmario-mobile/
 │   │       │   └── quickCaptureService.ts  # Supabase CRUD, attachments, convert-to-lead
 │   │       ├── screens/
 │   │       │   ├── QuickCapturesListScreen.tsx  # Searchable list with status filters
-│   │       │   ├── AddQuickCaptureScreen.tsx    # Add form with photo attachments
+│   │       │   ├── AddQuickCaptureScreen.tsx    # Add form with photo attachments + OCR scan
 │   │       │   └── QuickCaptureDetailScreen.tsx # Detail/edit view with convert button
-│   │       └── components/
-│   │           └── SelectRealtorModal.tsx  # Realtor picker modal with search
+│   │       ├── components/
+│   │       │   ├── SelectRealtorModal.tsx  # Realtor picker modal with search
+│   │       │   └── QuickCaptureAttachmentStrip.tsx  # Horizontal photo thumbnail strip
+│   │       └── hooks/
+│   │           └── useQuickCaptureAttachments.ts  # Camera/library pick, compress, upload hook
 │   ├── hooks/                      # ✨ Custom React hooks
 │   │   ├── useAiLeadAttention.ts   # AI attention badge data hook
 │   │   └── useRealtors.ts          # Realtor list state, search, filters, refresh
@@ -1064,6 +1067,16 @@ Environment variables for Supabase connection.
     - `tracking_note` - User-added note for tracked leads
     - `tracking_note_updated_at` - Timestamp of last note update
 
+### Supabase Edge Functions
+12. **`ocr-extract-lead`** - AI-powered OCR for contact extraction
+    - Receives base64-encoded image + mime_type
+    - Calls **OpenAI GPT-4o Vision** API to extract contact info
+    - Returns structured JSON: `{ first_name, last_name, email, phone, notes }`
+    - Handles business cards, handwritten notes, screenshots, any document with contact info
+    - CORS headers for browser + mobile access
+    - JWT verification enabled (requires authenticated user)
+    - `OPENAI_API_KEY` stored as Edge Function secret
+
 ### Authentication
 - Uses Supabase Auth with email/password and Google OAuth
 - Session management handled by Supabase SDK
@@ -1149,7 +1162,7 @@ The codebase underwent a massive refactoring to improve maintainability, readabi
 
 ## 📅 Recent Changes (November 2025 - February 2026)
 
-### February 25, 2026 - Quick Capture (Quick Leads) Feature (v1.1.65, Build 82)
+### February 25, 2026 - Quick Capture + OCR Scanning (v1.1.65, Build 82)
 
 #### ⚡ Quick Capture Feature - Fast Lead Entry with Photo Attachments
 1. **Quick Capture CRUD** - Full create, read, update, delete for quick lead captures
@@ -1188,11 +1201,27 @@ The codebase underwent a massive refactoring to improve maintainability, readabi
 
 6. **Quick Capture Screens**
    - **`QuickCapturesListScreen`** - Searchable list with status filter chips (All/Open/Converted/Archived), color-coded status badges
-   - **`AddQuickCaptureScreen`** - Form with photo attachments, realtor picker, validation
+   - **`AddQuickCaptureScreen`** - Form with photo attachments, realtor picker, validation, OCR scan button
    - **`QuickCaptureDetailScreen`** - View/edit with KeyboardAvoidingView, convert/archive/delete actions
    - **`SelectRealtorModal`** - Searchable realtor picker with KeyboardAvoidingView and `keyboardShouldPersistTaps`
 
-7. **Quick Capture Service** (`quickCaptureService.ts`)
+8. **OCR Image Scanning (AI-Powered)**
+   - **"Scan to Fill" button** in Quick Capture header - prominent white pill on purple header
+   - Tapping opens action sheet: **Take Photo** or **Choose from Library**
+   - Image converted to base64 and sent to **Supabase Edge Function** (`ocr-extract-lead`)
+   - Edge function calls **OpenAI GPT-4o Vision** to extract contact info from business cards, handwritten notes, screenshots, etc.
+   - Returns structured JSON: `first_name`, `last_name`, `email`, `phone`, `notes`
+   - Auto-populates form fields with extracted data
+   - **Scanned image saved as attachment** on the quick capture for reference
+   - **Fun scanning overlay modal** with rotating humorous messages:
+     - "Reading that chicken scratch...", "Deciphering ancient handwriting...", "Squinting really hard at this...",
+       "Teaching AI to read your notes...", "Extracting lead intel...", "Translating pixels into profits...", etc.
+   - Messages rotate every 2.5 seconds during scan
+   - Full-screen overlay blocks UI so user clearly sees processing state
+   - `OPENAI_API_KEY` stored as Supabase Edge Function secret (not in code)
+   - Also available on the **web app** (`AddQuickLeadModal`) with browser file picker
+
+9. **Quick Capture Service** (`quickCaptureService.ts`)
    - `fetchQuickCaptures()` - List with optional status/query filters
    - `fetchQuickCapture()` - Single capture by ID
    - `createQuickCapture()` - Insert with auto `created_by_user_id`

@@ -13,8 +13,12 @@ import {
   ActivityIndicator,
   Alert,
   ActionSheetIOS,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
+import { supabase } from '../../../lib/supabase';
 import { createQuickCapture } from '../services/quickCaptureService';
 import { useQuickCaptureAttachments } from '../hooks/useQuickCaptureAttachments';
 import QuickCaptureAttachmentStrip from '../components/QuickCaptureAttachmentStrip';
@@ -41,7 +45,20 @@ export default function AddQuickCaptureScreen({
   const [realtorName, setRealtorName] = useState('');
   const [showRealtorPicker, setShowRealtorPicker] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanMessage, setScanMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  const scanMessages = [
+    'Reading that chicken scratch...',
+    'Deciphering ancient handwriting...',
+    'Squinting really hard at this...',
+    'Teaching AI to read your notes...',
+    'Extracting lead intel...',
+    'Almost got it, hold tight...',
+    'Translating pixels into profits...',
+    'Working harder than your last intern...',
+  ];
 
   const {
     localAttachments,
@@ -49,10 +66,111 @@ export default function AddQuickCaptureScreen({
     uploading,
     pickFromCamera,
     pickFromLibrary,
+    addLocalUri,
     uploadAll,
     removeLocal,
     removeUploaded,
   } = useQuickCaptureAttachments();
+
+  const handleScanImage = useCallback(async () => {
+    const pickImage = async (): Promise<string | null> => {
+      return new Promise((resolve) => {
+        const launchCamera = async () => {
+          const { status } = await ImagePicker.requestCameraPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert('Permission needed', 'Camera access is required to scan.');
+            resolve(null);
+            return;
+          }
+          const result = await ImagePicker.launchCameraAsync({
+            mediaTypes: ['images'],
+            quality: 0.8,
+          });
+          resolve(result.canceled ? null : result.assets[0].uri);
+        };
+
+        const launchLibrary = async () => {
+          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (status !== 'granted') {
+            Alert.alert('Permission needed', 'Photo library access is required to scan.');
+            resolve(null);
+            return;
+          }
+          const result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            quality: 0.8,
+          });
+          resolve(result.canceled ? null : result.assets[0].uri);
+        };
+
+        if (Platform.OS === 'ios') {
+          ActionSheetIOS.showActionSheetWithOptions(
+            {
+              options: ['Cancel', 'Take Photo', 'Choose from Library'],
+              cancelButtonIndex: 0,
+            },
+            (buttonIndex) => {
+              if (buttonIndex === 1) launchCamera();
+              else if (buttonIndex === 2) launchLibrary();
+              else resolve(null);
+            }
+          );
+        } else {
+          Alert.alert('Scan Image', 'Choose an option', [
+            { text: 'Take Photo', onPress: () => launchCamera() },
+            { text: 'Choose from Library', onPress: () => launchLibrary() },
+            { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+          ]);
+        }
+      });
+    };
+
+    const uri = await pickImage();
+    if (!uri) return;
+
+    setScanning(true);
+    setError(null);
+    setScanMessage(scanMessages[Math.floor(Math.random() * scanMessages.length)]);
+
+    const messageInterval = setInterval(() => {
+      setScanMessage((prev) => {
+        const remaining = scanMessages.filter((m) => m !== prev);
+        return remaining[Math.floor(Math.random() * remaining.length)];
+      });
+    }, 2500);
+
+    try {
+      const base64 = await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+
+      const { data, error: fnError } = await supabase.functions.invoke('ocr-extract-lead', {
+        body: { image_base64: base64, mime_type: 'image/jpeg' },
+      });
+
+      if (fnError) throw fnError;
+      if (data?.error) throw new Error(data.error);
+
+      if (data.first_name) setFirstName(data.first_name);
+      if (data.last_name) setLastName(data.last_name);
+      if (data.email) setEmail(data.email);
+      if (data.phone) {
+        const digits = data.phone.replace(/\D/g, '').slice(0, 10);
+        setPhone(digits);
+      }
+      if (data.notes) setNotes((prev) => (prev ? `${prev}\n${data.notes}` : data.notes));
+
+      await addLocalUri(uri);
+
+      Alert.alert('Scan Complete', 'Fields have been populated. Please review before saving.');
+    } catch (err: any) {
+      console.error('[OCR scan] error:', err);
+      setError(err?.message || 'Failed to scan image');
+    } finally {
+      clearInterval(messageInterval);
+      setScanning(false);
+    }
+  }, []);
 
   const formatPhoneDisplay = (value: string): string => {
     const digits = value.replace(/\D/g, '').slice(0, 10);
@@ -152,13 +270,37 @@ export default function AddQuickCaptureScreen({
 
   return (
     <View style={styles.container}>
+      {/* Scanning Overlay */}
+      <Modal visible={scanning} transparent animationType="fade">
+        <View style={styles.scanOverlay}>
+          <View style={styles.scanCard}>
+            <ActivityIndicator size="large" color="#7C3AED" />
+            <Text style={styles.scanCardTitle}>Scanning Image</Text>
+            <Text style={styles.scanCardMessage}>{scanMessage}</Text>
+          </View>
+        </View>
+      </Modal>
+
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Quick Capture</Text>
-        <View style={styles.backBtn} />
+        <TouchableOpacity
+          onPress={handleScanImage}
+          disabled={scanning}
+          style={styles.scanBtn}
+        >
+          {scanning ? (
+            <ActivityIndicator size="small" color="#7C3AED" />
+          ) : (
+            <Ionicons name="camera-outline" size={18} color="#7C3AED" />
+          )}
+          <Text style={styles.scanBtnText}>
+            {scanning ? 'Scanning...' : 'Scan to Fill'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView
@@ -345,6 +487,52 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  scanBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 20,
+  },
+  scanBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#7C3AED',
+  },
+  scanOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  scanCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 32,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 300,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  scanCardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+    marginTop: 16,
+  },
+  scanCardMessage: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginTop: 8,
+    textAlign: 'center',
   },
   headerTitle: {
     fontSize: 20,

@@ -19,6 +19,7 @@ interface UseQuickCaptureAttachmentsResult {
   uploading: boolean;
   pickFromCamera: () => Promise<void>;
   pickFromLibrary: () => Promise<void>;
+  addLocalUri: (uri: string) => Promise<void>;
   uploadAll: (quickCaptureId: string) => Promise<QuickCaptureAttachment[]>;
   removeLocal: (index: number) => void;
   removeUploaded: (attachment: QuickCaptureAttachment) => Promise<void>;
@@ -89,6 +90,22 @@ export function useQuickCaptureAttachments(): UseQuickCaptureAttachmentsResult {
         console.error('[attachments] compress error:', err);
         Alert.alert('Error', 'Failed to process image. Please try again.');
       }
+    }
+  }, []);
+
+  const addLocalUri = useCallback(async (uri: string) => {
+    try {
+      const compressed = await compressImage(uri);
+      setLocalAttachments((prev) => [
+        ...prev,
+        {
+          localUri: compressed.uri,
+          width: compressed.width,
+          height: compressed.height,
+        },
+      ]);
+    } catch (err) {
+      console.error('[attachments] compress error:', err);
     }
   }, []);
 
@@ -197,6 +214,7 @@ export function useQuickCaptureAttachments(): UseQuickCaptureAttachmentsResult {
     uploading,
     pickFromCamera,
     pickFromLibrary,
+    addLocalUri,
     uploadAll,
     removeLocal,
     removeUploaded,
