@@ -3034,7 +3034,7 @@ export function LeadDetailView({
                 </ScrollView>
               </>
             ) : (
-              <ScrollView style={{ maxHeight: 500 }} contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
+              <ScrollView style={{ maxHeight: 600 }} contentContainerStyle={{ paddingBottom: 30 }} showsVerticalScrollIndicator={true}>
                 <TouchableOpacity
                   style={styles.backToTemplatesButton}
                   onPress={() => {
