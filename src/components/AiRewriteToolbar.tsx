@@ -201,6 +201,7 @@ export const AiRewriteToolbar = forwardRef<AiRewriteToolbarRef, AiRewriteToolbar
 
 const s = StyleSheet.create({
   container: {
+    marginTop: 12,
     marginBottom: 16,
   },
   rewriteRow: {
@@ -281,7 +282,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     marginBottom: 10,
-    marginTop: -8,
+    marginTop: 4,
   },
   badgeText: {
     fontSize: 12,
