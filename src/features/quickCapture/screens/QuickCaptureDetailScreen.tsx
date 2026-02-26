@@ -57,6 +57,7 @@ export default function QuickCaptureDetailScreen({
   const [realtorId, setRealtorId] = useState<string | null>(null);
   const [realtorName, setRealtorName] = useState('');
   const [showRealtorPicker, setShowRealtorPicker] = useState(false);
+  const [loanType, setLoanType] = useState<'purchase' | 'refinance' | null>(null);
 
   const {
     localAttachments,
@@ -87,6 +88,7 @@ export default function QuickCaptureDetailScreen({
       setEmail(c.email || '');
       setNotes(c.notes || '');
       setRealtorId(c.realtor_id);
+      setLoanType(c.loan_type ?? null);
       setRealtorName(
         c.realtor_first_name || c.realtor_last_name
           ? `${c.realtor_first_name || ''} ${c.realtor_last_name || ''}`.trim()
@@ -139,6 +141,7 @@ export default function QuickCaptureDetailScreen({
         email: email.trim().toLowerCase() || null,
         notes: notes.trim() || null,
         realtor_id: realtorId || null,
+        loan_type: loanType,
       });
 
       if (error) {
@@ -411,6 +414,24 @@ export default function QuickCaptureDetailScreen({
               />
             </View>
             <View style={styles.field}>
+              <Text style={styles.fieldLabel}>Loan Type</Text>
+              <View style={styles.segmentedRow}>
+                {([null, 'purchase', 'refinance'] as const).map((val) => {
+                  const label = val === null ? 'Not Set' : val === 'purchase' ? 'Purchase' : 'Refinance';
+                  const active = loanType === val;
+                  return (
+                    <TouchableOpacity
+                      key={label}
+                      style={[styles.segmentedBtn, active && styles.segmentedBtnActive]}
+                      onPress={() => setLoanType(val)}
+                    >
+                      <Text style={[styles.segmentedText, active && styles.segmentedTextActive]}>{label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+            <View style={styles.field}>
               <Text style={styles.fieldLabel}>Link Realtor</Text>
               <TouchableOpacity
                 style={styles.pickerRow}
@@ -485,6 +506,19 @@ export default function QuickCaptureDetailScreen({
                     </TouchableOpacity>
                   ) : (
                     <Text style={styles.infoEmpty}>Not provided</Text>
+                  )}
+                </View>
+              </View>
+              <View style={styles.infoRow}>
+                <Ionicons name="home-outline" size={18} color="#7C3AED" />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.infoLabel}>Loan Type</Text>
+                  {capture.loan_type ? (
+                    <Text style={styles.infoValue}>
+                      {capture.loan_type === 'purchase' ? 'Purchase' : 'Refinance'}
+                    </Text>
+                  ) : (
+                    <Text style={styles.infoEmpty}>Not set</Text>
                   )}
                 </View>
               </View>
@@ -606,6 +640,7 @@ export default function QuickCaptureDetailScreen({
                 setEmail(capture.email || '');
                 setNotes(capture.notes || '');
                 setRealtorId(capture.realtor_id);
+                setLoanType(capture.loan_type ?? null);
               }
             }}
           >
@@ -755,6 +790,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     gap: 10,
+  },
+  segmentedRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  segmentedBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+  },
+  segmentedBtnActive: {
+    backgroundColor: '#7C3AED',
+    borderColor: '#7C3AED',
+  },
+  segmentedText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  segmentedTextActive: {
+    color: '#FFFFFF',
   },
   pickerText: {
     flex: 1,
