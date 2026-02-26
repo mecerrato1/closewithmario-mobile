@@ -29,6 +29,7 @@ export async function createQuickCapture(
         phone: data.phone || null,
         realtor_id: data.realtor_id || null,
         notes: data.notes || null,
+        loan_type: data.loan_type || null,
       })
       .select()
       .single();
@@ -105,6 +106,7 @@ export async function listQuickCaptures(
       phone: row.phone,
       realtor_id: row.realtor_id,
       notes: row.notes,
+      loan_type: row.loan_type ?? null,
       status: row.status,
       converted_lead_id: row.converted_lead_id,
       last_touched_at: row.last_touched_at,
@@ -176,7 +178,7 @@ export async function convertQuickCaptureToLead(
       source_detail: captureId,
       status: 'new',
       lo_id: loId,
-      loan_purpose: 'Home Buying',
+      loan_purpose: capture.loan_type === 'refinance' ? 'Mortgage Refinance' : 'Home Buying',
     };
 
     const { data: lead, error: insertError } = await supabase

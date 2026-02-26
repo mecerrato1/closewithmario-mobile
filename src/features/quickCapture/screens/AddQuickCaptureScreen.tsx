@@ -44,6 +44,7 @@ export default function AddQuickCaptureScreen({
   const [realtorId, setRealtorId] = useState<string | null>(null);
   const [realtorName, setRealtorName] = useState('');
   const [showRealtorPicker, setShowRealtorPicker] = useState(false);
+  const [loanType, setLoanType] = useState<'purchase' | 'refinance' | null>(null);
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState('');
@@ -159,6 +160,7 @@ export default function AddQuickCaptureScreen({
         setPhone(digits);
       }
       if (data.notes) setNotes((prev) => (prev ? `${prev}\n${data.notes}` : data.notes));
+      if (data.loan_type === 'purchase' || data.loan_type === 'refinance') setLoanType(data.loan_type);
 
       await addLocalUri(uri);
 
@@ -229,6 +231,7 @@ export default function AddQuickCaptureScreen({
         email: email.trim().toLowerCase() || null,
         realtor_id: realtorId || null,
         notes: notes.trim() || null,
+        loan_type: loanType,
       };
 
       const { data: capture, error: createError } = await createQuickCapture(payload);
@@ -374,6 +377,26 @@ export default function AddQuickCaptureScreen({
               autoCapitalize="none"
               autoCorrect={false}
             />
+          </View>
+
+          {/* Loan Type */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Loan Type</Text>
+            <View style={styles.segmentedRow}>
+              {([null, 'purchase', 'refinance'] as const).map((val) => {
+                const label = val === null ? 'Not Set' : val === 'purchase' ? 'Purchase' : 'Refinance';
+                const active = loanType === val;
+                return (
+                  <TouchableOpacity
+                    key={label}
+                    style={[styles.segmentedBtn, active && styles.segmentedBtnActive]}
+                    onPress={() => setLoanType(val)}
+                  >
+                    <Text style={[styles.segmentedText, active && styles.segmentedTextActive]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
 
           {/* Realtor Link */}
@@ -594,6 +617,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     gap: 10,
+  },
+  segmentedRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  segmentedBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+  },
+  segmentedBtnActive: {
+    backgroundColor: '#7C3AED',
+    borderColor: '#7C3AED',
+  },
+  segmentedText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  segmentedTextActive: {
+    color: '#FFFFFF',
   },
   pickerText: {
     flex: 1,

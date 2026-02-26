@@ -12,6 +12,7 @@ export interface QuickCapture {
   phone: string | null;
   realtor_id: string | null;
   notes: string | null;
+  loan_type: 'purchase' | 'refinance' | null;
   status: QuickCaptureStatus;
   converted_lead_id: string | null;
   last_touched_at: string;
@@ -40,6 +41,7 @@ export interface CreateQuickCapturePayload {
   phone?: string | null;
   realtor_id?: string | null;
   notes?: string | null;
+  loan_type?: 'purchase' | 'refinance' | null;
 }
 
 export interface UpdateQuickCapturePayload {
@@ -49,6 +51,7 @@ export interface UpdateQuickCapturePayload {
   phone?: string | null;
   realtor_id?: string | null;
   notes?: string | null;
+  loan_type?: 'purchase' | 'refinance' | null;
   status?: QuickCaptureStatus;
   converted_lead_id?: string | null;
   last_touched_at?: string;
