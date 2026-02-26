@@ -3327,9 +3327,9 @@ export function LeadDetailView({
         <TouchableOpacity 
           style={partnerUpdateStyles.modalOverlay} 
           activeOpacity={1}
-          onPress={() => setShowPartnerUpdateModal(false)}
+          onPress={() => { Keyboard.dismiss(); setShowPartnerUpdateModal(false); }}
         >
-          <TouchableWithoutFeedback onPress={() => {}}>
+          <TouchableWithoutFeedback onPress={() => Keyboard.dismiss()}>
             <View style={[partnerUpdateStyles.modalContent, { backgroundColor: colors.cardBackground }]}>
               <View style={partnerUpdateStyles.modalHeader}>
                 <Text style={[partnerUpdateStyles.modalTitle, { color: colors.textPrimary }]}>
