@@ -141,6 +141,8 @@ export function LeadDetailView({
   const [rewrittenByAi, setRewrittenByAi] = useState(false);
   const [partnerCursorPos, setPartnerCursorPos] = useState<number>(0);
   const [showTonePicker, setShowTonePicker] = useState(false);
+  const [refineInput, setRefineInput] = useState('');
+  const [refining, setRefining] = useState(false);
   
   // Voice notes state (expo-av)
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -397,6 +399,8 @@ export function LeadDetailView({
         Alert.alert('Success', 'Partner update sent successfully!');
         setShowPartnerUpdateModal(false);
         setPartnerUpdateMessage('');
+        setRewrittenByAi(false);
+        setRefineInput('');
       } else {
         const errorText = await response.text().catch(() => '');
         console.error('📧 Partner update error response:', errorText);
@@ -419,6 +423,63 @@ export function LeadDetailView({
     }
   };
 
+  // Shared helper for AI rewrite/refine API calls with retry-on-401
+  const callRewriteApi = async (body: Record<string, string>): Promise<string | null> => {
+    const API_BASE_URL = 'https://www.closewithmario.com';
+
+    const doFetch = async (token: string) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const response = await fetch(`${API_BASE_URL}/api/ai/rewrite-text`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      return response;
+    };
+
+    let { data: { session: currentSession } } = await supabase.auth.getSession();
+    if (!currentSession?.access_token) {
+      Alert.alert('Error', 'Not authenticated. Please sign in again.');
+      return null;
+    }
+
+    let response = await doFetch(currentSession.access_token);
+
+    // Retry once on 401 after refreshing session
+    if (response.status === 401) {
+      const { data: { session: refreshed } } = await supabase.auth.refreshSession();
+      if (!refreshed?.access_token) {
+        Alert.alert('Error', 'Session expired. Please sign in again.');
+        return null;
+      }
+      response = await doFetch(refreshed.access_token);
+    }
+
+    if (response.status === 403) {
+      Alert.alert('Access Denied', 'AI rewrite access is not enabled for your account.');
+      return null;
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      let errorMessage = 'Failed to rewrite text';
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.error || errorMessage;
+      } catch {}
+      throw new Error(errorMessage);
+    }
+
+    const data = await response.json();
+    return data.rewrittenText || null;
+  };
+
   // Handle AI Rewrite
   const handleAiRewrite = async () => {
     if (!partnerUpdateMessage.trim() || partnerUpdateMessage.trim().length < 10) {
@@ -428,51 +489,15 @@ export function LeadDetailView({
     
     setRewriting(true);
     try {
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      if (!currentSession?.access_token) {
-        Alert.alert('Error', 'Not authenticated. Please sign in again.');
-        return;
-      }
-      
-      const API_BASE_URL = 'https://www.closewithmario.com';
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
-      
-      const response = await fetch(`${API_BASE_URL}/api/ai/rewrite-text`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentSession.access_token}`,
-        },
-        body: JSON.stringify({
-          text: partnerUpdateMessage.trim(),
-          tone: aiTone,
-          context: 'partner_update',
-        }),
-        signal: controller.signal,
+      const result = await callRewriteApi({
+        text: partnerUpdateMessage.trim(),
+        tone: aiTone,
+        context: 'partner_update',
       });
-      
-      clearTimeout(timeoutId);
-      
-      if (response.status === 403) {
-        Alert.alert('Access Denied', 'AI rewrite access is not enabled for your account.');
-        return;
-      }
-      
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => '');
-        let errorMessage = 'Failed to rewrite text';
-        try {
-          const errorData = JSON.parse(errorText);
-          errorMessage = errorData.error || errorMessage;
-        } catch {}
-        throw new Error(errorMessage);
-      }
-      
-      const data = await response.json();
-      if (data.rewrittenText) {
-        setPartnerUpdateMessage(data.rewrittenText);
+      if (result) {
+        setPartnerUpdateMessage(result);
         setRewrittenByAi(true);
+        setRefineInput('');
       }
     } catch (error: any) {
       if (error.name === 'AbortError') {
@@ -482,6 +507,34 @@ export function LeadDetailView({
       }
     } finally {
       setRewriting(false);
+    }
+  };
+
+  // Handle AI Refine
+  const handleAiRefine = async () => {
+    if (!refineInput.trim() || !partnerUpdateMessage.trim()) return;
+
+    setRefining(true);
+    try {
+      const result = await callRewriteApi({
+        text: partnerUpdateMessage.trim(),
+        tone: aiTone,
+        context: 'partner_update',
+        refinement: refineInput.trim(),
+      });
+      if (result) {
+        setPartnerUpdateMessage(result);
+        setRefineInput('');
+        setRewrittenByAi(true);
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        Alert.alert('Timeout', 'Request timed out. Please try again.');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to refine text');
+      }
+    } finally {
+      setRefining(false);
     }
   };
 
@@ -3355,7 +3408,10 @@ export function LeadDetailView({
                 value={partnerUpdateMessage}
                 onChangeText={(text) => {
                   setPartnerUpdateMessage(text);
-                  if (rewrittenByAi) setRewrittenByAi(false);
+                  if (rewrittenByAi) {
+                    setRewrittenByAi(false);
+                    setRefineInput('');
+                  }
                 }}
                 onSelectionChange={(e) => setPartnerCursorPos(e.nativeEvent.selection.end)}
                 multiline
@@ -3445,6 +3501,39 @@ export function LeadDetailView({
                       ))}
                     </View>
                   )}
+                </View>
+              )}
+
+              {rewrittenByAi && currentLOInfo?.aiDraftAccess && (
+                <View style={aiRewriteStyles.refineContainer}>
+                  <View style={aiRewriteStyles.refineRow}>
+                    <TextInput
+                      style={aiRewriteStyles.refineInput}
+                      placeholder='e.g. "make it more urgent"'
+                      placeholderTextColor="#A78BFA"
+                      value={refineInput}
+                      onChangeText={setRefineInput}
+                      onSubmitEditing={handleAiRefine}
+                      returnKeyType="send"
+                    />
+                    <TouchableOpacity
+                      style={[
+                        aiRewriteStyles.refineButton,
+                        (refining || !refineInput.trim()) && aiRewriteStyles.rewriteButtonDisabled,
+                      ]}
+                      onPress={handleAiRefine}
+                      disabled={refining || !refineInput.trim()}
+                    >
+                      {refining ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <>
+                          <Text style={aiRewriteStyles.rewriteButtonIcon}>💬</Text>
+                          <Text style={aiRewriteStyles.rewriteButtonText}>Refine</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
                 </View>
               )}
               
@@ -3972,6 +4061,34 @@ const aiRewriteStyles = StyleSheet.create({
     fontSize: 12,
     color: '#7C3AED',
     fontWeight: '500',
+  },
+  refineContainer: {
+    marginBottom: 12,
+  },
+  refineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  refineInput: {
+    flex: 1,
+    backgroundColor: '#F5F0FF',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: '#4B5563',
+    borderWidth: 1,
+    borderColor: '#E9D5FF',
+  },
+  refineButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#8B5CF6',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 20,
   },
   emojiRow: {
     marginBottom: 12,
