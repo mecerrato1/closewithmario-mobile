@@ -1,5 +1,5 @@
 // src/screens/realtors/RealtorDetailScreen.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -48,6 +48,7 @@ import {
 import { LanguageCode } from '../../lib/types/realtors';
 import RealtorStageBadge from '../../components/realtors/RealtorStageBadge';
 import { saveContact } from '../../utils/vcard';
+import { AiRewriteToolbar, AiRewriteToolbarRef } from '../../components/AiRewriteToolbar';
 import { 
   pickProfileImage, 
   requestMediaLibraryPermission, 
@@ -61,7 +62,7 @@ interface RealtorDetailScreenProps {
   onBack: () => void;
   onUpdate: () => void;
   onLeadSelect?: (leadId: string, source: 'lead' | 'meta') => void;
-  currentLOInfo?: { firstName: string; lastName: string; phone: string; email: string } | null;
+  currentLOInfo?: { firstName: string; lastName: string; phone: string; email: string; aiDraftAccess?: boolean } | null;
 }
 
 const STAGES: RelationshipStage[] = ['hot', 'warm', 'cold'];
@@ -126,6 +127,7 @@ export default function RealtorDetailScreen({
   const [useSpanishTemplates, setUseSpanishTemplates] = useState(false);
   const [showCustomMessage, setShowCustomMessage] = useState(false);
   const [customMessageText, setCustomMessageText] = useState('');
+  const customMsgAiRef = useRef<AiRewriteToolbarRef>(null);
 
   const fullName = getRealtorFullName(realtor);
   const initials = getRealtorInitials(realtor);
@@ -852,7 +854,7 @@ export default function RealtorDetailScreen({
                 </>
               ) : (
                 /* Custom Message Input - matches Lead Detail style */
-                <ScrollView style={{ maxHeight: 500 }} contentContainerStyle={{ paddingBottom: 20 }} showsVerticalScrollIndicator={false}>
+                <ScrollView style={{ maxHeight: 600 }} contentContainerStyle={{ paddingBottom: 30 }} showsVerticalScrollIndicator={true}>
                   <TouchableOpacity
                     style={styles.backToTemplatesButton}
                     onPress={() => {
@@ -874,9 +876,20 @@ export default function RealtorDetailScreen({
                     placeholder={useSpanishTemplates ? "Escribe tu mensaje aquí..." : "Type your message here..."}
                     placeholderTextColor="#999"
                     value={customMessageText}
-                    onChangeText={setCustomMessageText}
+                    onChangeText={(text) => {
+                      setCustomMessageText(text);
+                      customMsgAiRef.current?.resetBadge();
+                    }}
                     multiline
                     autoFocus
+                  />
+
+                  <AiRewriteToolbar
+                    ref={customMsgAiRef}
+                    text={customMessageText}
+                    onTextRewritten={setCustomMessageText}
+                    context="realtor_message"
+                    hasAccess={!!currentLOInfo?.aiDraftAccess}
                   />
 
                   <Text style={[styles.customMessagePreview, { color: colors.textPrimary }]}>

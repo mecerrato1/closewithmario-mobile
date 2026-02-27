@@ -23,7 +23,7 @@ interface RealtorsTabScreenProps {
 export default function RealtorsTabScreen({ session, onClose, onNavigateToLead }: RealtorsTabScreenProps) {
   const [screenState, setScreenState] = useState<ScreenState>({ screen: 'list' });
   const [refreshKey, setRefreshKey] = useState(0);
-  const [currentLOInfo, setCurrentLOInfo] = useState<{ firstName: string; lastName: string; phone: string; email: string } | null>(null);
+  const [currentLOInfo, setCurrentLOInfo] = useState<{ firstName: string; lastName: string; phone: string; email: string; aiDraftAccess?: boolean } | null>(null);
 
   const userId = session?.user?.id;
 
@@ -34,8 +34,8 @@ export default function RealtorsTabScreen({ session, onClose, onNavigateToLead }
       
       try {
         // Hardcoded super admin contacts (same as LeadDetailScreen)
-        const superAdminContacts: Record<string, { firstName: string; lastName: string; phone: string; email: string }> = {
-          'mcerrato@loandepot.com': { firstName: 'Mario', lastName: 'Cerrato', phone: '3052192788', email: 'mcerrato@loandepot.com' },
+        const superAdminContacts: Record<string, { firstName: string; lastName: string; phone: string; email: string; aiDraftAccess: boolean }> = {
+          'mcerrato@loandepot.com': { firstName: 'Mario', lastName: 'Cerrato', phone: '3052192788', email: 'mcerrato@loandepot.com', aiDraftAccess: true },
         };
         
         const emailLower = session.user.email.toLowerCase();
@@ -64,7 +64,7 @@ export default function RealtorsTabScreen({ session, onClose, onNavigateToLead }
         if (memberId) {
           const { data, error } = await supabase
             .from('loan_officers')
-            .select('first_name, last_name, phone, email')
+            .select('first_name, last_name, phone, email, ai_draft_access')
             .eq('id', memberId)
             .single();
           
@@ -74,6 +74,7 @@ export default function RealtorsTabScreen({ session, onClose, onNavigateToLead }
               lastName: data.last_name || '',
               phone: data.phone || '',
               email: data.email || '',
+              aiDraftAccess: !!(data as any).ai_draft_access,
             });
           }
         }
