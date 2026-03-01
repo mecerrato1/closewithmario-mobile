@@ -15,6 +15,7 @@ export interface QuickCapture {
   loan_type: 'purchase' | 'refinance' | null;
   status: QuickCaptureStatus;
   converted_lead_id: string | null;
+  converted_meta_ad_id: string | null;
   last_touched_at: string;
   // Joined fields (optional, from realtor)
   realtor_first_name?: string | null;
@@ -54,6 +55,7 @@ export interface UpdateQuickCapturePayload {
   loan_type?: 'purchase' | 'refinance' | null;
   status?: QuickCaptureStatus;
   converted_lead_id?: string | null;
+  converted_meta_ad_id?: string | null;
   last_touched_at?: string;
 }
 

@@ -2451,6 +2451,29 @@ export function LeadDetailView({
 
           {isMeta && (
             <>
+              {(record as MetaLead).source_detail && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((record as MetaLead).source_detail!) && onNavigateToCapture && (
+                <TouchableOpacity
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    backgroundColor: '#F5F3FF',
+                    paddingHorizontal: 14,
+                    paddingVertical: 10,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: '#DDD6FE',
+                    marginBottom: 8,
+                  }}
+                  onPress={() => onNavigateToCapture((record as MetaLead).source_detail!)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="camera-outline" size={18} color="#7C3AED" style={{ marginRight: 8 }} />
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#7C3AED', flex: 1 }}>
+                    View Quick Capture & Photos
+                  </Text>
+                  <Ionicons name="chevron-forward" size={16} color="#7C3AED" />
+                </TouchableOpacity>
+              )}
               {(record as MetaLead).platform && (
                 <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Platform: <Text style={{ fontWeight: '700' }}>{(() => {
@@ -2488,6 +2511,11 @@ export function LeadDetailView({
               {(record as MetaLead).subject_address && (
                 <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Address: {(record as MetaLead).subject_address}
+                </Text>
+              )}
+              {(record as MetaLead).loan_purpose && (
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
+                  Loan Purpose: {(record as MetaLead).loan_purpose}
                 </Text>
               )}
               {(record as MetaLead).preferred_language && (

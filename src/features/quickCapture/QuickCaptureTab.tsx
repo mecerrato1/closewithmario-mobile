@@ -18,6 +18,7 @@ interface QuickCaptureTabProps {
   userId: string;
   onBack: () => void;
   onRealtorPress?: (realtorId: string) => void;
+  onNavigateToLead?: (leadId: string, source: 'lead' | 'meta') => void;
   startOnAdd?: boolean;
   initialCaptureId?: string | null;
   onInitialCaptureHandled?: () => void;
@@ -27,6 +28,7 @@ export default function QuickCaptureTab({
   userId,
   onBack,
   onRealtorPress,
+  onNavigateToLead,
   startOnAdd = false,
   initialCaptureId,
   onInitialCaptureHandled,
@@ -83,6 +85,7 @@ export default function QuickCaptureTab({
         onBack={handleBack}
         onUpdate={handleUpdate}
         onRealtorPress={onRealtorPress}
+        onNavigateToLead={onNavigateToLead}
       />
     );
   }

@@ -98,6 +98,7 @@ export default function AuthenticatedRoot({
           <QuickCaptureTab
             userId={session?.user?.id || ''}
             onBack={handleNavigateToDashboard}
+            onNavigateToLead={handleNavigateToLead}
             initialCaptureId={pendingCaptureId}
             onInitialCaptureHandled={handlePendingCaptureHandled}
           />

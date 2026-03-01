@@ -109,6 +109,7 @@ export async function listQuickCaptures(
       loan_type: row.loan_type ?? null,
       status: row.status,
       converted_lead_id: row.converted_lead_id,
+      converted_meta_ad_id: row.converted_meta_ad_id ?? null,
       last_touched_at: row.last_touched_at,
       realtor_first_name: row.realtors?.first_name || null,
       realtor_last_name: row.realtors?.last_name || null,
@@ -178,7 +179,7 @@ export async function convertQuickCaptureToLead(
       source_detail: captureId,
       status: 'new',
       lo_id: loId,
-      loan_purpose: capture.loan_type === 'refinance' ? 'Mortgage Refinance' : 'Home Buying',
+      loan_purpose: capture.loan_type === 'refinance' ? 'Refinance' : 'Purchase',
     };
 
     const { data: lead, error: insertError } = await supabase

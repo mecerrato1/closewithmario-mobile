@@ -14,6 +14,8 @@ import {
   ActionSheetIOS,
   Linking,
   KeyboardAvoidingView,
+  Modal,
+  FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -27,6 +29,8 @@ import { useQuickCaptureAttachments } from '../hooks/useQuickCaptureAttachments'
 import QuickCaptureAttachmentStrip from '../components/QuickCaptureAttachmentStrip';
 import SelectRealtorModal from '../components/SelectRealtorModal';
 import type { QuickCapture, QuickCaptureAttachment } from '../types';
+import { findMatchingLeads, searchLeads, mergeIntoExistingLead, type MatchedLead } from '../services/leadMatchService';
+import LeadMergeView from '../components/LeadMergeView';
 
 interface QuickCaptureDetailScreenProps {
   captureId: string;
@@ -34,6 +38,7 @@ interface QuickCaptureDetailScreenProps {
   onBack: () => void;
   onUpdate: () => void;
   onRealtorPress?: (realtorId: string) => void;
+  onNavigateToLead?: (leadId: string, source: 'lead' | 'meta') => void;
 }
 
 export default function QuickCaptureDetailScreen({
@@ -42,6 +47,7 @@ export default function QuickCaptureDetailScreen({
   onBack,
   onUpdate,
   onRealtorPress,
+  onNavigateToLead,
 }: QuickCaptureDetailScreenProps) {
   const [capture, setCapture] = useState<QuickCapture | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,6 +64,19 @@ export default function QuickCaptureDetailScreen({
   const [realtorName, setRealtorName] = useState('');
   const [showRealtorPicker, setShowRealtorPicker] = useState(false);
   const [loanType, setLoanType] = useState<'purchase' | 'refinance' | null>(null);
+
+  // Merge flow state
+  const [showMatchesModal, setShowMatchesModal] = useState(false);
+  const [matchedLeads, setMatchedLeads] = useState<MatchedLead[]>([]);
+  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
+  const [selectedMatch, setSelectedMatch] = useState<MatchedLead | null>(null);
+  const [showMergeView, setShowMergeView] = useState(false);
+  const [merging, setMerging] = useState(false);
+  // Link to existing lead (manual search)
+  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<MatchedLead[]>([]);
+  const [searching, setSearching] = useState(false);
 
   const {
     localAttachments,
@@ -189,7 +208,31 @@ export default function QuickCaptureDetailScreen({
     ]);
   };
 
-  const handleConvertToLead = () => {
+  const handleConvertToLead = async () => {
+    if (!capture) return;
+
+    // Check for duplicates first
+    setCheckingDuplicates(true);
+    const { matches, error: matchError } = await findMatchingLeads(capture);
+    setCheckingDuplicates(false);
+
+    if (matchError) {
+      console.error('[convert] duplicate check failed:', matchError);
+      // Fall through to normal convert if duplicate check fails
+    }
+
+    if (matches.length > 0) {
+      // Duplicates found — show options
+      setMatchedLeads(matches);
+      setShowMatchesModal(true);
+      return;
+    }
+
+    // No duplicates — proceed with normal convert
+    confirmCreateNewLead();
+  };
+
+  const confirmCreateNewLead = () => {
     if (!capture) return;
     const fullName = [capture.first_name, capture.last_name].filter(Boolean).join(' ');
     Alert.alert(
@@ -212,6 +255,47 @@ export default function QuickCaptureDetailScreen({
         },
       ]
     );
+  };
+
+  const handleSelectMatch = (match: MatchedLead) => {
+    setSelectedMatch(match);
+    setShowMatchesModal(false);
+    setShowSearchModal(false);
+    setShowMergeView(true);
+  };
+
+  const handleMerge = async (fieldsToUpdate: Record<string, any>) => {
+    if (!capture || !selectedMatch) return;
+    setMerging(true);
+    const { error } = await mergeIntoExistingLead(
+      captureId,
+      selectedMatch.id,
+      selectedMatch.source,
+      fieldsToUpdate
+    );
+    setMerging(false);
+
+    if (error) {
+      Alert.alert('Error', error.message);
+    } else {
+      setShowMergeView(false);
+      setSelectedMatch(null);
+      Alert.alert('Success', 'Lead updated and capture marked as converted!');
+      onUpdate();
+      await loadData();
+    }
+  };
+
+  const handleSearchLeads = async (query: string) => {
+    setSearchQuery(query);
+    if (query.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    setSearching(true);
+    const { results } = await searchLeads(query.trim());
+    setSearchResults(results);
+    setSearching(false);
   };
 
   const handleDelete = () => {
@@ -568,23 +652,55 @@ export default function QuickCaptureDetailScreen({
 
         {/* Converted banner */}
         {capture.status === 'converted' && (
-          <View style={styles.convertedBanner}>
+          <TouchableOpacity
+            style={styles.convertedBanner}
+            activeOpacity={onNavigateToLead && (capture.converted_lead_id || capture.converted_meta_ad_id) ? 0.7 : 1}
+            onPress={() => {
+              if (!onNavigateToLead) return;
+              if (capture.converted_lead_id) {
+                onNavigateToLead(capture.converted_lead_id, 'lead');
+              } else if (capture.converted_meta_ad_id) {
+                onNavigateToLead(capture.converted_meta_ad_id, 'meta');
+              }
+            }}
+          >
             <Ionicons name="checkmark-circle" size={20} color="#059669" />
-            <Text style={styles.convertedBannerText}>Converted to Lead</Text>
-          </View>
+            <Text style={[styles.convertedBannerText, { flex: 1 }]}>
+              {capture.converted_meta_ad_id ? 'Merged into Meta Ad Lead' : 'Converted to Lead'}
+            </Text>
+            {(capture.converted_lead_id || capture.converted_meta_ad_id) && onNavigateToLead && (
+              <Ionicons name="chevron-forward" size={16} color="#059669" />
+            )}
+          </TouchableOpacity>
         )}
 
         {/* Action buttons (non-edit mode) */}
         {!editing && (
           <View style={styles.actionsWrapper}>
             {capture.status !== 'converted' && (
-              <TouchableOpacity
-                style={[styles.convertBtn]}
-                onPress={handleConvertToLead}
-              >
-                <Ionicons name="arrow-forward-circle-outline" size={20} color="#FFFFFF" />
-                <Text style={styles.convertBtnText}>Convert to Lead</Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  style={[styles.convertBtn, checkingDuplicates && { opacity: 0.6 }]}
+                  onPress={handleConvertToLead}
+                  disabled={checkingDuplicates}
+                >
+                  {checkingDuplicates ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Ionicons name="arrow-forward-circle-outline" size={20} color="#FFFFFF" />
+                  )}
+                  <Text style={styles.convertBtnText}>
+                    {checkingDuplicates ? 'Checking...' : 'Convert to Lead'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.linkExistingBtn}
+                  onPress={() => setShowSearchModal(true)}
+                >
+                  <Ionicons name="link-outline" size={20} color="#7C3AED" />
+                  <Text style={styles.linkExistingBtnText}>Link to Existing Lead</Text>
+                </TouchableOpacity>
+              </>
             )}
             <View style={styles.actionsSection}>
               <TouchableOpacity
@@ -671,6 +787,183 @@ export default function QuickCaptureDetailScreen({
         onSelect={handleRealtorSelect}
         onClose={() => setShowRealtorPicker(false)}
       />
+
+      {/* Duplicate matches modal (shown on convert when matches found) */}
+      <Modal
+        visible={showMatchesModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowMatchesModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Existing Lead Found</Text>
+              <TouchableOpacity onPress={() => setShowMatchesModal(false)}>
+                <Ionicons name="close" size={22} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalSubtitle}>
+              Would you like to merge into the existing lead listed below?
+            </Text>
+            <FlatList
+              data={matchedLeads}
+              keyExtractor={(item) => `${item.source}_${item.id}`}
+              style={{ maxHeight: 400 }}
+              renderItem={({ item }) => {
+                const name = [item.first_name, item.last_name].filter(Boolean).join(' ') || 'Unknown';
+                const capPhone = capture?.phone ? capture.phone.replace(/\D/g, '').slice(-10) : '';
+                const matchPhone = item.phone ? item.phone.replace(/\D/g, '').slice(-10) : '';
+                const phoneMismatch = capPhone && matchPhone && capPhone !== matchPhone;
+                const emailMismatch = capture?.email && item.email &&
+                  capture.email.trim().toLowerCase() !== item.email.trim().toLowerCase();
+                const nameMismatch = capture &&
+                  ([capture.first_name, capture.last_name].filter(Boolean).join(' ').toLowerCase() !==
+                   [item.first_name, item.last_name].filter(Boolean).join(' ').toLowerCase());
+                const hasMismatch = phoneMismatch || emailMismatch || nameMismatch;
+                return (
+                  <TouchableOpacity
+                    style={[styles.matchRow, hasMismatch && styles.matchRowWarning]}
+                    onPress={() => handleSelectMatch(item)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.matchName}>{name}</Text>
+                      <Text style={styles.matchDetail}>
+                        {item.source === 'meta' ? 'Meta Ad' : 'Lead'} · {item.matchReason}
+                        {item.phone ? ` · ${item.phone}` : ''}
+                      </Text>
+                      {item.status && (
+                        <Text style={styles.matchStatus}>{item.status}</Text>
+                      )}
+                      {hasMismatch && (
+                        <View style={styles.mismatchBadge}>
+                          <Ionicons name="warning-outline" size={13} color="#D97706" />
+                          <Text style={styles.mismatchText}>
+                            {[
+                              phoneMismatch && `Phone: ${capture?.phone || '—'} vs ${item.phone || '—'}`,
+                              emailMismatch && `Email differs`,
+                              nameMismatch && `Name differs`,
+                            ].filter(Boolean).join(' · ')}
+                            {' — review before merging'}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                  </TouchableOpacity>
+                );
+              }}
+            />
+            <TouchableOpacity
+              style={styles.createNewBtn}
+              onPress={() => {
+                setShowMatchesModal(false);
+                confirmCreateNewLead();
+              }}
+            >
+              <Ionicons name="add-circle-outline" size={18} color="#10B981" />
+              <Text style={styles.createNewBtnText}>Create New Lead Instead</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Search modal (Link to Existing Lead) */}
+      <Modal
+        visible={showSearchModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setShowSearchModal(false);
+          setSearchQuery('');
+          setSearchResults([]);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Link to Existing Lead</Text>
+              <TouchableOpacity onPress={() => {
+                setShowSearchModal(false);
+                setSearchQuery('');
+                setSearchResults([]);
+              }}>
+                <Ionicons name="close" size={22} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalSubtitle}>
+              Search for an existing lead to merge this capture into.
+            </Text>
+            <View style={styles.searchInputWrapper}>
+              <Ionicons name="search" size={18} color="#9CA3AF" />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search by name, phone, or email..."
+                placeholderTextColor="#9CA3AF"
+                value={searchQuery}
+                onChangeText={handleSearchLeads}
+                autoFocus
+              />
+              {searching && <ActivityIndicator size="small" color="#7C3AED" />}
+            </View>
+            <FlatList
+              data={searchResults}
+              keyExtractor={(item) => `${item.source}_${item.id}`}
+              style={{ maxHeight: 350 }}
+              ListEmptyComponent={
+                searchQuery.length >= 2 && !searching ? (
+                  <Text style={styles.emptySearchText}>No leads found</Text>
+                ) : null
+              }
+              renderItem={({ item }) => {
+                const name = [item.first_name, item.last_name].filter(Boolean).join(' ') || 'Unknown';
+                return (
+                  <TouchableOpacity
+                    style={styles.matchRow}
+                    onPress={() => handleSelectMatch(item)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.matchName}>{name}</Text>
+                      <Text style={styles.matchDetail}>
+                        {item.source === 'meta' ? 'Meta Ad' : 'Lead'}
+                        {item.phone ? ` · ${item.phone}` : ''}
+                        {item.email ? ` · ${item.email}` : ''}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Merge view modal */}
+      <Modal
+        visible={showMergeView}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setShowMergeView(false);
+          setSelectedMatch(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          {capture && selectedMatch && (
+            <LeadMergeView
+              capture={capture}
+              existingLead={selectedMatch}
+              onMerge={handleMerge}
+              onCancel={() => {
+                setShowMergeView(false);
+                setSelectedMatch(null);
+              }}
+              merging={merging}
+            />
+          )}
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -968,5 +1261,141 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     color: '#FFFFFF',
+  },
+  // Link to Existing Lead button
+  linkExistingBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#7C3AED',
+    backgroundColor: '#F5F3FF',
+  },
+  linkExistingBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#7C3AED',
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 20,
+    maxHeight: '85%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: '#6B7280',
+    lineHeight: 18,
+    marginBottom: 16,
+  },
+  // Match row styles
+  matchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginBottom: 8,
+    backgroundColor: '#F9FAFB',
+  },
+  matchName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  matchDetail: {
+    fontSize: 12,
+    color: '#6B7280',
+  },
+  matchStatus: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#7C3AED',
+    marginTop: 2,
+  },
+  createNewBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    backgroundColor: '#ECFDF5',
+    marginTop: 8,
+  },
+  createNewBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#10B981',
+  },
+  // Search modal styles
+  searchInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+    backgroundColor: '#F9FAFB',
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1F2937',
+  },
+  matchRowWarning: {
+    borderColor: '#FBBF24',
+    backgroundColor: '#FFFBEB',
+  },
+  mismatchBadge: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 4,
+    marginTop: 6,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  mismatchText: {
+    fontSize: 11,
+    color: '#92400E',
+    flex: 1,
+    lineHeight: 15,
+  },
+  emptySearchText: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: '#9CA3AF',
+    paddingVertical: 20,
   },
 });

@@ -54,6 +54,8 @@ export type MetaLead = {
   down_payment_saved?: string | null;
   has_realtor?: boolean | null;
   additional_notes?: string | null;
+  source_detail?: string | null;
+  loan_purpose?: string | null;
   county_interest?: string | null;
   monthly_income?: string | null;
   meta_ad_notes?: string | null;
