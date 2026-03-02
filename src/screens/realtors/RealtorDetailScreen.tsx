@@ -70,13 +70,16 @@ const STAGES: RelationshipStage[] = ['hot', 'warm', 'cold'];
 // Lead status configuration for display
 const LEAD_STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
   new: { label: 'New', color: '#7C3AED', bgColor: '#EDE9FE' },
+  attempting_contact: { label: 'Attempting Contact', color: '#D97706', bgColor: '#FEF3C7' },
   contacted: { label: 'Contacted', color: '#3B82F6', bgColor: '#DBEAFE' },
-  no_response: { label: 'No Response', color: '#F59E0B', bgColor: '#FEF3C7' },
-  qualified: { label: 'Qualified', color: '#10B981', bgColor: '#D1FAE5' },
-  unqualified: { label: 'Unqualified', color: '#6B7280', bgColor: '#F3F4F6' },
+  gathering_docs: { label: 'Docs Requested', color: '#F97316', bgColor: '#FFEDD5' },
+  working_on_credit: { label: 'Working on Credit', color: '#DC2626', bgColor: '#FEE2E2' },
+  qualified: { label: 'Pre-Approved', color: '#10B981', bgColor: '#D1FAE5' },
+  in_process: { label: 'In Process', color: '#2563EB', bgColor: '#DBEAFE' },
   nurturing: { label: 'Nurturing', color: '#8B5CF6', bgColor: '#EDE9FE' },
-  gathering_docs: { label: 'Gathering Docs', color: '#F97316', bgColor: '#FFEDD5' },
   closed: { label: 'Closed', color: '#059669', bgColor: '#D1FAE5' },
+  unqualified: { label: 'Unqualified', color: '#6B7280', bgColor: '#F3F4F6' },
+  lost_deal: { label: 'Lost Deal', color: '#616161', bgColor: '#F5F5F5' },
 };
 
 const getLeadStatusDisplay = (status: string | null) => {

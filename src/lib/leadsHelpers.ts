@@ -4,37 +4,46 @@ import type { AttentionBadge } from './types/leads';
 // Status values must match database check constraint exactly
 export const STATUSES = [
   'new',
+  'attempting_contact',
   'contacted',
   'gathering_docs',
+  'working_on_credit',
   'qualified',
+  'in_process',
   'nurturing',
   'closed',
   'unqualified',
-  'no_response',
+  'lost_deal',
 ];
 
 // Map status to display names matching website
 export const STATUS_DISPLAY_MAP: Record<string, string> = {
   'new': 'New',
+  'attempting_contact': 'Attempting Contact',
   'contacted': 'Contacted',
   'gathering_docs': 'Docs Requested',
-  'qualified': 'Qualified',
+  'working_on_credit': 'Working on Credit',
+  'qualified': 'Pre-Approved',
+  'in_process': 'In Process',
   'nurturing': 'Nurturing',
   'closed': 'Closed',
   'unqualified': 'Unqualified',
-  'no_response': 'No Response',
+  'lost_deal': 'Lost Deal',
 };
 
 // Map status to colors for visual distinction
 export const STATUS_COLOR_MAP: Record<string, { bg: string; text: string; border: string }> = {
   'new': { bg: '#E3F2FD', text: '#1976D2', border: '#90CAF9' },
+  'attempting_contact': { bg: '#FEF3C7', text: '#D97706', border: '#FCD34D' },
   'contacted': { bg: '#FFF3E0', text: '#F57C00', border: '#FFB74D' },
   'gathering_docs': { bg: '#F3E5F5', text: '#7B1FA2', border: '#CE93D8' },
+  'working_on_credit': { bg: '#FEE2E2', text: '#DC2626', border: '#FCA5A5' },
   'qualified': { bg: '#D1FAE5', text: '#059669', border: '#10B981' },
+  'in_process': { bg: '#DBEAFE', text: '#2563EB', border: '#93C5FD' },
   'nurturing': { bg: '#FFF9C4', text: '#F9A825', border: '#FFF59D' },
   'closed': { bg: '#D1FAE5', text: '#047857', border: '#10B981' },
   'unqualified': { bg: '#FFEBEE', text: '#C62828', border: '#EF5350' },
-  'no_response': { bg: '#F5F5F5', text: '#616161', border: '#BDBDBD' },
+  'lost_deal': { bg: '#F5F5F5', text: '#616161', border: '#BDBDBD' },
 };
 
 // Attention badge logic (matches web implementation)
@@ -59,8 +68,8 @@ export function getLeadAlert(lead: { status: string | null; created_at: string; 
     }
   }
   
-  // Stale leads (>3 days since last contact, gathering_docs/no_response)
-  if (['gathering_docs', 'no_response'].includes(status)) {
+  // Stale leads (>3 days since last contact, gathering_docs/lost_deal)
+  if (['gathering_docs', 'lost_deal'].includes(status)) {
     const lastContact = lead.last_contact_date ? new Date(lead.last_contact_date) : createdAt;
     const daysSinceContact = (now.getTime() - lastContact.getTime()) / (1000 * 60 * 60 * 24);
     if (daysSinceContact > 3) {

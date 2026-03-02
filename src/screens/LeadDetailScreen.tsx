@@ -3423,7 +3423,7 @@ export function LeadDetailView({
             <View style={trackingInfoStyles.ruleRow}>
               <Text style={trackingInfoStyles.ruleIcon}>🔓</Text>
               <Text style={[trackingInfoStyles.ruleText, { color: colors.textPrimary }]}>
-                <Text style={{ fontWeight: '600' }}>Auto-untrack:</Text> When status is "Closed" or "Unqualified"
+                <Text style={{ fontWeight: '600' }}>Auto-untrack:</Text> When status is "Closed", "Unqualified", or "Lost Deal"
               </Text>
             </View>
 

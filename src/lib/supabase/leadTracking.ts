@@ -7,7 +7,7 @@ type LeadSource = 'lead' | 'meta';
 // Statuses that auto-track
 const AUTO_TRACK_STATUSES = ['gathering_docs', 'qualified'];
 // Statuses that auto-untrack
-const AUTO_UNTRACK_STATUSES = ['closed', 'unqualified'];
+const AUTO_UNTRACK_STATUSES = ['closed', 'unqualified', 'lost_deal'];
 
 /**
  * Get the tracking reason based on status
