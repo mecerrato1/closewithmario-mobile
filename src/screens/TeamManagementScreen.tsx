@@ -15,6 +15,15 @@ import { Session } from '@supabase/supabase-js';
 import type { LoanOfficer, Realtor } from '../lib/types/leads';
 import { supabase } from '../lib/supabase';
 import { styles } from '../styles/appStyles';
+import { FLORIDA_COUNTIES } from '../utils/floridaCounties';
+import { formatPhoneNumber } from '../lib/textTemplates';
+
+const LANGUAGE_OPTIONS = [
+  { value: 'en', label: 'English' },
+  { value: 'es', label: 'Spanish' },
+  { value: 'ht', label: 'Haitian Creole' },
+  { value: 'pt', label: 'Portuguese' },
+];
 
 export type TeamManagementScreenProps = {
   onBack: () => void;
@@ -37,7 +46,14 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
     phone: '',
     active: true,
     lead_eligible: true,
+    // Realtor-specific fields
+    preferred_language: 'en',
+    secondary_language: '' as string,
+    county_filter: [] as string[],
+    ai_draft_access: false,
+    notes: '',
   });
+  const [showCountyPicker, setShowCountyPicker] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Fetch team members and auto-assign state
@@ -57,14 +73,31 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
       if (loError) throw loError;
       setLoanOfficers(loData || []);
 
-      // Fetch realtors
-      const { data: realtorData, error: realtorError } = await supabase
-        .from('realtors')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // Fetch realtors - paginate to avoid Supabase 1000-row default limit
+      let allRealtors: Realtor[] = [];
+      let from = 0;
+      const pageSize = 1000;
+      let hasMore = true;
 
-      if (realtorError) throw realtorError;
-      setRealtors(realtorData || []);
+      while (hasMore) {
+        const { data: realtorPage, error: realtorError } = await supabase
+          .from('realtors')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .range(from, from + pageSize - 1);
+
+        if (realtorError) throw realtorError;
+
+        if (realtorPage && realtorPage.length > 0) {
+          allRealtors = [...allRealtors, ...realtorPage];
+          from += pageSize;
+          hasMore = realtorPage.length === pageSize;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      setRealtors(allRealtors);
 
       // Fetch auto-assign state
       const { data: assignData, error: assignError } = await supabase
@@ -122,12 +155,20 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
       phone: '',
       active: true,
       lead_eligible: true,
+      preferred_language: 'en',
+      secondary_language: '',
+      county_filter: [],
+      ai_draft_access: false,
+      notes: '',
     });
+    setShowCountyPicker(false);
     setShowAddEditModal(true);
   };
 
   const openEditModal = (member: LoanOfficer | Realtor) => {
     setEditingMember(member);
+    const isRealtor = activeTab === 'realtors';
+    const r = member as Realtor;
     setFormData({
       first_name: member.first_name,
       last_name: member.last_name,
@@ -135,7 +176,13 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
       phone: member.phone || '',
       active: member.active,
       lead_eligible: 'lead_eligible' in member ? member.lead_eligible : true,
+      preferred_language: isRealtor ? (r.preferred_language || 'en') : 'en',
+      secondary_language: isRealtor ? (r.secondary_language || '') : '',
+      county_filter: isRealtor ? (r.county_filter || []) : [],
+      ai_draft_access: isRealtor ? (r.ai_draft_access ?? false) : false,
+      notes: isRealtor ? (r.notes || '') : '',
     });
+    setShowCountyPicker(false);
     setShowAddEditModal(true);
   };
 
@@ -159,6 +206,16 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
       // Only add lead_eligible for loan officers
       if (activeTab === 'loan_officers') {
         dataToSave.lead_eligible = formData.lead_eligible;
+      }
+
+      // Add realtor-specific fields
+      if (activeTab === 'realtors') {
+        dataToSave.lead_eligible = formData.lead_eligible;
+        dataToSave.preferred_language = formData.preferred_language || 'en';
+        dataToSave.secondary_language = formData.secondary_language || null;
+        dataToSave.county_filter = formData.county_filter.length > 0 ? formData.county_filter : null;
+        dataToSave.ai_draft_access = formData.ai_draft_access;
+        dataToSave.notes = formData.notes.trim() || null;
       }
 
       if (editingMember) {
@@ -351,7 +408,7 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
                   <Text style={styles.teamMemberDetail}>📧 {item.email}</Text>
                 )}
                 {item.phone && (
-                  <Text style={styles.teamMemberDetail}>📱 {item.phone}</Text>
+                  <Text style={styles.teamMemberDetail}>📱 {formatPhoneNumber(item.phone)}</Text>
                 )}
                 {activeTab === 'loan_officers' && 'lead_eligible' in item && (
                   <View style={styles.teamMemberEligible}>
@@ -363,6 +420,37 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
                     </Text>
                   </View>
                 )}
+                {activeTab === 'realtors' && (() => {
+                  const r = item as Realtor;
+                  return (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                      {r.lead_eligible && (
+                        <View style={{ backgroundColor: '#DBEAFE', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
+                          <Text style={{ fontSize: 11, color: '#2563EB' }}>Lead Eligible</Text>
+                        </View>
+                      )}
+                      {r.ai_draft_access && (
+                        <View style={{ backgroundColor: '#F3E8FF', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
+                          <Text style={{ fontSize: 11, color: '#7C3AED' }}>AI Drafts</Text>
+                        </View>
+                      )}
+                      {r.preferred_language && r.preferred_language !== 'en' && (
+                        <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
+                          <Text style={{ fontSize: 11, color: '#D97706' }}>
+                            {r.preferred_language === 'es' ? 'Spanish' : r.preferred_language === 'ht' ? 'Haitian Creole' : r.preferred_language === 'pt' ? 'Portuguese' : r.preferred_language.toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
+                      {r.county_filter && r.county_filter.length > 0 && (
+                        <View style={{ backgroundColor: '#E0F2FE', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
+                          <Text style={{ fontSize: 11, color: '#0369A1' }}>
+                            {r.county_filter.join(', ')}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })()}
               </TouchableOpacity>
             )}
             contentContainerStyle={styles.teamListContent}
@@ -415,8 +503,8 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
                   <Text style={styles.teamInputLabel}>Phone</Text>
                   <TextInput
                     style={styles.teamInput}
-                    value={formData.phone}
-                    onChangeText={(text) => setFormData({ ...formData, phone: text })}
+                    value={formData.phone ? formatPhoneNumber(formData.phone) : ''}
+                    onChangeText={(text) => setFormData({ ...formData, phone: text.replace(/\D/g, '') })}
                     placeholder="Enter phone"
                     placeholderTextColor="#94A3B8"
                     keyboardType="phone-pad"
@@ -448,6 +536,204 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
                       </View>
                       <Text style={styles.teamCheckboxLabel}>Eligible for auto-assigned leads</Text>
                     </TouchableOpacity>
+                  )}
+
+                  {/* Realtor-specific fields */}
+                  {activeTab === 'realtors' && (
+                    <>
+                      <TouchableOpacity
+                        style={styles.teamCheckboxRow}
+                        onPress={() => {
+                          const newEligible = !formData.lead_eligible;
+                          setFormData({
+                            ...formData,
+                            lead_eligible: newEligible,
+                            // Clear counties when disabling lead eligibility
+                            county_filter: newEligible ? formData.county_filter : [],
+                          });
+                          if (!newEligible) setShowCountyPicker(false);
+                        }}
+                      >
+                        <View style={[
+                          styles.teamCheckbox,
+                          formData.lead_eligible && styles.teamCheckboxChecked
+                        ]}>
+                          {formData.lead_eligible && <Text style={styles.teamCheckboxCheck}>✓</Text>}
+                        </View>
+                        <Text style={styles.teamCheckboxLabel}>Lead Eligible (round-robin)</Text>
+                      </TouchableOpacity>
+
+                      {formData.lead_eligible && (
+                        <>
+                          <Text style={[styles.teamInputLabel, { marginTop: 4 }]}>Eligible Counties</Text>
+                          <Text style={{ fontSize: 12, color: '#64748B', marginBottom: 8 }}>
+                            Select which counties this realtor receives leads from. Leave empty for all counties.
+                          </Text>
+                          <TouchableOpacity
+                            onPress={() => setShowCountyPicker(!showCountyPicker)}
+                            style={{
+                              borderWidth: 1,
+                              borderColor: '#E2E8F0',
+                              borderRadius: 8,
+                              padding: 12,
+                              marginBottom: 4,
+                              backgroundColor: '#FFFFFF',
+                            }}
+                          >
+                            <Text style={{ color: formData.county_filter.length > 0 ? '#1E293B' : '#94A3B8', fontSize: 14 }}>
+                              {formData.county_filter.length > 0
+                                ? `${formData.county_filter.length} selected: ${formData.county_filter.join(', ')}`
+                                : 'All counties (tap to select specific ones)'}
+                            </Text>
+                          </TouchableOpacity>
+                          {formData.county_filter.length > 0 && (
+                            <TouchableOpacity
+                              onPress={() => setFormData({ ...formData, county_filter: [] })}
+                              style={{ marginBottom: 8 }}
+                            >
+                              <Text style={{ color: '#DC2626', fontSize: 12 }}>Clear county filter</Text>
+                            </TouchableOpacity>
+                          )}
+                          {showCountyPicker && (
+                            <View style={{ maxHeight: 200, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 8, marginBottom: 12, backgroundColor: '#FFFFFF' }}>
+                              <ScrollView nestedScrollEnabled={true}>
+                                {FLORIDA_COUNTIES.map((county) => {
+                                  const isSelected = formData.county_filter.includes(county);
+                                  return (
+                                    <TouchableOpacity
+                                      key={county}
+                                      onPress={() => {
+                                        const updated = isSelected
+                                          ? formData.county_filter.filter(c => c !== county)
+                                          : [...formData.county_filter, county];
+                                        setFormData({ ...formData, county_filter: updated });
+                                      }}
+                                      style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 10,
+                                        borderBottomWidth: 0.5,
+                                        borderBottomColor: '#F1F5F9',
+                                        backgroundColor: isSelected ? '#F5F3FF' : '#FFFFFF',
+                                      }}
+                                    >
+                                      <View style={{
+                                        width: 20,
+                                        height: 20,
+                                        borderRadius: 4,
+                                        borderWidth: 1.5,
+                                        borderColor: isSelected ? '#6D28D9' : '#CBD5E1',
+                                        backgroundColor: isSelected ? '#6D28D9' : '#FFFFFF',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        marginRight: 10,
+                                      }}>
+                                        {isSelected && <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '700' }}>✓</Text>}
+                                      </View>
+                                      <Text style={{ fontSize: 14, color: '#1E293B' }}>{county}</Text>
+                                    </TouchableOpacity>
+                                  );
+                                })}
+                              </ScrollView>
+                            </View>
+                          )}
+                        </>
+                      )}
+
+                      <TouchableOpacity
+                        style={styles.teamCheckboxRow}
+                        onPress={() => setFormData({ ...formData, ai_draft_access: !formData.ai_draft_access })}
+                      >
+                        <View style={[
+                          styles.teamCheckbox,
+                          formData.ai_draft_access && styles.teamCheckboxChecked
+                        ]}>
+                          {formData.ai_draft_access && <Text style={styles.teamCheckboxCheck}>✓</Text>}
+                        </View>
+                        <Text style={styles.teamCheckboxLabel}>AI Draft Access</Text>
+                      </TouchableOpacity>
+
+                      <Text style={styles.teamInputLabel}>Preferred Language</Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                        {LANGUAGE_OPTIONS.map((lang) => (
+                          <TouchableOpacity
+                            key={lang.value}
+                            onPress={() => setFormData({ ...formData, preferred_language: lang.value })}
+                            style={{
+                              paddingHorizontal: 14,
+                              paddingVertical: 8,
+                              borderRadius: 8,
+                              borderWidth: 1.5,
+                              borderColor: formData.preferred_language === lang.value ? '#6D28D9' : '#E2E8F0',
+                              backgroundColor: formData.preferred_language === lang.value ? '#F5F3FF' : '#FFFFFF',
+                            }}
+                          >
+                            <Text style={{
+                              fontSize: 13,
+                              fontWeight: formData.preferred_language === lang.value ? '600' : '400',
+                              color: formData.preferred_language === lang.value ? '#6D28D9' : '#475569',
+                            }}>
+                              {lang.label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+
+                      <Text style={styles.teamInputLabel}>Secondary Language</Text>
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                        <TouchableOpacity
+                          onPress={() => setFormData({ ...formData, secondary_language: '' })}
+                          style={{
+                            paddingHorizontal: 14,
+                            paddingVertical: 8,
+                            borderRadius: 8,
+                            borderWidth: 1.5,
+                            borderColor: !formData.secondary_language ? '#6D28D9' : '#E2E8F0',
+                            backgroundColor: !formData.secondary_language ? '#F5F3FF' : '#FFFFFF',
+                          }}
+                        >
+                          <Text style={{
+                            fontSize: 13,
+                            fontWeight: !formData.secondary_language ? '600' : '400',
+                            color: !formData.secondary_language ? '#6D28D9' : '#475569',
+                          }}>None</Text>
+                        </TouchableOpacity>
+                        {LANGUAGE_OPTIONS.filter(l => l.value !== formData.preferred_language).map((lang) => (
+                          <TouchableOpacity
+                            key={lang.value}
+                            onPress={() => setFormData({ ...formData, secondary_language: lang.value })}
+                            style={{
+                              paddingHorizontal: 14,
+                              paddingVertical: 8,
+                              borderRadius: 8,
+                              borderWidth: 1.5,
+                              borderColor: formData.secondary_language === lang.value ? '#6D28D9' : '#E2E8F0',
+                              backgroundColor: formData.secondary_language === lang.value ? '#F5F3FF' : '#FFFFFF',
+                            }}
+                          >
+                            <Text style={{
+                              fontSize: 13,
+                              fontWeight: formData.secondary_language === lang.value ? '600' : '400',
+                              color: formData.secondary_language === lang.value ? '#6D28D9' : '#475569',
+                            }}>
+                              {lang.label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+
+                      <Text style={styles.teamInputLabel}>Admin Notes</Text>
+                      <TextInput
+                        style={[styles.teamInput, { height: 80, textAlignVertical: 'top' }]}
+                        value={formData.notes}
+                        onChangeText={(text) => setFormData({ ...formData, notes: text })}
+                        placeholder="Internal notes about this realtor..."
+                        placeholderTextColor="#94A3B8"
+                        multiline
+                        numberOfLines={3}
+                      />
+                    </>
                   )}
 
                   <View style={styles.teamModalButtons}>

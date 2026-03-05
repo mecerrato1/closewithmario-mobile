@@ -16,11 +16,17 @@ export interface Realtor {
   email: string | null;
   brokerage: string | null;
   active: boolean;
+  lead_eligible: boolean;
   campaign_eligible: boolean;
   email_opt_out: boolean;
+  preferred_language: LanguageCode;
+  secondary_language: LanguageCode | null;
+  county_filter: string[] | null;
+  profile_picture_url: string | null;
+  ai_draft_access: boolean;
+  notes: string | null;
   created_by_user_id: string | null;
   user_id: string | null;
-  profile_picture_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -61,12 +67,16 @@ export interface AssignedRealtor {
   email: string | null;
   brokerage: string | null;
   active: boolean;
+  lead_eligible: boolean;
   campaign_eligible: boolean;
   email_opt_out: boolean;
   preferred_language: LanguageCode;
   secondary_language: LanguageCode | null;
-  realtor_created_at: string;
+  county_filter: string[] | null;
   profile_picture_url: string | null;
+  ai_draft_access: boolean;
+  notes: string | null;
+  realtor_created_at: string;
   // Computed fields
   lead_count?: number;
 }

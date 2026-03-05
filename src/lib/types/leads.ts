@@ -92,8 +92,19 @@ export type Realtor = {
   last_name: string;
   email: string | null;
   phone: string | null;
+  brokerage: string | null;
   active: boolean;
+  lead_eligible: boolean;
+  campaign_eligible: boolean;
+  email_opt_out: boolean;
+  preferred_language: string;
+  secondary_language: string | null;
+  county_filter: string[] | null;
+  profile_picture_url: string | null;
+  ai_draft_access: boolean;
+  notes: string | null;
   created_at: string;
+  updated_at: string;
 };
 
 export type Activity = {

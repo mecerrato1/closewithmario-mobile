@@ -43,11 +43,15 @@ export async function fetchAssignedRealtors(
           email,
           brokerage,
           active,
+          lead_eligible,
           campaign_eligible,
           email_opt_out,
           preferred_language,
           secondary_language,
+          county_filter,
           profile_picture_url,
+          ai_draft_access,
+          notes,
           created_at
         )
       `)
@@ -131,12 +135,16 @@ export async function fetchAssignedRealtors(
         email: row.realtors.email,
         brokerage: row.realtors.brokerage,
         active: row.realtors.active,
+        lead_eligible: row.realtors.lead_eligible ?? false,
         campaign_eligible: row.realtors.campaign_eligible ?? true,
         email_opt_out: row.realtors.email_opt_out ?? false,
         preferred_language: row.realtors.preferred_language || 'en',
         secondary_language: row.realtors.secondary_language || null,
-        realtor_created_at: row.realtors.created_at,
+        county_filter: row.realtors.county_filter || null,
         profile_picture_url: row.realtors.profile_picture_url || null,
+        ai_draft_access: row.realtors.ai_draft_access ?? false,
+        notes: row.realtors.notes || null,
+        realtor_created_at: row.realtors.created_at,
         lead_count: leadCountMap[row.realtors.id] || 0,
       }))
       // Sort: realtors with leads first, then alphabetically by last name, first name
@@ -203,10 +211,15 @@ export async function fetchRealtorById(
           email,
           brokerage,
           active,
+          lead_eligible,
           campaign_eligible,
           email_opt_out,
           preferred_language,
           secondary_language,
+          county_filter,
+          profile_picture_url,
+          ai_draft_access,
+          notes,
           created_at
         )
       `)
@@ -238,12 +251,16 @@ export async function fetchRealtorById(
       email: row.realtors.email,
       brokerage: row.realtors.brokerage,
       active: row.realtors.active,
+      lead_eligible: row.realtors.lead_eligible ?? false,
       campaign_eligible: row.realtors.campaign_eligible ?? true,
       email_opt_out: row.realtors.email_opt_out ?? false,
       preferred_language: row.realtors.preferred_language || 'en',
       secondary_language: row.realtors.secondary_language || null,
-      realtor_created_at: row.realtors.created_at,
+      county_filter: row.realtors.county_filter || null,
       profile_picture_url: row.realtors.profile_picture_url || null,
+      ai_draft_access: row.realtors.ai_draft_access ?? false,
+      notes: row.realtors.notes || null,
+      realtor_created_at: row.realtors.created_at,
     };
 
     return { data: realtor, error: null };
@@ -319,12 +336,16 @@ export async function createRealtorAndAssign(
       email: newRealtor.email,
       brokerage: newRealtor.brokerage,
       active: newRealtor.active,
+      lead_eligible: newRealtor.lead_eligible ?? false,
       campaign_eligible: newRealtor.campaign_eligible ?? true,
       email_opt_out: newRealtor.email_opt_out ?? false,
       preferred_language: newRealtor.preferred_language || 'en',
       secondary_language: newRealtor.secondary_language || null,
-      realtor_created_at: newRealtor.created_at,
+      county_filter: newRealtor.county_filter || null,
       profile_picture_url: newRealtor.profile_picture_url || null,
+      ai_draft_access: newRealtor.ai_draft_access ?? false,
+      notes: newRealtor.notes || null,
+      realtor_created_at: newRealtor.created_at,
     };
 
     return { data: result, error: null };
@@ -557,11 +578,15 @@ export async function fetchNeedsLoveRealtors(
           email,
           brokerage,
           active,
+          lead_eligible,
           campaign_eligible,
           email_opt_out,
           preferred_language,
           secondary_language,
+          county_filter,
           profile_picture_url,
+          ai_draft_access,
+          notes,
           created_at
         )
       `)
@@ -590,12 +615,16 @@ export async function fetchNeedsLoveRealtors(
         email: row.realtors.email,
         brokerage: row.realtors.brokerage,
         active: row.realtors.active,
+        lead_eligible: row.realtors.lead_eligible ?? false,
         campaign_eligible: row.realtors.campaign_eligible ?? true,
         email_opt_out: row.realtors.email_opt_out ?? false,
         preferred_language: row.realtors.preferred_language || 'en',
         secondary_language: row.realtors.secondary_language || null,
-        realtor_created_at: row.realtors.created_at,
+        county_filter: row.realtors.county_filter || null,
         profile_picture_url: row.realtors.profile_picture_url || null,
+        ai_draft_access: row.realtors.ai_draft_access ?? false,
+        notes: row.realtors.notes || null,
+        realtor_created_at: row.realtors.created_at,
       }));
 
     return { data: realtors, error: null };
