@@ -135,10 +135,11 @@ export async function removeCustomProfilePicture(userId: string): Promise<Upload
  * Get the avatar URL to display, with priority:
  * 1. Custom uploaded picture
  * 2. Google/OAuth profile picture
- * 3. null (will show initial letter)
+ * 3. Realtor profile picture (from realtors table)
+ * 4. null (will show initial letter)
  */
-export function getAvatarUrl(userMetadata: any): string | null {
-  return userMetadata?.custom_avatar_url || userMetadata?.avatar_url || null;
+export function getAvatarUrl(userMetadata: any, realtorPictureUrl?: string | null): string | null {
+  return userMetadata?.custom_avatar_url || userMetadata?.avatar_url || realtorPictureUrl || null;
 }
 
 /**

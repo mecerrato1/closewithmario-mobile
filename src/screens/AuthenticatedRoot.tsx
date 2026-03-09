@@ -1,11 +1,13 @@
 // src/screens/AuthenticatedRoot.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Session } from '@supabase/supabase-js';
 import BottomTabs, { TabKey } from '../components/navigation/BottomTabs';
 import QuickCaptureTab from '../features/quickCapture/QuickCaptureTab';
 import RealtorsTabScreen from './tabs/RealtorsTabScreen';
+import LoanOfficersTabScreen from './tabs/LoanOfficersTabScreen';
 import CalculatorTabScreen from './tabs/CalculatorTabScreen';
+import { getUserRole, type UserRole } from '../lib/roles';
 
 interface AuthenticatedRootProps {
   session: Session;
@@ -39,6 +41,17 @@ export default function AuthenticatedRoot({
   const [pendingLeadNav, setPendingLeadNav] = useState<PendingLeadNavigation>(null);
   const [pendingCaptureId, setPendingCaptureId] = useState<PendingCaptureNavigation>(null);
   const [hasClickedLeadsTab, setHasClickedLeadsTab] = useState(false);
+  const [userRole, setUserRole] = useState<UserRole>('buyer');
+
+  useEffect(() => {
+    const fetchRole = async () => {
+      if (session?.user?.id && session?.user?.email) {
+        const role = await getUserRole(session.user.id, session.user.email);
+        setUserRole(role);
+      }
+    };
+    fetchRole();
+  }, [session?.user?.id, session?.user?.email]);
 
   const handleTabChange = (tab: TabKey) => {
     if (tab === 'leads') {
@@ -111,6 +124,13 @@ export default function AuthenticatedRoot({
             onNavigateToLead={handleNavigateToLead}
           />
         );
+      case 'loan_officers':
+        return (
+          <LoanOfficersTabScreen
+            session={session}
+            onClose={handleNavigateToDashboard}
+          />
+        );
       case 'calculator':
         return <CalculatorTabScreen onNavigateToLeads={handleNavigateToDashboard} />;
       default:
@@ -121,7 +141,7 @@ export default function AuthenticatedRoot({
   return (
     <View style={styles.container}>
       <View style={styles.content}>{renderContent()}</View>
-      <BottomTabs activeTab={activeTab} onTabChange={handleTabChange} />
+      <BottomTabs activeTab={activeTab} onTabChange={handleTabChange} userRole={userRole} />
     </View>
   );
 }

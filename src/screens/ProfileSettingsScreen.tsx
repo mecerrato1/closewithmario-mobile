@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,10 +10,14 @@ import {
   ScrollView,
   ActivityIndicator,
   BackHandler,
+  TextInput,
+  Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Session } from '@supabase/supabase-js';
 import { useThemeColors } from '../styles/theme';
+import { supabase } from '../lib/supabase';
+import { getUserTeamMemberId, type UserRole } from '../lib/roles';
 import {
   requestMediaLibraryPermission,
   pickProfileImage,
@@ -22,17 +26,160 @@ import {
   getAvatarUrl,
 } from '../utils/profilePicture';
 
+const LANGUAGE_MAP: Record<string, string> = {
+  en: 'English',
+  es: 'Spanish',
+  pt: 'Portuguese',
+  fr: 'French',
+  ht: 'Creole',
+  zh: 'Chinese',
+  // Also support full names already in DB
+  English: 'English',
+  Spanish: 'Spanish',
+  Portuguese: 'Portuguese',
+  French: 'French',
+  Creole: 'Creole',
+  Chinese: 'Chinese',
+};
+
+const LANGUAGE_CODE_MAP: Record<string, string> = {
+  English: 'en',
+  Spanish: 'es',
+  Portuguese: 'pt',
+  French: 'fr',
+  Creole: 'ht',
+  Chinese: 'zh',
+};
+
+const LANGUAGE_OPTIONS = ['None', 'English', 'Spanish', 'Portuguese', 'French', 'Creole', 'Chinese'];
+
+const toLangDisplay = (val: string | null): string => {
+  if (!val) return 'None';
+  return LANGUAGE_MAP[val] || val;
+};
+
+const toLangCode = (display: string): string | null => {
+  if (display === 'None') return null;
+  return LANGUAGE_CODE_MAP[display] || display;
+};
+
+const formatPhoneDisplay = (raw: string | null): string => {
+  if (!raw) return '';
+  const cleaned = raw.replace(/\D/g, '');
+  if (cleaned.length === 11 && cleaned.startsWith('1')) {
+    return `(${cleaned.slice(1, 4)}) ${cleaned.slice(4, 7)}-${cleaned.slice(7)}`;
+  }
+  if (cleaned.length === 10) {
+    return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+  }
+  return raw;
+};
+
+const stripPhoneFormatting = (formatted: string): string => {
+  return formatted.replace(/\D/g, '');
+};
+
+const formatPhoneAsYouType = (text: string): string => {
+  const digits = text.replace(/\D/g, '');
+  if (digits.length <= 3) return digits.length > 0 ? `(${digits}` : '';
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+};
+
+const isValidEmail = (val: string): boolean => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim());
+};
+
+const isValidPhone = (val: string): boolean => {
+  const digits = val.replace(/\D/g, '');
+  return digits.length === 10;
+};
+
+const FLORIDA_COUNTIES = [
+  'Alachua', 'Baker', 'Bay', 'Bradford', 'Brevard', 'Broward', 'Calhoun',
+  'Charlotte', 'Citrus', 'Clay', 'Collier', 'Columbia', 'DeSoto', 'Dixie',
+  'Duval', 'Escambia', 'Flagler', 'Franklin', 'Gadsden', 'Gilchrist',
+  'Glades', 'Gulf', 'Hamilton', 'Hardee', 'Hendry', 'Hernando', 'Highlands',
+  'Hillsborough', 'Holmes', 'Indian River', 'Jackson', 'Jefferson', 'Lafayette',
+  'Lake', 'Lee', 'Leon', 'Levy', 'Liberty', 'Madison', 'Manatee', 'Marion',
+  'Martin', 'Miami-Dade', 'Monroe', 'Nassau', 'Okaloosa', 'Okeechobee',
+  'Orange', 'Osceola', 'Palm Beach', 'Pasco', 'Pinellas', 'Polk', 'Putnam',
+  'Santa Rosa', 'Sarasota', 'Seminole', 'St. Johns', 'St. Lucie', 'Sumter',
+  'Suwannee', 'Taylor', 'Union', 'Volusia', 'Wakulla', 'Walton', 'Washington',
+];
+
 type ProfileSettingsScreenProps = {
   session: Session | null;
   onBack: () => void;
   onSignOut: () => void;
+  realtorProfilePicUrl?: string | null;
+  userRole?: UserRole;
 };
 
-export default function ProfileSettingsScreen({ session, onBack, onSignOut }: ProfileSettingsScreenProps) {
+export default function ProfileSettingsScreen({ session, onBack, onSignOut, realtorProfilePicUrl, userRole }: ProfileSettingsScreenProps) {
   const { colors } = useThemeColors();
   const [uploadingPicture, setUploadingPicture] = useState(false);
+  const [realtorId, setRealtorId] = useState<string | null>(null);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [brokerage, setBrokerage] = useState('');
+  const [primaryLanguage, setPrimaryLanguage] = useState('English');
+  const [secondaryLanguage, setSecondaryLanguage] = useState('None');
+  const [leadEligible, setLeadEligible] = useState(false);
+  const [loadingProfile, setLoadingProfile] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [showPrimaryLangPicker, setShowPrimaryLangPicker] = useState(false);
+  const [showSecondaryLangPicker, setShowSecondaryLangPicker] = useState(false);
+  const [countyFilter, setCountyFilter] = useState<string[]>([]);
+  const [countyInput, setCountyInput] = useState('');
+  const [loId, setLoId] = useState<string | null>(null);
+  const [nmlsId, setNmlsId] = useState('');
+  const [company, setCompany] = useState('');
+  const [companyNmlsId, setCompanyNmlsId] = useState('');
 
-  const avatarUrl = getAvatarUrl(session?.user?.user_metadata);
+  const avatarUrl = getAvatarUrl(session?.user?.user_metadata, realtorProfilePicUrl);
+  const isRealtor = userRole === 'realtor';
+  const isLoanOfficer = userRole === 'loan_officer';
+
+  // Fetch realtor profile data
+  const fetchRealtorProfile = useCallback(async () => {
+    if (!isRealtor || !session?.user?.id) return;
+    setLoadingProfile(true);
+    try {
+      const memberId = await getUserTeamMemberId(session.user.id, 'realtor');
+      if (!memberId) return;
+      setRealtorId(memberId);
+
+      const { data } = await supabase
+        .from('realtors')
+        .select('first_name, last_name, email, phone, brokerage, preferred_language, secondary_language, lead_eligible, county_filter')
+        .eq('id', memberId)
+        .single();
+
+      if (data) {
+        setFirstName(data.first_name || '');
+        setLastName(data.last_name || '');
+        setEmail(data.email || '');
+        setPhone(formatPhoneDisplay(data.phone));
+        setBrokerage(data.brokerage || '');
+        setPrimaryLanguage(toLangDisplay(data.preferred_language));
+        setSecondaryLanguage(toLangDisplay(data.secondary_language));
+        setLeadEligible(!!data.lead_eligible);
+        setCountyFilter(data.county_filter || []);
+      }
+    } catch (err) {
+      console.error('Error fetching realtor profile:', err);
+    } finally {
+      setLoadingProfile(false);
+    }
+  }, [isRealtor, session?.user?.id]);
+
+  useEffect(() => {
+    fetchRealtorProfile();
+  }, [fetchRealtorProfile]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -42,6 +189,144 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut }: Pr
 
     return () => subscription.remove();
   }, [onBack]);
+
+  const handleSaveRealtorProfile = async () => {
+    if (!realtorId) return;
+    if (email.trim() && !isValidEmail(email)) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address.');
+      return;
+    }
+    if (phone && !isValidPhone(phone)) {
+      Alert.alert('Invalid Phone', 'Please enter a valid 10-digit phone number.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('realtors')
+        .update({
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          email: email.trim(),
+          phone: stripPhoneFormatting(phone),
+          brokerage: brokerage.trim(),
+          preferred_language: toLangCode(primaryLanguage),
+          secondary_language: toLangCode(secondaryLanguage),
+          lead_eligible: leadEligible,
+          county_filter: countyFilter.length > 0 ? countyFilter : null,
+        })
+        .eq('id', realtorId);
+
+      if (error) {
+        Alert.alert('Error', 'Failed to save profile. Please try again.');
+        console.error('Error saving realtor profile:', error);
+      } else {
+        setHasChanges(false);
+        Alert.alert('Success', 'Profile updated!');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'An unexpected error occurred.');
+      console.error('Unexpected error saving realtor profile:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleLeadEligible = async (value: boolean) => {
+    setLeadEligible(value);
+    const tableId = isRealtor ? realtorId : loId;
+    const table = isRealtor ? 'realtors' : 'loan_officers';
+    if (!tableId) return;
+    try {
+      await supabase
+        .from(table)
+        .update({ lead_eligible: value })
+        .eq('id', tableId);
+    } catch (err) {
+      console.error('Error updating lead_eligible:', err);
+    }
+  };
+
+  // Fetch LO profile data
+  const fetchLOProfile = useCallback(async () => {
+    if (!isLoanOfficer || !session?.user?.id) return;
+    setLoadingProfile(true);
+    try {
+      const memberId = await getUserTeamMemberId(session.user.id, 'loan_officer');
+      if (!memberId) return;
+      setLoId(memberId);
+
+      const { data } = await supabase
+        .from('loan_officers')
+        .select('first_name, last_name, email, phone, nmls_id, company, company_nmls_id, preferred_language, secondary_language, lead_eligible')
+        .eq('id', memberId)
+        .single();
+
+      if (data) {
+        setFirstName(data.first_name || '');
+        setLastName(data.last_name || '');
+        setEmail(data.email || '');
+        setPhone(formatPhoneDisplay(data.phone));
+        setNmlsId(data.nmls_id || '');
+        setCompany(data.company || '');
+        setCompanyNmlsId(data.company_nmls_id || '');
+        setPrimaryLanguage(toLangDisplay(data.preferred_language));
+        setSecondaryLanguage(toLangDisplay(data.secondary_language));
+        setLeadEligible(!!data.lead_eligible);
+      }
+    } catch (err) {
+      console.error('Error fetching LO profile:', err);
+    } finally {
+      setLoadingProfile(false);
+    }
+  }, [isLoanOfficer, session?.user?.id]);
+
+  useEffect(() => {
+    fetchLOProfile();
+  }, [fetchLOProfile]);
+
+  const handleSaveLOProfile = async () => {
+    if (!loId) return;
+    if (email.trim() && !isValidEmail(email)) {
+      Alert.alert('Invalid Email', 'Please enter a valid email address.');
+      return;
+    }
+    if (phone && !isValidPhone(phone)) {
+      Alert.alert('Invalid Phone', 'Please enter a valid 10-digit phone number.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('loan_officers')
+        .update({
+          first_name: firstName.trim(),
+          last_name: lastName.trim(),
+          email: email.trim(),
+          phone: stripPhoneFormatting(phone),
+          nmls_id: nmlsId.trim(),
+          company: company.trim(),
+          company_nmls_id: companyNmlsId.trim(),
+          preferred_language: toLangCode(primaryLanguage),
+          secondary_language: toLangCode(secondaryLanguage),
+          lead_eligible: leadEligible,
+        })
+        .eq('id', loId);
+
+      if (error) {
+        Alert.alert('Error', 'Failed to save profile. Please try again.');
+        console.error('Error saving LO profile:', error);
+      } else {
+        setHasChanges(false);
+        Alert.alert('Success', 'Profile updated!');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'An unexpected error occurred.');
+      console.error('Unexpected error saving LO profile:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleUploadProfilePicture = async () => {
     try {
@@ -158,6 +443,471 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut }: Pr
             </View>
           </View>
         </View>
+
+        {/* Realtor Profile Fields */}
+        {isRealtor && !loadingProfile && (
+          <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+            {/* Lead Participation */}
+            <View style={localStyles.toggleRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.sectionTitle, { color: colors.textPrimary, marginBottom: 0 }]}>Lead Participation</Text>
+                <Text style={[localStyles.toggleSubtext, { color: colors.textSecondary }]}>
+                  {leadEligible ? 'Receiving leads' : 'Not receiving leads'}
+                </Text>
+              </View>
+              <Switch
+                value={leadEligible}
+                onValueChange={handleToggleLeadEligible}
+                trackColor={{ false: '#D1D5DB', true: '#7C3AED' }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+
+            {/* Service Counties - only when lead eligible */}
+            {leadEligible && (
+              <View style={{ marginTop: 12 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary, marginTop: 0 }]}>Service Counties</Text>
+                {countyFilter.length > 0 && (
+                  <View style={localStyles.countyTags}>
+                    {countyFilter.map((county) => (
+                      <View key={county} style={localStyles.countyTag}>
+                        <Text style={localStyles.countyTagText}>{county}</Text>
+                        <TouchableOpacity
+                          onPress={() => {
+                            setCountyFilter(countyFilter.filter(c => c !== county));
+                            setHasChanges(true);
+                          }}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Text style={localStyles.countyTagRemove}>×</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+                <TextInput
+                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                  value={countyInput}
+                  onChangeText={setCountyInput}
+                  placeholder="Add another county..."
+                  placeholderTextColor={colors.textSecondary}
+                  returnKeyType="done"
+                />
+                {countyInput.trim().length > 0 && (
+                  <View style={[localStyles.countySuggestions, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+                    {FLORIDA_COUNTIES
+                      .filter(c =>
+                        c.toLowerCase().includes(countyInput.trim().toLowerCase()) &&
+                        !countyFilter.includes(c)
+                      )
+                      .slice(0, 6)
+                      .map(county => (
+                        <TouchableOpacity
+                          key={county}
+                          style={localStyles.countySuggestionItem}
+                          onPress={() => {
+                            setCountyFilter([...countyFilter, county]);
+                            setCountyInput('');
+                            setHasChanges(true);
+                          }}
+                        >
+                          <Text style={{ color: colors.textPrimary, fontSize: 15 }}>{county}</Text>
+                        </TouchableOpacity>
+                      ))
+                    }
+                    {FLORIDA_COUNTIES.filter(c =>
+                      c.toLowerCase().includes(countyInput.trim().toLowerCase()) &&
+                      !countyFilter.includes(c)
+                    ).length === 0 && (
+                      <View style={localStyles.countySuggestionItem}>
+                        <Text style={{ color: colors.textSecondary, fontSize: 14 }}>No matching counties</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            )}
+
+            <View style={localStyles.divider} />
+
+            {/* Name Row */}
+            <View style={localStyles.fieldRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>First Name</Text>
+                <TextInput
+                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                  value={firstName}
+                  onChangeText={(t) => { setFirstName(t); setHasChanges(true); }}
+                  placeholder="First Name"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Last Name</Text>
+                <TextInput
+                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                  value={lastName}
+                  onChangeText={(t) => { setLastName(t); setHasChanges(true); }}
+                  placeholder="Last Name"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+            </View>
+
+            {/* Email */}
+            <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Email</Text>
+            <TextInput
+              style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+              value={email}
+              onChangeText={(t) => { setEmail(t); setHasChanges(true); }}
+              placeholder="Email"
+              placeholderTextColor={colors.textSecondary}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+
+            {/* Phone / Brokerage Row */}
+            <View style={localStyles.fieldRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Phone</Text>
+                <TextInput
+                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                  value={phone}
+                  onChangeText={(t) => { setPhone(formatPhoneAsYouType(t)); setHasChanges(true); }}
+                  placeholder="(555) 555-5555"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="phone-pad"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Brokerage</Text>
+                <TextInput
+                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                  value={brokerage}
+                  onChangeText={(t) => { setBrokerage(t); setHasChanges(true); }}
+                  placeholder="Brokerage"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+            </View>
+
+            {/* Language Row */}
+            <View style={localStyles.fieldRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Primary Language</Text>
+                <TouchableOpacity
+                  style={[localStyles.fieldInput, localStyles.dropdownField, { backgroundColor: colors.background, borderColor: colors.border }]}
+                  onPress={() => setShowPrimaryLangPicker(!showPrimaryLangPicker)}
+                >
+                  <Text style={{ color: colors.textPrimary, fontSize: 15 }}>{primaryLanguage}</Text>
+                  <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
+                {showPrimaryLangPicker && (
+                  <View style={[localStyles.langPickerDropdown, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+                    {LANGUAGE_OPTIONS.filter(l => l !== 'None').map(lang => (
+                      <TouchableOpacity
+                        key={lang}
+                        style={[localStyles.langPickerItem, primaryLanguage === lang && { backgroundColor: '#F3F0FF' }]}
+                        onPress={() => { setPrimaryLanguage(lang); setShowPrimaryLangPicker(false); setHasChanges(true); }}
+                      >
+                        <Text style={{ color: primaryLanguage === lang ? '#7C3AED' : colors.textPrimary, fontWeight: primaryLanguage === lang ? '600' : '400' }}>{lang}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Secondary Language</Text>
+                <TouchableOpacity
+                  style={[localStyles.fieldInput, localStyles.dropdownField, { backgroundColor: colors.background, borderColor: colors.border }]}
+                  onPress={() => setShowSecondaryLangPicker(!showSecondaryLangPicker)}
+                >
+                  <Text style={{ color: colors.textPrimary, fontSize: 15 }}>{secondaryLanguage}</Text>
+                  <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
+                {showSecondaryLangPicker && (
+                  <View style={[localStyles.langPickerDropdown, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+                    {LANGUAGE_OPTIONS.map(lang => (
+                      <TouchableOpacity
+                        key={lang}
+                        style={[localStyles.langPickerItem, secondaryLanguage === lang && { backgroundColor: '#F3F0FF' }]}
+                        onPress={() => { setSecondaryLanguage(lang); setShowSecondaryLangPicker(false); setHasChanges(true); }}
+                      >
+                        <Text style={{ color: secondaryLanguage === lang ? '#7C3AED' : colors.textPrimary, fontWeight: secondaryLanguage === lang ? '600' : '400' }}>{lang}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </View>
+
+            {/* Save Button */}
+            {hasChanges && (
+              <TouchableOpacity
+                style={[localStyles.saveButton, { backgroundColor: '#7C3AED' }]}
+                onPress={handleSaveRealtorProfile}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={localStyles.saveButtonText}>Save Changes</Text>
+                )}
+              </TouchableOpacity>
+            )}
+
+            <View style={localStyles.divider} />
+
+            {/* Signed in as */}
+            <Text style={[localStyles.signedInText, { color: colors.textSecondary }]}>
+              Signed in as:  <Text style={{ color: colors.textPrimary, fontWeight: '600' }}>{session?.user?.email}</Text>
+            </Text>
+
+            {/* Change Password */}
+            <TouchableOpacity onPress={() => {
+              Alert.alert(
+                'Change Password',
+                'A password reset email will be sent to your email address.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Send Reset Email',
+                    onPress: async () => {
+                      const { error } = await supabase.auth.resetPasswordForEmail(session?.user?.email || '');
+                      if (error) {
+                        Alert.alert('Error', error.message);
+                      } else {
+                        Alert.alert('Success', 'Check your email for the password reset link.');
+                      }
+                    },
+                  },
+                ]
+              );
+            }}>
+              <Text style={localStyles.changePasswordText}>Change Password</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {isRealtor && loadingProfile && (
+          <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border, alignItems: 'center', padding: 24 }]}>
+            <ActivityIndicator size="small" color="#7C3AED" />
+            <Text style={{ color: colors.textSecondary, marginTop: 8 }}>Loading profile...</Text>
+          </View>
+        )}
+
+        {/* Loan Officer Profile Fields */}
+        {isLoanOfficer && !loadingProfile && (
+          <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+            {/* Lead Participation */}
+            <View style={localStyles.toggleRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.sectionTitle, { color: colors.textPrimary, marginBottom: 0 }]}>Lead Participation</Text>
+                <Text style={[localStyles.toggleSubtext, { color: colors.textSecondary }]}>
+                  {leadEligible ? 'Receiving leads' : 'Not receiving leads'}
+                </Text>
+              </View>
+              <Switch
+                value={leadEligible}
+                onValueChange={handleToggleLeadEligible}
+                trackColor={{ false: '#D1D5DB', true: '#7C3AED' }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+
+            <View style={localStyles.divider} />
+
+            {/* Name Row */}
+            <View style={localStyles.fieldRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>First Name</Text>
+                <TextInput
+                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                  value={firstName}
+                  onChangeText={(t) => { setFirstName(t); setHasChanges(true); }}
+                  placeholder="First Name"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Last Name</Text>
+                <TextInput
+                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                  value={lastName}
+                  onChangeText={(t) => { setLastName(t); setHasChanges(true); }}
+                  placeholder="Last Name"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+            </View>
+
+            {/* Email */}
+            <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Email</Text>
+            <TextInput
+              style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+              value={email}
+              onChangeText={(t) => { setEmail(t); setHasChanges(true); }}
+              placeholder="Email"
+              placeholderTextColor={colors.textSecondary}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+
+            {/* Phone / NMLS ID Row */}
+            <View style={localStyles.fieldRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Phone</Text>
+                <TextInput
+                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                  value={phone}
+                  onChangeText={(t) => { setPhone(formatPhoneAsYouType(t)); setHasChanges(true); }}
+                  placeholder="(555) 555-5555"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="phone-pad"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>NMLS ID</Text>
+                <TextInput
+                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                  value={nmlsId}
+                  onChangeText={(t) => { setNmlsId(t); setHasChanges(true); }}
+                  placeholder="NMLS ID"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="number-pad"
+                />
+              </View>
+            </View>
+
+            {/* Company / Company NMLS Row */}
+            <View style={localStyles.fieldRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Company</Text>
+                <TextInput
+                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                  value={company}
+                  onChangeText={(t) => { setCompany(t); setHasChanges(true); }}
+                  placeholder="Company"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Company NMLS</Text>
+                <TextInput
+                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                  value={companyNmlsId}
+                  onChangeText={(t) => { setCompanyNmlsId(t); setHasChanges(true); }}
+                  placeholder="Company NMLS"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="number-pad"
+                />
+              </View>
+            </View>
+
+            {/* Language Row */}
+            <View style={localStyles.fieldRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Primary Language</Text>
+                <TouchableOpacity
+                  style={[localStyles.fieldInput, localStyles.dropdownField, { backgroundColor: colors.background, borderColor: colors.border }]}
+                  onPress={() => setShowPrimaryLangPicker(!showPrimaryLangPicker)}
+                >
+                  <Text style={{ color: colors.textPrimary, fontSize: 15 }}>{primaryLanguage}</Text>
+                  <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
+                {showPrimaryLangPicker && (
+                  <View style={[localStyles.langPickerDropdown, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+                    {LANGUAGE_OPTIONS.filter(l => l !== 'None').map(lang => (
+                      <TouchableOpacity
+                        key={lang}
+                        style={[localStyles.langPickerItem, primaryLanguage === lang && { backgroundColor: '#F3F0FF' }]}
+                        onPress={() => { setPrimaryLanguage(lang); setShowPrimaryLangPicker(false); setHasChanges(true); }}
+                      >
+                        <Text style={{ color: primaryLanguage === lang ? '#7C3AED' : colors.textPrimary, fontWeight: primaryLanguage === lang ? '600' : '400' }}>{lang}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Secondary Language</Text>
+                <TouchableOpacity
+                  style={[localStyles.fieldInput, localStyles.dropdownField, { backgroundColor: colors.background, borderColor: colors.border }]}
+                  onPress={() => setShowSecondaryLangPicker(!showSecondaryLangPicker)}
+                >
+                  <Text style={{ color: colors.textPrimary, fontSize: 15 }}>{secondaryLanguage}</Text>
+                  <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+                </TouchableOpacity>
+                {showSecondaryLangPicker && (
+                  <View style={[localStyles.langPickerDropdown, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+                    {LANGUAGE_OPTIONS.map(lang => (
+                      <TouchableOpacity
+                        key={lang}
+                        style={[localStyles.langPickerItem, secondaryLanguage === lang && { backgroundColor: '#F3F0FF' }]}
+                        onPress={() => { setSecondaryLanguage(lang); setShowSecondaryLangPicker(false); setHasChanges(true); }}
+                      >
+                        <Text style={{ color: secondaryLanguage === lang ? '#7C3AED' : colors.textPrimary, fontWeight: secondaryLanguage === lang ? '600' : '400' }}>{lang}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </View>
+
+            {/* Save Button */}
+            {hasChanges && (
+              <TouchableOpacity
+                style={[localStyles.saveButton, { backgroundColor: '#7C3AED' }]}
+                onPress={handleSaveLOProfile}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={localStyles.saveButtonText}>Save Changes</Text>
+                )}
+              </TouchableOpacity>
+            )}
+
+            <View style={localStyles.divider} />
+
+            {/* Signed in as */}
+            <Text style={[localStyles.signedInText, { color: colors.textSecondary }]}>
+              Signed in as:  <Text style={{ color: colors.textPrimary, fontWeight: '600' }}>{session?.user?.email}</Text>
+            </Text>
+
+            {/* Change Password */}
+            <TouchableOpacity onPress={() => {
+              Alert.alert(
+                'Change Password',
+                'A password reset email will be sent to your email address.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Send Reset Email',
+                    onPress: async () => {
+                      const { error } = await supabase.auth.resetPasswordForEmail(session?.user?.email || '');
+                      if (error) {
+                        Alert.alert('Error', error.message);
+                      } else {
+                        Alert.alert('Success', 'Check your email for the password reset link.');
+                      }
+                    },
+                  },
+                ]
+              );
+            }}>
+              <Text style={localStyles.changePasswordText}>Change Password</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {isLoanOfficer && loadingProfile && (
+          <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border, alignItems: 'center', padding: 24 }]}>
+            <ActivityIndicator size="small" color="#7C3AED" />
+            <Text style={{ color: colors.textSecondary, marginTop: 8 }}>Loading profile...</Text>
+          </View>
+        )}
 
         <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
           <TouchableOpacity style={localStyles.menuRow} onPress={onSignOut}>
@@ -303,5 +1053,116 @@ const localStyles = StyleSheet.create({
   doneButtonText: {
     fontSize: 15,
     fontWeight: '800',
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  toggleSubtext: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 14,
+  },
+  fieldRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 4,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 4,
+    marginTop: 8,
+  },
+  fieldInput: {
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    fontSize: 15,
+    marginBottom: 4,
+  },
+  dropdownField: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  langPickerDropdown: {
+    borderWidth: 1,
+    borderRadius: 10,
+    marginTop: 2,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  langPickerItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  saveButton: {
+    height: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+  },
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  signedInText: {
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  changePasswordText: {
+    color: '#7C3AED',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  countyTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  countyTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F0FF',
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingLeft: 12,
+    paddingRight: 8,
+    gap: 4,
+  },
+  countyTagText: {
+    color: '#7C3AED',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  countyTagRemove: {
+    color: '#7C3AED',
+    fontSize: 18,
+    fontWeight: '700',
+    marginLeft: 2,
+  },
+  countySuggestions: {
+    borderWidth: 1,
+    borderRadius: 10,
+    marginTop: 2,
+    marginBottom: 4,
+    overflow: 'hidden',
+  },
+  countySuggestionItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
   },
 });

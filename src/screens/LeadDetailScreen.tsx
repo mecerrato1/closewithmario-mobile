@@ -110,7 +110,7 @@ export function LeadDetailView({
   const [currentRealtorName, setCurrentRealtorName] = useState<string | null>(null);
   const [showAdImage, setShowAdImage] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [currentLOInfo, setCurrentLOInfo] = useState<{ firstName: string; lastName: string; phone: string; email: string; aiDraftAccess?: boolean } | null>(null);
+  const [currentLOInfo, setCurrentLOInfo] = useState<{ firstName: string; lastName: string; phone: string; email: string; aiDraftAccess?: boolean; company?: string } | null>(null);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [showCallbackModal, setShowCallbackModal] = useState(false);
   const [callbackDate, setCallbackDate] = useState<Date | null>(null);
@@ -624,6 +624,7 @@ export function LeadDetailView({
       loFname: currentLOInfo?.firstName || 'Mario',
       loPhone: currentLOInfo?.phone || '[Phone]',
       loEmail: currentLOInfo?.email || '[Email]',
+      company: currentLOInfo?.company || '[Company]',
       platform: isMeta ? (r as MetaLead).platform || 'Facebook' : 'our website',
       callbackTime: callbackTime,
       adDate: formatAdDate(r.created_at),
@@ -923,9 +924,9 @@ export function LeadDetailView({
       
       try {
         // Hardcoded contact info for super admins
-        const superAdminContacts: Record<string, { firstName: string; lastName: string; phone: string; email: string; aiDraftAccess: boolean }> = {
-          'mario@closewithmario.com': { firstName: 'Mario', lastName: 'Cerrato', phone: '3052192788', email: 'mcerrato@loandepot.com', aiDraftAccess: true },
-          'mario@regallending.com': { firstName: 'Mario', lastName: 'Cerrato', phone: '3052192788', email: 'mario@regallending.com', aiDraftAccess: true },
+        const superAdminContacts: Record<string, { firstName: string; lastName: string; phone: string; email: string; aiDraftAccess: boolean; company: string }> = {
+          'mario@closewithmario.com': { firstName: 'Mario', lastName: 'Cerrato', phone: '3052192788', email: 'mcerrato@loandepot.com', aiDraftAccess: true, company: 'loanDepot' },
+          'mario@regallending.com': { firstName: 'Mario', lastName: 'Cerrato', phone: '3052192788', email: 'mario@regallending.com', aiDraftAccess: true, company: 'Regal Lending' },
         };
         
         const emailLower = session.user.email.toLowerCase();
@@ -957,7 +958,7 @@ export function LeadDetailView({
         if (memberId) {
           const { data, error } = await supabase
             .from('loan_officers')
-            .select('first_name, last_name, phone, email, ai_draft_access')
+            .select('first_name, last_name, phone, email, ai_draft_access, company')
             .eq('id', memberId)
             .single();
           
@@ -971,12 +972,38 @@ export function LeadDetailView({
               phone: data.phone || '',
               email: data.email || '',
               aiDraftAccess: !!(data as any).ai_draft_access,
+              company: (data as any).company || '',
             };
             console.log('Setting LO Info:', loInfo);
             setCurrentLOInfo(loInfo);
           }
         } else {
-          console.log('No LO record found for this user');
+          // No LO record found - check if user is a realtor
+          console.log('No LO record found, checking realtors table');
+          const realtorMemberId = await getUserTeamMemberId(session.user.id, 'realtor');
+          
+          if (realtorMemberId) {
+            const { data: realtorData, error: realtorError } = await supabase
+              .from('realtors')
+              .select('first_name, last_name, phone, email, brokerage')
+              .eq('id', realtorMemberId)
+              .single();
+            
+            if (realtorData && !realtorError) {
+              const realtorInfo = {
+                firstName: realtorData.first_name || '',
+                lastName: realtorData.last_name || '',
+                phone: realtorData.phone || '',
+                email: realtorData.email || '',
+                aiDraftAccess: false,
+                company: realtorData.brokerage || '',
+              };
+              console.log('Setting Realtor Info as current user info:', realtorInfo);
+              setCurrentLOInfo(realtorInfo);
+            }
+          } else {
+            console.log('No realtor record found either');
+          }
         }
       } catch (e) {
         console.error('Error loading LO info:', e);
@@ -1547,8 +1574,8 @@ export function LeadDetailView({
   };
 
   const handleUpdateLO = async (newLOId: string | null) => {
-    if (!propUserRole || propUserRole !== 'super_admin') {
-      alert('Only super admins can change LO assignments.');
+    if (!propUserRole || (propUserRole !== 'super_admin' && propUserRole !== 'realtor')) {
+      alert('You do not have permission to change LO assignments.');
       return;
     }
 
@@ -1870,8 +1897,8 @@ export function LeadDetailView({
               <Text style={styles.statusDropdownArrow}>▼</Text>
             </TouchableOpacity>
 
-            {/* LO Assignment (Super Admin Only - Inline) */}
-            {propUserRole === 'super_admin' && (
+            {/* LO Assignment (Super Admin & Realtor) */}
+            {(propUserRole === 'super_admin' || propUserRole === 'realtor') && (
               <TouchableOpacity
                 style={styles.loDropdownButton}
                 onPress={() => setShowLOPicker(true)}
@@ -1888,21 +1915,23 @@ export function LeadDetailView({
               </TouchableOpacity>
             )}
 
-            {/* Realtor Assignment */}
-            <TouchableOpacity
-              style={styles.loDropdownButton}
-              onPress={() => {
-                fetchRealtorsForPicker();
-                setShowRealtorPicker(true);
-              }}
-              disabled={updatingRealtor}
-            >
-              <Text style={styles.loDropdownLabel}>🏠 Realtor:</Text>
-              <Text style={styles.loDropdownValue} numberOfLines={1}>
-                {currentRealtorName || 'None'}
-              </Text>
-              <Text style={styles.statusDropdownArrow}>▼</Text>
-            </TouchableOpacity>
+            {/* Realtor Assignment (hide for realtors - they ARE the realtor) */}
+            {propUserRole !== 'realtor' && (
+              <TouchableOpacity
+                style={styles.loDropdownButton}
+                onPress={() => {
+                  fetchRealtorsForPicker();
+                  setShowRealtorPicker(true);
+                }}
+                disabled={updatingRealtor}
+              >
+                <Text style={styles.loDropdownLabel}>🏠 Realtor:</Text>
+                <Text style={styles.loDropdownValue} numberOfLines={1}>
+                  {currentRealtorName || 'None'}
+                </Text>
+                <Text style={styles.statusDropdownArrow}>▼</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Tracking Section */}
@@ -2128,7 +2157,7 @@ export function LeadDetailView({
           <View style={styles.sectionDivider} />
 
           {/* LO Picker Modal (used by inline LO dropdown) */}
-          {propUserRole === 'super_admin' && (
+          {(propUserRole === 'super_admin' || propUserRole === 'realtor') && (
             <Modal
                 visible={showLOPicker}
                 transparent={true}
@@ -3041,6 +3070,7 @@ export function LeadDetailView({
                       loFname: currentLOInfo?.firstName || 'Mario',
                       loPhone: currentLOInfo?.phone || '[Phone]',
                       loEmail: currentLOInfo?.email || '[Email]',
+                      company: currentLOInfo?.company || '[Company]',
                       platform: isMeta ? (record as MetaLead).platform || 'Facebook' : 'our website',
                     };
                     const templateText = getTemplateText(template, useSpanishTemplates);

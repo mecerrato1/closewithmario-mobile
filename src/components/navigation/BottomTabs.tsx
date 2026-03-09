@@ -3,7 +3,9 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform, Image, ImageSourcePropType } from 'react-native';
 import { useThemeColors } from '../../styles/theme';
 
-export type TabKey = 'leads' | 'captures' | 'realtors' | 'calculator';
+import type { UserRole } from '../../lib/roles';
+
+export type TabKey = 'leads' | 'captures' | 'realtors' | 'loan_officers' | 'calculator';
 
 interface Tab {
   key: TabKey;
@@ -12,24 +14,33 @@ interface Tab {
   iconImage?: ImageSourcePropType;
 }
 
-const TABS: Tab[] = [
+const DEFAULT_TABS: Tab[] = [
   { key: 'leads', label: 'Leads', icon: '📋' },
   { key: 'captures', label: 'Quick Leads', icon: '⚡' },
   { key: 'realtors', label: 'Realtors', icon: '🧑‍💼' },
   { key: 'calculator', label: 'Calculator', iconImage: require('../../../assets/MortgageCalc.png') },
 ];
 
+const REALTOR_TABS: Tab[] = [
+  { key: 'leads', label: 'Leads', icon: '📋' },
+  { key: 'captures', label: 'Quick Leads', icon: '⚡' },
+  { key: 'loan_officers', label: 'Loan Officers', icon: '👔' },
+  { key: 'calculator', label: 'Calculator', iconImage: require('../../../assets/MortgageCalc.png') },
+];
+
 interface BottomTabsProps {
   activeTab: TabKey;
   onTabChange: (tab: TabKey) => void;
+  userRole?: UserRole;
 }
 
-export default function BottomTabs({ activeTab, onTabChange }: BottomTabsProps) {
+export default function BottomTabs({ activeTab, onTabChange, userRole }: BottomTabsProps) {
+  const tabs = userRole === 'realtor' ? REALTOR_TABS : DEFAULT_TABS;
   const { colors } = useThemeColors();
 
   return (
     <View style={[styles.container, { backgroundColor: colors.cardBackground, borderTopColor: colors.border }]}>
-      {TABS.map((tab) => {
+      {tabs.map((tab) => {
         const isActive = activeTab === tab.key;
         return (
           <TouchableOpacity

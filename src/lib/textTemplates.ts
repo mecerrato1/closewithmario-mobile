@@ -17,7 +17,7 @@ export const TEXT_TEMPLATES: TextTemplate[] = [
     subjectEs: 'Seguimiento sobre su consulta de financiamiento de vivienda',
     template: `Hi {fname} 👋
 
-This is {LO fullname} with loanDepot (2nd largest mortgage lender in the US).
+This is {LO fullname} with {company}.
 
 I'm reaching out about the ad you clicked on {platform}. Tried calling you earlier - are you available for a quick chat to see how we can help you become a homeowner? 🏡
 
@@ -25,7 +25,7 @@ I'm reaching out about the ad you clicked on {platform}. Tried calling you earli
 📧 Email {LO email}`,
     templateEs: `Hola {fname} 👋
 
-Soy {LO fullname} de loanDepot (el segundo prestamista hipotecario más grande de EE. UU.).
+Soy {LO fullname} de {company}.
 
 Me comunico sobre el anuncio en el que hizo clic en {platform}. Intenté llamarlo antes, ¿está disponible para una charla rápida para ver cómo podemos ayudarlo a convertirse en propietario de vivienda? 🏡
 
@@ -40,7 +40,7 @@ Me comunico sobre el anuncio en el que hizo clic en {platform}. Intenté llamarl
     subjectEs: 'Documentos necesarios para su preaprobación',
     template: `Hi {fname} 👋
 
-This is {LO fullname} with loanDepot.
+This is {LO fullname} with {company}.
 
 Just following up on the documents we need to get you preapproved. Let me know if you have any questions! 📄
 
@@ -49,7 +49,7 @@ You can reach me at:
 📧 {LO email}`,
     templateEs: `Hola {fname} 👋
 
-Soy {LO fullname} de loanDepot.
+Soy {LO fullname} de {company}.
 
 Solo hago seguimiento de los documentos que necesitamos para pre-aprobarlo. ¡Avíseme si tiene alguna pregunta! 📄
 
@@ -65,7 +65,7 @@ Puede comunicarse conmigo en:
     subjectEs: 'Seguimiento sobre su preaprobación de hipoteca',
     template: `Hi {fname} 👋
 
-This is {LO fullname} with loanDepot.
+This is {LO fullname} with {company}.
 
 Just checking in to see if you're ready to move forward with getting preapproved for your home mortgage. I'm here to help! 🏠✅
 
@@ -74,7 +74,7 @@ Feel free to call or text me:
 📧 {LO email}`,
     templateEs: `Hola {fname} 👋
 
-Soy {LO fullname} de loanDepot.
+Soy {LO fullname} de {company}.
 
 Solo verifico para ver si está listo para avanzar con la pre-aprobación de su hipoteca. ¡Estoy aquí para ayudar! 🏠✅
 
@@ -90,7 +90,7 @@ No dude en llamarme o enviarme un mensaje:
     subjectEs: 'Veamos cómo puede dejar de pagar alquiler',
     template: `Hi {fname} 👋
 
-This is {LO fullname} with loanDepot.
+This is {LO fullname} with {company}.
 
 I don't mean to bug you, but I really think I can help you get into your own home and stop paying rent. Let's chat when you have a moment! 🏡💰
 
@@ -99,7 +99,7 @@ Reach me at:
 📧 {LO email}`,
     templateEs: `Hola {fname} 👋
 
-Soy {LO fullname} de loanDepot.
+Soy {LO fullname} de {company}.
 
 No quiero molestarlo, pero realmente creo que puedo ayudarlo a tener su propia casa y dejar de pagar alquiler. ¡Hablemos cuando tenga un momento! 🏡💰
 
@@ -192,7 +192,7 @@ Espero con ansias nuestra llamada{callbackTime}
     subjectEs: 'Seguimiento de nuestra llamada reciente',
     template: `Hi {fname} 👋
 
-This is {LO fullname} with loanDepot. I believe you just hung up the call thinking I was a spam call.
+This is {LO fullname} with {company}. I believe you just hung up the call thinking I was a spam call.
 
 I am not, I am simply responding to the ad you clicked on {platform}.
 
@@ -204,7 +204,7 @@ This call is to see how we can help you become a homeowner? 🏡
 📧 Email {LO email}`,
     templateEs: `Hola {fname} 👋
 
-Soy {LO fullname} de loanDepot. Creo que acaba de colgar la llamada pensando que era una llamada de spam.
+Soy {LO fullname} de {company}. Creo que acaba de colgar la llamada pensando que era una llamada de spam.
 
 No lo soy, simplemente estoy respondiendo al anuncio en el que hizo clic en {platform}.
 
@@ -355,6 +355,7 @@ export type TemplateVariables = {
   loFname: string;
   loPhone: string;
   loEmail: string;
+  company: string;
   platform: string;
   recentYear?: string;
   prevYear?: string;
@@ -462,6 +463,9 @@ export function fillTemplate(
   
   // Replace {LO email} with loan officer's email
   result = result.replace(/{LO email}/g, variables.loEmail || '[LO Email]');
+  
+  // Replace {company} with company/brokerage name
+  result = result.replace(/{company}/g, variables.company || '[Company]');
   
   // Replace {platform} with the friendly platform name
   result = result.replace(/{platform}/g, formatPlatformName(variables.platform));

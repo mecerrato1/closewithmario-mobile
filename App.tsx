@@ -127,6 +127,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [unreadMessageCounts, setUnreadMessageCounts] = useState<Record<string, number>>({});
   const [showAiRecommendationModal, setShowAiRecommendationModal] = useState(false);
   const [selectedAiAttention, setSelectedAiAttention] = useState<{ reason: string; suggestedAction: string; badge: string; leadId: string; source: 'lead' | 'meta'; phone: string; firstName: string } | null>(null);
+  const [realtorProfilePicUrl, setRealtorProfilePicUrl] = useState<string | null>(null);
   
   // AI Lead Attention - fetch from cache/API
   const { fetchBatchAttention, getAttention, invalidateAttention, attentionMap } = useAiLeadAttention();
@@ -362,8 +363,24 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           }
         }
 
-        // Fetch loan officers for super admins
-        if (role === 'super_admin' || role === 'admin') {
+        // Fetch realtor profile picture for realtor users
+        if (role === 'realtor') {
+          const realtorMemberId = await getUserTeamMemberId(session.user.id, 'realtor');
+          if (realtorMemberId) {
+            const { data: realtorPicData } = await supabase
+              .from('realtors')
+              .select('profile_picture_url')
+              .eq('id', realtorMemberId)
+              .single();
+            
+            if (realtorPicData?.profile_picture_url) {
+              setRealtorProfilePicUrl(realtorPicData.profile_picture_url);
+            }
+          }
+        }
+
+        // Fetch loan officers for super admins and realtors
+        if (role === 'super_admin' || role === 'admin' || role === 'realtor') {
           const { data: losData } = await supabase
             .from('loan_officers')
             .select('id, first_name, last_name')
@@ -1720,6 +1737,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         session={session}
         onBack={() => setShowProfileSettings(false)}
         onSignOut={onSignOut}
+        realtorProfilePicUrl={realtorProfilePicUrl}
+        userRole={userRole}
       />
     );
   }
@@ -2044,9 +2063,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   onPress={() => setShowProfileMenu(true)}
                   style={styles.profileButton}
                 >
-                  {getAvatarUrl(session?.user?.user_metadata) ? (
+                  {getAvatarUrl(session?.user?.user_metadata, realtorProfilePicUrl) ? (
                     <Image 
-                      source={{ uri: getAvatarUrl(session?.user?.user_metadata) || '' }}
+                      source={{ uri: getAvatarUrl(session?.user?.user_metadata, realtorProfilePicUrl) || '' }}
                       style={styles.profileButtonAvatar}
                     />
                   ) : (
@@ -2698,9 +2717,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               onPress={() => setShowProfileMenu(true)}
               style={styles.profileButton}
             >
-              {getAvatarUrl(session?.user?.user_metadata) ? (
+              {getAvatarUrl(session?.user?.user_metadata, realtorProfilePicUrl) ? (
                 <Image 
-                  source={{ uri: getAvatarUrl(session?.user?.user_metadata) || '' }}
+                  source={{ uri: getAvatarUrl(session?.user?.user_metadata, realtorProfilePicUrl) || '' }}
                   style={styles.profileButtonAvatar}
                 />
               ) : (

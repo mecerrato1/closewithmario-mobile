@@ -1,5 +1,6 @@
 import { Platform, Alert } from 'react-native';
 import * as Contacts from 'expo-contacts';
+import { File as FSFile, Paths } from 'expo-file-system';
 
 export interface ContactInfo {
   firstName: string;
@@ -8,6 +9,7 @@ export interface ContactInfo {
   email?: string;
   company?: string;
   notes?: string;
+  imageUri?: string;
 }
 
 export interface PickedContact {
@@ -142,6 +144,17 @@ export async function saveContact(info: ContactInfo): Promise<void> {
 
     if (notes) {
       (contact as any)[Contacts.Fields.Note] = notes;
+    }
+
+    // Download remote image to local temp file if provided
+    if (info.imageUri) {
+      try {
+        const downloaded = await FSFile.downloadFileAsync(info.imageUri, Paths.cache);
+        (contact as any).image = { uri: downloaded.uri };
+        console.log('[Contacts] Attached profile image from:', downloaded.uri);
+      } catch (imgError) {
+        console.warn('[Contacts] Could not download profile image:', imgError);
+      }
     }
 
     console.log('[Contacts] Presenting contact form with contact:', contact);

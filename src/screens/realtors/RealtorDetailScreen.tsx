@@ -383,6 +383,7 @@ export default function RealtorDetailScreen({
         email: realtor.email || undefined,
         company: 'Realtor',
         notes: realtor.brokerage ? `Brokerage: ${realtor.brokerage}` : undefined,
+        imageUri: realtor.profile_picture_url || undefined,
       });
     } catch (error) {
       console.error('[Contacts] Failed to save realtor contact:', error);
