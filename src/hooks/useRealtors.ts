@@ -2,12 +2,14 @@
 // Hook for managing realtor list state with search, filters, and refresh
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { fetchAssignedRealtors, fetchNeedsLoveRealtors } from '../lib/supabase/realtors';
+import { fetchAssignedRealtors, fetchAllRealtors, fetchNeedsLoveRealtors } from '../lib/supabase/realtors';
 import type { AssignedRealtor, RelationshipStage } from '../lib/types/realtors';
+import type { UserRole } from '../lib/roles';
 
 interface UseRealtorsOptions {
   userId: string | undefined;
   autoFetch?: boolean;
+  userRole?: UserRole;
 }
 
 interface UseRealtorsResult {
@@ -26,7 +28,7 @@ interface UseRealtorsResult {
 
 const DEBOUNCE_MS = 300;
 
-export function useRealtors({ userId, autoFetch = true }: UseRealtorsOptions): UseRealtorsResult {
+export function useRealtors({ userId, autoFetch = true, userRole }: UseRealtorsOptions): UseRealtorsResult {
   const [realtors, setRealtors] = useState<AssignedRealtor[]>([]);
   const [needsLoveRealtors, setNeedsLoveRealtors] = useState<AssignedRealtor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,11 +71,11 @@ export function useRealtors({ userId, autoFetch = true }: UseRealtorsOptions): U
     setError(null);
 
     try {
-      // Fetch main list
-      const { data, error: fetchError } = await fetchAssignedRealtors(userId, {
-        search: debouncedSearch || undefined,
-        stage: stageFilter,
-      });
+      // Super admins see all realtors; others see only their assigned ones
+      const isSuperAdmin = userRole === 'super_admin';
+      const { data, error: fetchError } = isSuperAdmin
+        ? await fetchAllRealtors({ search: debouncedSearch || undefined, stage: stageFilter })
+        : await fetchAssignedRealtors(userId, { search: debouncedSearch || undefined, stage: stageFilter });
 
       if (fetchError) {
         setError(fetchError.message);
@@ -96,7 +98,7 @@ export function useRealtors({ userId, autoFetch = true }: UseRealtorsOptions): U
       setLoading(false);
       setRefreshing(false);
     }
-  }, [userId, debouncedSearch, stageFilter]);
+  }, [userId, debouncedSearch, stageFilter, userRole]);
 
   // Auto-fetch on mount and when filters change
   useEffect(() => {

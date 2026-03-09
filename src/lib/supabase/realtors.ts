@@ -186,6 +186,138 @@ export async function fetchAssignedRealtors(
 }
 
 // ============================================================================
+// Fetch All Realtors (for Super Admin)
+// ============================================================================
+
+export async function fetchAllRealtors(
+  options: FetchRealtorsOptions = {}
+): Promise<{ data: AssignedRealtor[] | null; error: Error | null }> {
+  try {
+    let query = supabase
+      .from('realtors')
+      .select('*')
+      .eq('active', true)
+      .order('last_name', { ascending: true });
+
+    let allData: any[] = [];
+    let from = 0;
+    const pageSize = 1000;
+    let hasMore = true;
+
+    while (hasMore) {
+      const { data: pageData, error: pageError } = await query.range(from, from + pageSize - 1);
+
+      if (pageError) {
+        console.error('[realtors] fetchAllRealtors error:', pageError.message);
+        return { data: null, error: new Error(pageError.message) };
+      }
+
+      if (pageData && pageData.length > 0) {
+        allData = [...allData, ...pageData];
+        from += pageSize;
+        hasMore = pageData.length === pageSize;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    // Get lead counts for all realtors
+    const realtorIds = allData.map((r: any) => r.id);
+    let leadCountMap: Record<string, number> = {};
+    if (realtorIds.length > 0) {
+      // Count leads + meta_ads for each realtor
+      const [leadsResult, metaResult] = await Promise.all([
+        supabase
+          .from('leads')
+          .select('realtor_id')
+          .in('realtor_id', realtorIds),
+        supabase
+          .from('meta_ads')
+          .select('realtor_id')
+          .in('realtor_id', realtorIds),
+      ]);
+
+      const allLeads = [...(leadsResult.data || []), ...(metaResult.data || [])];
+      allLeads.forEach((row: any) => {
+        if (row.realtor_id) {
+          leadCountMap[row.realtor_id] = (leadCountMap[row.realtor_id] || 0) + 1;
+        }
+      });
+    }
+
+    // Determine relationship stage based on lead count
+    const getStage = (count: number): RelationshipStage => {
+      if (count >= 2) return 'hot';
+      if (count === 1) return 'warm';
+      return 'cold';
+    };
+
+    const realtors: AssignedRealtor[] = allData.map((r: any) => {
+      const leadCount = leadCountMap[r.id] || 0;
+      return {
+        assignment_id: r.id, // Use realtor id as placeholder
+        lo_user_id: '',
+        relationship_stage: getStage(leadCount),
+        assignment_notes: null,
+        last_touched_at: r.created_at,
+        assigned_at: r.created_at,
+        realtor_id: r.id,
+        first_name: r.first_name,
+        last_name: r.last_name,
+        phone: r.phone,
+        email: r.email,
+        brokerage: r.brokerage,
+        active: r.active,
+        lead_eligible: r.lead_eligible ?? false,
+        campaign_eligible: r.campaign_eligible ?? true,
+        email_opt_out: r.email_opt_out ?? false,
+        preferred_language: r.preferred_language || 'en',
+        secondary_language: r.secondary_language || null,
+        county_filter: r.county_filter || null,
+        profile_picture_url: r.profile_picture_url || null,
+        ai_draft_access: r.ai_draft_access ?? false,
+        notes: r.notes || null,
+        realtor_created_at: r.created_at,
+        lead_count: leadCount,
+      };
+    })
+    .sort((a, b) => {
+      const aHasLeads = (a.lead_count || 0) > 0 ? 1 : 0;
+      const bHasLeads = (b.lead_count || 0) > 0 ? 1 : 0;
+      if (bHasLeads !== aHasLeads) return bHasLeads - aHasLeads;
+      const lastNameCompare = (a.last_name || '').localeCompare(b.last_name || '');
+      if (lastNameCompare !== 0) return lastNameCompare;
+      return (a.first_name || '').localeCompare(b.first_name || '');
+    });
+
+    // Apply stage filter
+    let filtered = realtors;
+    if (options.stage && options.stage !== 'all') {
+      filtered = filtered.filter(r => r.relationship_stage === options.stage);
+    }
+
+    // Apply search filter
+    if (options.search) {
+      const searchLower = options.search.toLowerCase();
+      filtered = filtered.filter(r => {
+        const fullName = `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase();
+        return (
+          fullName.includes(searchLower) ||
+          r.brokerage?.toLowerCase().includes(searchLower) ||
+          r.phone?.includes(options.search!) ||
+          r.email?.toLowerCase().includes(searchLower)
+        );
+      });
+    }
+
+    return { data: filtered, error: null };
+  } catch (err: any) {
+    console.error('[realtors] fetchAllRealtors exception:', err);
+    return { data: null, error: err };
+  }
+}
+
+// ============================================================================
 // Fetch Single Realtor by ID
 // ============================================================================
 
@@ -365,6 +497,9 @@ export interface UpdateRealtorPayload {
   email_opt_out?: boolean;
   preferred_language?: string;
   secondary_language?: string | null;
+  lead_eligible?: boolean;
+  ai_draft_access?: boolean;
+  county_filter?: string[] | null;
 }
 
 export async function updateRealtor(

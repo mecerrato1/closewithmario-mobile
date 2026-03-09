@@ -122,6 +122,7 @@ export default function AuthenticatedRoot({
             session={session} 
             onClose={handleNavigateToDashboard} 
             onNavigateToLead={handleNavigateToLead}
+            userRole={userRole}
           />
         );
       case 'loan_officers':

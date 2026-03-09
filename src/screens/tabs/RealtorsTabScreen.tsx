@@ -7,7 +7,7 @@ import RealtorDetailScreen from '../realtors/RealtorDetailScreen';
 import AddRealtorScreen from '../realtors/AddRealtorScreen';
 import { AssignedRealtor } from '../../lib/types/realtors';
 import { supabase } from '../../lib/supabase';
-import { getUserTeamMemberId } from '../../lib/roles';
+import { getUserTeamMemberId, type UserRole } from '../../lib/roles';
 
 type ScreenState =
   | { screen: 'list' }
@@ -18,9 +18,10 @@ interface RealtorsTabScreenProps {
   session?: Session | null;
   onClose?: () => void;
   onNavigateToLead?: (leadId: string, source: 'lead' | 'meta') => void;
+  userRole?: UserRole;
 }
 
-export default function RealtorsTabScreen({ session, onClose, onNavigateToLead }: RealtorsTabScreenProps) {
+export default function RealtorsTabScreen({ session, onClose, onNavigateToLead, userRole }: RealtorsTabScreenProps) {
   const [screenState, setScreenState] = useState<ScreenState>({ screen: 'list' });
   const [refreshKey, setRefreshKey] = useState(0);
   const [currentLOInfo, setCurrentLOInfo] = useState<{ firstName: string; lastName: string; phone: string; email: string; aiDraftAccess?: boolean } | null>(null);
@@ -138,6 +139,7 @@ export default function RealtorsTabScreen({ session, onClose, onNavigateToLead }
         onRealtorPress={handleRealtorPress}
         onAddPress={handleAddPress}
         onClose={onClose}
+        userRole={userRole}
       />
     </View>
   );

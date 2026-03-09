@@ -48,6 +48,7 @@ import {
 import { LanguageCode } from '../../lib/types/realtors';
 import RealtorStageBadge from '../../components/realtors/RealtorStageBadge';
 import { saveContact } from '../../utils/vcard';
+import { FLORIDA_COUNTIES } from '../../utils/floridaCounties';
 import { AiRewriteToolbar, AiRewriteToolbarRef } from '../../components/AiRewriteToolbar';
 import { 
   pickProfileImage, 
@@ -113,6 +114,10 @@ export default function RealtorDetailScreen({
   const [active, setActive] = useState(realtor.active);
   const [campaignEligible, setCampaignEligible] = useState(realtor.campaign_eligible);
   const [emailOptOut, setEmailOptOut] = useState(realtor.email_opt_out);
+  const [leadEligible, setLeadEligible] = useState(realtor.lead_eligible);
+  const [aiDraftAccess, setAiDraftAccess] = useState(realtor.ai_draft_access);
+  const [countyFilter, setCountyFilter] = useState<string[]>(realtor.county_filter || []);
+  const [showCountyPicker, setShowCountyPicker] = useState(false);
   const [primaryLanguage, setPrimaryLanguage] = useState<LanguageCode>(realtor.preferred_language);
   const [secondaryLanguage, setSecondaryLanguage] = useState<LanguageCode | 'none'>(realtor.secondary_language || 'none');
   
@@ -195,6 +200,64 @@ export default function RealtorDetailScreen({
     if (error) {
       Alert.alert('Error', 'Failed to update email preference');
       setEmailOptOut(realtor.email_opt_out);
+    } else {
+      onUpdate();
+    }
+  };
+
+  const handleLeadEligibleChange = async (value: boolean) => {
+    setLeadEligible(value);
+    if (!value) {
+      setCountyFilter([]);
+      setShowCountyPicker(false);
+    }
+    const { error } = await updateRealtor(realtor.realtor_id, { 
+      lead_eligible: value,
+      ...(!value ? { county_filter: null } : {}),
+    });
+    if (error) {
+      Alert.alert('Error', 'Failed to update lead eligibility');
+      setLeadEligible(realtor.lead_eligible);
+      setCountyFilter(realtor.county_filter || []);
+    } else {
+      onUpdate();
+    }
+  };
+
+  const handleAiDraftAccessChange = async (value: boolean) => {
+    setAiDraftAccess(value);
+    const { error } = await updateRealtor(realtor.realtor_id, { ai_draft_access: value });
+    if (error) {
+      Alert.alert('Error', 'Failed to update AI draft access');
+      setAiDraftAccess(realtor.ai_draft_access);
+    } else {
+      onUpdate();
+    }
+  };
+
+  const handleCountyToggle = async (county: string) => {
+    const isSelected = countyFilter.includes(county);
+    const updated = isSelected
+      ? countyFilter.filter(c => c !== county)
+      : [...countyFilter, county];
+    setCountyFilter(updated);
+    const { error } = await updateRealtor(realtor.realtor_id, { 
+      county_filter: updated.length > 0 ? updated : null 
+    });
+    if (error) {
+      Alert.alert('Error', 'Failed to update county filter');
+      setCountyFilter(realtor.county_filter || []);
+    } else {
+      onUpdate();
+    }
+  };
+
+  const handleClearCounties = async () => {
+    setCountyFilter([]);
+    const { error } = await updateRealtor(realtor.realtor_id, { county_filter: null });
+    if (error) {
+      Alert.alert('Error', 'Failed to clear county filter');
+      setCountyFilter(realtor.county_filter || []);
     } else {
       onUpdate();
     }
@@ -647,6 +710,119 @@ export default function RealtorDetailScreen({
               thumbColor={emailOptOut ? '#EF4444' : '#9CA3AF'}
             />
           </View>
+
+          {/* Lead Eligible Toggle */}
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleInfo}>
+              <View style={[styles.toggleIconContainer, { backgroundColor: leadEligible ? '#DBEAFE' : '#F3F4F6' }]}>
+                <Ionicons name="people" size={20} color={leadEligible ? '#2563EB' : '#9CA3AF'} />
+              </View>
+              <View style={styles.toggleTextContainer}>
+                <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>Lead Eligible (round-robin)</Text>
+                <Text style={[styles.toggleHelper, { color: colors.textSecondary }]}>
+                  When enabled, this realtor can receive leads from the round-robin system.
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={leadEligible}
+              onValueChange={handleLeadEligibleChange}
+              trackColor={{ false: '#E5E7EB', true: '#93C5FD' }}
+              thumbColor={leadEligible ? '#2563EB' : '#9CA3AF'}
+            />
+          </View>
+
+          {/* Eligible Counties (only when lead eligible) */}
+          {leadEligible && (
+            <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
+              <Text style={[styles.toggleLabel, { color: colors.textPrimary, marginBottom: 4 }]}>Eligible Counties</Text>
+              <Text style={[styles.toggleHelper, { color: colors.textSecondary, marginBottom: 8 }]}>
+                Select which counties this realtor receives leads from. Leave empty for all counties.
+              </Text>
+              <TouchableOpacity
+                style={{
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  borderRadius: 8,
+                  padding: 12,
+                  backgroundColor: colors.background,
+                  marginBottom: 4,
+                }}
+                onPress={() => setShowCountyPicker(!showCountyPicker)}
+              >
+                <Text style={{ color: countyFilter.length > 0 ? colors.textPrimary : colors.textSecondary, fontSize: 14 }}>
+                  {countyFilter.length > 0
+                    ? `${countyFilter.length} selected: ${countyFilter.join(', ')}`
+                    : 'All counties (tap to select specific ones)'}
+                </Text>
+              </TouchableOpacity>
+              {countyFilter.length > 0 && (
+                <TouchableOpacity onPress={handleClearCounties} style={{ marginBottom: 8 }}>
+                  <Text style={{ color: '#DC2626', fontSize: 12 }}>Clear county filter</Text>
+                </TouchableOpacity>
+              )}
+              {showCountyPicker && (
+                <View style={{ maxHeight: 200, borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.background }}>
+                  <ScrollView nestedScrollEnabled={true}>
+                    {FLORIDA_COUNTIES.map((county) => {
+                      const isSelected = countyFilter.includes(county);
+                      return (
+                        <TouchableOpacity
+                          key={county}
+                          onPress={() => handleCountyToggle(county)}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            paddingVertical: 10,
+                            paddingHorizontal: 12,
+                            borderBottomWidth: 1,
+                            borderBottomColor: colors.border,
+                            backgroundColor: isSelected ? '#EFF6FF' : 'transparent',
+                          }}
+                        >
+                          <View style={{
+                            width: 20,
+                            height: 20,
+                            borderRadius: 4,
+                            borderWidth: 2,
+                            borderColor: isSelected ? '#2563EB' : '#D1D5DB',
+                            backgroundColor: isSelected ? '#2563EB' : 'transparent',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            marginRight: 10,
+                          }}>
+                            {isSelected && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+                          </View>
+                          <Text style={{ fontSize: 14, color: colors.textPrimary }}>{county}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* AI Draft Access Toggle */}
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleInfo}>
+              <View style={[styles.toggleIconContainer, { backgroundColor: aiDraftAccess ? '#FEF3C7' : '#F3F4F6' }]}>
+                <Ionicons name="sparkles" size={20} color={aiDraftAccess ? '#D97706' : '#9CA3AF'} />
+              </View>
+              <View style={styles.toggleTextContainer}>
+                <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>AI Draft Access</Text>
+                <Text style={[styles.toggleHelper, { color: colors.textSecondary }]}>
+                  When enabled, AI can draft messages for leads assigned to this realtor.
+                </Text>
+              </View>
+            </View>
+            <Switch
+              value={aiDraftAccess}
+              onValueChange={handleAiDraftAccessChange}
+              trackColor={{ false: '#E5E7EB', true: '#FCD34D' }}
+              thumbColor={aiDraftAccess ? '#D97706' : '#9CA3AF'}
+            />
+          </View>
         </View>
 
         {/* Languages Section */}
@@ -1074,6 +1250,29 @@ export default function RealtorDetailScreen({
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* Sticky Footer */}
+      <View style={[styles.stickyFooter, { backgroundColor: colors.cardBackground, borderTopColor: colors.border }]}>
+        <TouchableOpacity
+          style={styles.footerSaveButton}
+          onPress={() => {
+            onUpdate();
+            Alert.alert('Saved', 'All changes have been saved.', [
+              { text: 'OK', onPress: onBack },
+            ]);
+          }}
+        >
+          <Ionicons name="checkmark-circle" size={20} color="#FFFFFF" />
+          <Text style={styles.footerSaveText}>Save</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.footerCloseButton}
+          onPress={onBack}
+        >
+          <Ionicons name="arrow-back-circle" size={20} color="#7C3AED" />
+          <Text style={styles.footerCloseText}>Close</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -1576,6 +1775,44 @@ const styles = StyleSheet.create({
   },
   sendCustomMessageButtonText: {
     color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  stickyFooter: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 12,
+    borderTopWidth: 1,
+    gap: 12,
+  },
+  footerSaveButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#7C3AED',
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 8,
+  },
+  footerSaveText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  footerCloseButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 8,
+  },
+  footerCloseText: {
+    color: '#7C3AED',
     fontSize: 16,
     fontWeight: '600',
   },

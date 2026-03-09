@@ -462,6 +462,16 @@ export function LeadDetailView({
     aiAttention: aiAttention ? { badge: aiAttention.badge, priority: aiAttention.priority } : 'none'
   });
 
+  // Auto-update status from 'new' to 'attempting_contact' when user initiates contact
+  // Returns true if status was advanced (so callers can include it in subsequent updates)
+  const autoAdvanceStatus = async (): Promise<boolean> => {
+    if (record?.status === 'new') {
+      await onStatusChange(selected.source, record.id, 'attempting_contact');
+      return true;
+    }
+    return false;
+  };
+
   const handleCall = async () => {
     if (!phone) return;
 
@@ -471,6 +481,9 @@ export function LeadDetailView({
       Alert.alert('Invalid phone number', 'This lead does not have a valid phone number to call.');
       return;
     }
+
+    // Auto-advance status from 'new' to 'attempting_contact'
+    const statusAdvanced = await autoAdvanceStatus();
     
     // Log the call activity automatically
     try {
@@ -500,8 +513,8 @@ export function LeadDetailView({
           .update({ last_contact_date: now })
           .eq('id', record!.id);
         
-        // Update the lead in parent component state
-        const updatedLead = { ...record!, last_contact_date: now };
+        // Update the lead in parent component state (preserve status if it was advanced)
+        const updatedLead = { ...record!, last_contact_date: now, ...(statusAdvanced ? { status: 'attempting_contact' } : {}) };
         console.log('📞 CALL: Updating lead', { id: updatedLead.id, last_contact_date: now, source: isMeta ? 'meta' : 'lead' });
         onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
         
@@ -642,6 +655,9 @@ export function LeadDetailView({
     if (templateMode === 'text') {
       const encodedBody = encodeURIComponent(messageBody);
 
+      // Auto-advance status from 'new' to 'attempting_contact'
+      const statusAdvanced = await autoAdvanceStatus();
+
       // Log the text activity automatically
       try {
         const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
@@ -670,8 +686,8 @@ export function LeadDetailView({
             .update({ last_contact_date: now })
             .eq('id', r.id);
           
-          // Update the lead in parent component state
-          const updatedLead = { ...r, last_contact_date: now };
+          // Update the lead in parent component state (preserve status if advanced)
+          const updatedLead = { ...r, last_contact_date: now, ...(statusAdvanced ? { status: 'attempting_contact' } : {}) };
           onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
           
           // Refresh activities to show the new log
@@ -777,6 +793,9 @@ export function LeadDetailView({
     if (templateMode === 'text') {
       const encodedBody = encodeURIComponent(messageBody);
 
+      // Auto-advance status from 'new' to 'attempting_contact'
+      const statusAdvanced = await autoAdvanceStatus();
+
       // Log the text activity automatically
       try {
         const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
@@ -807,8 +826,8 @@ export function LeadDetailView({
             .update({ last_contact_date: now })
             .eq('id', record.id);
           
-          // Update the lead in parent component state
-          const updatedLead = { ...record, last_contact_date: now };
+          // Update the lead in parent component state (preserve status if advanced)
+          const updatedLead = { ...record, last_contact_date: now, ...(statusAdvanced ? { status: 'attempting_contact' } : {}) };
           onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
           
           LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);

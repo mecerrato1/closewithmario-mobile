@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../../styles/theme';
 import { useRealtors } from '../../hooks/useRealtors';
 import { AssignedRealtor, RelationshipStage } from '../../lib/types/realtors';
+import type { UserRole } from '../../lib/roles';
 import RealtorCard from '../../components/realtors/RealtorCard';
 
 interface RealtorsListScreenProps {
@@ -23,6 +24,7 @@ interface RealtorsListScreenProps {
   onRealtorPress: (realtor: AssignedRealtor) => void;
   onAddPress: () => void;
   onClose?: () => void;
+  userRole?: UserRole;
 }
 
 export default function RealtorsListScreen({
@@ -30,6 +32,7 @@ export default function RealtorsListScreen({
   onRealtorPress,
   onAddPress,
   onClose,
+  userRole,
 }: RealtorsListScreenProps) {
   const { colors } = useThemeColors();
   const {
@@ -42,7 +45,7 @@ export default function RealtorsListScreen({
     stageFilter,
     setStageFilter,
     onRefresh,
-  } = useRealtors({ userId });
+  } = useRealtors({ userId, userRole });
 
   const [showStageInfo, setShowStageInfo] = useState(false);
 
