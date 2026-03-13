@@ -147,14 +147,12 @@ export async function fetchAssignedRealtors(
         realtor_created_at: row.realtors.created_at,
         lead_count: leadCountMap[row.realtors.id] || 0,
       }))
-      // Sort: realtors with leads first, then alphabetically by last name, first name
+      // Sort: most leads first, then alphabetically by last name, first name
       .sort((a, b) => {
-        const aHasLeads = (a.lead_count || 0) > 0 ? 1 : 0;
-        const bHasLeads = (b.lead_count || 0) > 0 ? 1 : 0;
-        // First sort by has leads (descending - with leads first)
-        if (bHasLeads !== aHasLeads) {
-          return bHasLeads - aHasLeads;
-        }
+        const aCount = a.lead_count || 0;
+        const bCount = b.lead_count || 0;
+        // First sort by lead count descending
+        if (bCount !== aCount) return bCount - aCount;
         // Then sort alphabetically by last name, then first name
         const lastNameCompare = (a.last_name || '').localeCompare(b.last_name || '');
         if (lastNameCompare !== 0) return lastNameCompare;
@@ -282,9 +280,11 @@ export async function fetchAllRealtors(
       };
     })
     .sort((a, b) => {
-      const aHasLeads = (a.lead_count || 0) > 0 ? 1 : 0;
-      const bHasLeads = (b.lead_count || 0) > 0 ? 1 : 0;
-      if (bHasLeads !== aHasLeads) return bHasLeads - aHasLeads;
+      const aCount = a.lead_count || 0;
+      const bCount = b.lead_count || 0;
+      // First sort by lead count descending
+      if (bCount !== aCount) return bCount - aCount;
+      // Then sort alphabetically by last name, then first name
       const lastNameCompare = (a.last_name || '').localeCompare(b.last_name || '');
       if (lastNameCompare !== 0) return lastNameCompare;
       return (a.first_name || '').localeCompare(b.first_name || '');
