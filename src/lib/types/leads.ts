@@ -59,6 +59,7 @@ export type MetaLead = {
   county_interest?: string | null;
   monthly_income?: string | null;
   meta_ad_notes?: string | null;
+  form_data?: Record<string, string> | null;
   // Tracking fields
   is_tracked?: boolean;
   tracking_reason?: TrackingReason;

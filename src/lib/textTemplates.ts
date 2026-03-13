@@ -321,6 +321,103 @@ Aquí está la lista de documentos necesarios para su pre-aprobación:
 📧 Email {LO email}`,
   },
   {
+    id: 'dpa_checkin',
+    name: '10k DPA',
+    nameEs: '10k DPA',
+    subject: 'Down payment assistance program for first-time buyers',
+    subjectEs: 'Programa de asistencia de pago inicial para compradores primerizos',
+    template: `Hi {fname} 👋
+
+This is {LO fullname} with {company}.
+We have that $10,000 down payment assistance program for first time home buyers.
+
+The info you entered says you have {creditRange} credit and want to buy in {county} county, I can help.
+
+Can we hop on a quick call so I can walk you through how the program works? 🏠✅
+
+You can reach me at:
+📞 {LO phone}
+📧 {LO email}`,
+    templateEs: `Hola {fname} 👋
+
+Soy {LO fullname} de {company}.
+Tenemos un programa de asistencia de pago inicial de $10,000 para compradores de primera vivienda.
+
+La información que ingresó dice que tiene crédito de {creditRange} y quiere comprar en el condado de {county}, puedo ayudar.
+
+¿Podemos hablar rápido para explicarle cómo funciona el programa? 🏠✅
+
+Puede contactarme en:
+📞 {LO phone}
+📧 {LO email}`,
+  },
+  {
+    id: 'dscr_loan',
+    name: 'DSCR Loan',
+    nameEs: 'Préstamo DSCR',
+    subject: 'DSCR investment property loan – no tax returns needed',
+    subjectEs: 'Préstamo DSCR para propiedad de inversión – sin declaraciones de impuestos',
+    template: `Hi {fname} 👋
+
+This is {LO fullname} with {company}.
+We have a DSCR loan program for investment properties — no tax returns or income verification needed. We qualify you based on the property's rental income.
+
+The info you entered says you have {creditRange} credit and want to buy in {county} county, I can help.
+
+Do you have a few minutes for a quick call? I can break down exactly how this works for your situation. 🏠💰
+
+You can reach me at:
+📞 {LO phone}
+📧 {LO email}`,
+    templateEs: `Hola {fname} 👋
+
+Soy {LO fullname} de {company}.
+Tenemos un programa de préstamo DSCR para propiedades de inversión — no se necesitan declaraciones de impuestos ni verificación de ingresos. Lo calificamos basándonos en los ingresos de alquiler de la propiedad.
+
+La información que ingresó dice que tiene crédito de {creditRange} y quiere comprar en el condado de {county}, puedo ayudar.
+
+¿Tiene unos minutos para una llamada rápida? Le explico exactamente cómo funciona para su situación. 🏠💰
+
+Puede contactarme en:
+📞 {LO phone}
+📧 {LO email}`,
+  },
+  {
+    id: 'va_loan',
+    name: 'VA Loan',
+    nameEs: 'Préstamo VA',
+    subject: 'VA home loan – $0 down payment for veterans',
+    subjectEs: 'Préstamo VA – $0 de pago inicial para veteranos',
+    template: `Hi {fname} 👋
+
+This is {LO fullname} with {company}.
+I see you may qualify for a VA home loan — that means $0 down payment and no monthly mortgage insurance.
+
+The info you entered says you have {creditRange} credit and want to buy in {county} county, I can help.
+
+Do you have a few minutes? I'd love to walk you through how to use your VA benefit. 🏠✅
+
+You can reach me at:
+📞 {LO phone}
+📧 {LO email}
+
+Thank you for your service! 🇺🇸🫡`,
+    templateEs: `Hola {fname} 👋
+
+Soy {LO fullname} de {company}.
+Veo que podría calificar para un préstamo VA — eso significa $0 de pago inicial y sin seguro hipotecario mensual.
+
+La información que ingresó dice que tiene crédito de {creditRange} y quiere comprar en el condado de {county}, puedo ayudar.
+
+¿Tiene unos minutos? Me encantaría explicarle cómo usar su beneficio VA. 🏠✅
+
+Puede contactarme en:
+📞 {LO phone}
+📧 {LO email}
+
+¡Gracias por su servicio! 🇺🇸🫡`,
+  },
+  {
     id: 'no_response',
     name: 'No Response',
     nameEs: 'Sin Respuesta',
@@ -361,6 +458,8 @@ export type TemplateVariables = {
   prevYear?: string;
   callbackTime?: string;
   adDate?: string;
+  creditRange?: string;
+  county?: string;
 };
 
 /**
@@ -484,6 +583,12 @@ export function fillTemplate(
 
   // Replace {adDate} with the formatted ad clicked date
   result = result.replace(/{adDate}/g, variables.adDate || 'recently');
+
+  // Replace {creditRange} with lead's credit range
+  result = result.replace(/{creditRange}/g, variables.creditRange || '[credit]');
+
+  // Replace {county} with lead's county of interest
+  result = result.replace(/{county}/g, variables.county || '[county]');
 
   return result;
 }

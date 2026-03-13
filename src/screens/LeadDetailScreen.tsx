@@ -451,8 +451,15 @@ export function LeadDetailView({
   // Use AI attention badge if available, otherwise fall back to rule-based
   // Show AI badge if we have AI data (even if needsAttention is false - shows "No Action Needed")
   const ruleBadge = record ? getLeadAlert(record) : null;
-  const attentionBadge = aiAttention?.badge 
-    ? { label: aiAttention.badge, color: aiAttention.priority <= 2 ? '#EF4444' : aiAttention.priority <= 4 ? '#F59E0B' : '#22C55E' }
+  const getAiPriorityColor = (p: number) => {
+    if (p <= 1) return { dot: '#EF4444', bg: '#FEF2F2', border: '#EF4444' }; // red
+    if (p <= 2) return { dot: '#F97316', bg: '#FFF7ED', border: '#F97316' }; // orange
+    if (p <= 3) return { dot: '#EAB308', bg: '#FEFCE8', border: '#EAB308' }; // yellow
+    return { dot: '#22C55E', bg: '#F0FDF4', border: '#22C55E' }; // green (priority 4 and 5 = "On Track")
+  };
+  const aiPriorityColors = aiAttention?.badge ? getAiPriorityColor(aiAttention.priority) : null;
+  const attentionBadge = aiAttention?.badge && aiPriorityColors
+    ? { label: aiAttention.badge, color: aiPriorityColors.dot }
     : ruleBadge;
   
   console.log('🔍 LeadDetailView render:', { 
@@ -629,6 +636,18 @@ export function LeadDetailView({
       return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     };
 
+    // Extract credit range and county from hardcoded columns or form_data
+    const metaR = r as MetaLead;
+    const fd = metaR.form_data || {};
+    const creditRange = metaR.credit_range
+      || fd.credit_range
+      || Object.entries(fd).find(([k]) => k.toLowerCase().includes('credit'))?.[1]
+      || '';
+    const county = metaR.county_interest
+      || fd.county_interest
+      || Object.entries(fd).find(([k]) => k.toLowerCase().includes('county') && !k.toLowerCase().includes('credit'))?.[1]
+      || '';
+
     const variables: TemplateVariables = {
       fname: r.first_name || 'there',
       loFullname: currentLOInfo 
@@ -641,6 +660,8 @@ export function LeadDetailView({
       platform: isMeta ? (r as MetaLead).platform || 'Facebook' : 'our website',
       callbackTime: callbackTime,
       adDate: formatAdDate(r.created_at),
+      creditRange,
+      county,
     };
 
     console.log('Template variables:', variables);
@@ -1497,6 +1518,10 @@ export function LeadDetailView({
         // Remove from local state
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setActivities(activities.filter(a => a.id !== activityId));
+        // Invalidate AI attention cache after deleting activity
+        if (onInvalidateAttention && record) {
+          onInvalidateAttention(record.id);
+        }
       }
     } catch (e) {
       console.error('Unexpected error deleting activity:', e);
@@ -1876,21 +1901,69 @@ export function LeadDetailView({
             {/* Divider */}
             <View style={styles.sectionDivider} />
 
-            {/* AI Attention Badge - Tappable to show recommendation */}
-            {attentionBadge && (
-            <TouchableOpacity 
-              style={styles.attentionBadgeContainer}
-              onPress={() => aiAttention?.reason && setShowAiRecommendation(true)}
-              activeOpacity={aiAttention?.reason ? 0.7 : 1}
-            >
-              <View style={[styles.detailAttentionBadge, { backgroundColor: attentionBadge.color }]}>
-                <Text style={styles.detailAttentionBadgeText}>⚠️ {attentionBadge.label}</Text>
-                {aiAttention?.reason && (
-                  <Ionicons name="information-circle-outline" size={14} color="#FFF" style={{ marginLeft: 6 }} />
-                )}
-              </View>
-            </TouchableOpacity>
-          )}
+            {/* AI Attention Card */}
+            {attentionBadge && (() => {
+              const priorityColors = aiPriorityColors || { dot: attentionBadge.color, bg: '#FEF2F2', border: attentionBadge.color };
+              const stripEmoji = (s: string) => s.replace(/^[\p{Emoji}\p{Emoji_Presentation}\p{Emoji_Modifier_Base}\p{Emoji_Component}\u200d\ufe0f\s]+/u, '').trim();
+              return (
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: priorityColors.bg,
+                    borderLeftWidth: 4,
+                    borderLeftColor: priorityColors.border,
+                    borderRadius: 10,
+                    padding: 12,
+                    marginBottom: 10,
+                  }}
+                  onPress={() => aiAttention?.reason && setShowAiRecommendation(true)}
+                  activeOpacity={aiAttention?.reason ? 0.7 : 1}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: aiAttention?.reason ? 6 : 0 }}>
+                    <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: priorityColors.dot, marginRight: 8 }} />
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#1E293B', flex: 1 }}>
+                      {stripEmoji(attentionBadge.label)}
+                    </Text>
+                  </View>
+                  {aiAttention?.reason && (
+                    <Text style={{ fontSize: 12, color: '#475569', marginLeft: 18, marginBottom: 4, lineHeight: 17 }}>
+                      {aiAttention.reason}
+                    </Text>
+                  )}
+                  {aiAttention?.suggestedAction && (() => {
+                    const sugAction = aiAttention.suggestedAction || '';
+                    const isTextSug = sugAction.toLowerCase().includes('send a text') || sugAction.toLowerCase().includes('text:');
+                    if (isTextSug && phone) {
+                      return (
+                        <TouchableOpacity
+                          onPress={() => {
+                            // Extract quoted message from AI suggestion
+                            const quoteMatch = sugAction.match(/['"]([^'"]+)['"]/);
+                            const aiMessage = quoteMatch ? quoteMatch[1] : sugAction.replace(/^Send a text:\s*/i, '').trim();
+                            // Pre-fill custom message and open template modal
+                            setCustomMessageText(aiMessage);
+                            setShowCustomMessage(true);
+                            setTemplateMode('text');
+                            setShowTemplateModal(true);
+                          }}
+                          activeOpacity={0.6}
+                          style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 18, backgroundColor: '#F3E8FF', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, marginTop: 2 }}
+                        >
+                          <Ionicons name="chatbubble-ellipses-outline" size={13} color="#6D28D9" style={{ marginRight: 5 }} />
+                          <Text style={{ fontSize: 12, color: '#6D28D9', fontWeight: '600', lineHeight: 17, flex: 1 }}>
+                            Tap to send: {aiAttention.suggestedAction.replace(/^Send a text:\s*/i, '').replace(/^['"]|['"]$/g, '').substring(0, 60)}…
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    }
+                    return (
+                      <Text style={{ fontSize: 12, color: '#6D28D9', fontWeight: '600', marginLeft: 18, lineHeight: 17 }}>
+                        Suggested: {aiAttention.suggestedAction}
+                      </Text>
+                    );
+                  })()}
+                </TouchableOpacity>
+              );
+            })()}
           
           {/* Status and LO Assignment Row (for admins) or Full Width Status (for non-admins) */}
           <View style={propUserRole === 'super_admin' ? styles.statusLORow : { marginTop: 0 }}>
@@ -2561,61 +2634,115 @@ export function LeadDetailView({
                   Address: {(record as MetaLead).subject_address}
                 </Text>
               )}
-              {(record as MetaLead).loan_purpose && (
-                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
-                  Loan Purpose: {(record as MetaLead).loan_purpose}
-                </Text>
-              )}
-              {(record as MetaLead).preferred_language && (
-                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
-                  Language: {(record as MetaLead).preferred_language}
-                </Text>
-              )}
-              {(record as MetaLead).credit_range && (
-                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
-                  Credit Range: {(record as MetaLead).credit_range}
-                </Text>
-              )}
-              {(record as MetaLead).income_type && (
-                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
-                  Income Type: {(record as MetaLead).income_type}
-                </Text>
-              )}
-              {(record as MetaLead).purchase_timeline && (
-                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
-                  Purchase Timeline: {(record as MetaLead).purchase_timeline}
-                </Text>
-              )}
-              {(record as MetaLead).price_range && (
-                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
-                  Price Range: {(record as MetaLead).price_range}
-                </Text>
-              )}
-              {(record as MetaLead).down_payment_saved && (
-                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
-                  Down Payment Saved: {(record as MetaLead).down_payment_saved}
-                </Text>
-              )}
-              {(record as MetaLead).has_realtor != null && (
-                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
-                  Has Realtor: {(record as MetaLead).has_realtor ? 'Yes' : 'No'}
-                </Text>
-              )}
-              {(record as MetaLead).county_interest && (
-                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
-                  County Interest: {(record as MetaLead).county_interest}
-                </Text>
-              )}
-              {(record as MetaLead).monthly_income && (
-                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
-                  Monthly Income: {(record as MetaLead).monthly_income}
-                </Text>
-              )}
-              {((record as MetaLead).meta_ad_notes || (record as MetaLead).additional_notes) && (
-                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
-                  Notes: {(record as MetaLead).meta_ad_notes || (record as MetaLead).additional_notes}
-                </Text>
-              )}
+              {/* Form answers: use form_data when available, fall back to hardcoded columns for old leads */}
+              {(() => {
+                const meta = record as MetaLead;
+                const formData = meta.form_data;
+                const hasFormData = formData && Object.keys(formData).length > 0;
+
+                if (hasFormData) {
+                  // form_data is the source of truth — exclude identity & campaign keys shown elsewhere
+                  const excludeKeys = new Set([
+                    'first_name', 'last_name', 'email', 'phone_number', 'phone', 'full_name', 'name',
+                    'campaign_name', 'ad_name', 'platform', 'ad_set',
+                  ]);
+                  const entries = Object.entries(formData).filter(
+                    ([key]) => !excludeKeys.has(key)
+                  );
+                  if (entries.length === 0) return null;
+                  const formatStr = (s: string) =>
+                    s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+                  return (
+                    <View style={{ marginTop: 4 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: '#7C3AED', marginBottom: 8, letterSpacing: 0.3 }}>
+                        FORM ANSWERS
+                      </Text>
+                      {entries.map(([key, value]) => (
+                        <View
+                          key={key}
+                          style={{
+                            backgroundColor: colors.cardBackground === '#FFFFFF' ? '#F8FAFC' : 'rgba(255,255,255,0.05)',
+                            borderRadius: 8,
+                            paddingHorizontal: 12,
+                            paddingVertical: 8,
+                            marginBottom: 6,
+                            borderWidth: 1,
+                            borderColor: colors.border || '#E2E8F0',
+                          }}
+                        >
+                          <Text style={{ fontSize: 11, fontWeight: '600', color: '#94A3B8', marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+                            {formatStr(key)}
+                          </Text>
+                          <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: '500' }} selectable={true}>
+                            {formatStr(value)}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  );
+                }
+
+                // Legacy fallback: no form_data, show hardcoded columns
+                return (
+                  <>
+                    {meta.loan_purpose && (
+                      <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
+                        Loan Purpose: {meta.loan_purpose}
+                      </Text>
+                    )}
+                    {meta.preferred_language && (
+                      <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
+                        Language: {meta.preferred_language}
+                      </Text>
+                    )}
+                    {meta.credit_range && (
+                      <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
+                        Credit Range: {meta.credit_range}
+                      </Text>
+                    )}
+                    {meta.income_type && (
+                      <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
+                        Income Type: {meta.income_type}
+                      </Text>
+                    )}
+                    {meta.purchase_timeline && (
+                      <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
+                        Purchase Timeline: {meta.purchase_timeline}
+                      </Text>
+                    )}
+                    {meta.price_range && (
+                      <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
+                        Price Range: {meta.price_range}
+                      </Text>
+                    )}
+                    {meta.down_payment_saved && (
+                      <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
+                        Down Payment Saved: {meta.down_payment_saved}
+                      </Text>
+                    )}
+                    {meta.has_realtor != null && (
+                      <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
+                        Has Realtor: {meta.has_realtor ? 'Yes' : 'No'}
+                      </Text>
+                    )}
+                    {meta.county_interest && (
+                      <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
+                        County Interest: {meta.county_interest}
+                      </Text>
+                    )}
+                    {meta.monthly_income && (
+                      <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
+                        Monthly Income: {meta.monthly_income}
+                      </Text>
+                    )}
+                    {(meta.meta_ad_notes || meta.additional_notes) && (
+                      <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
+                        Notes: {meta.meta_ad_notes || meta.additional_notes}
+                      </Text>
+                    )}
+                  </>
+                );
+              })()}
             </>
           )}
 
@@ -3081,6 +3208,16 @@ export function LeadDetailView({
                 
                 <ScrollView style={styles.templateList} showsVerticalScrollIndicator={false}>
                   {TEXT_TEMPLATES.map((template) => {
+                    const metaRec = record as MetaLead;
+                    const fdPrev = metaRec.form_data || {};
+                    const crPrev = metaRec.credit_range
+                      || fdPrev.credit_range
+                      || Object.entries(fdPrev).find(([k]) => k.toLowerCase().includes('credit'))?.[1]
+                      || '';
+                    const countyPrev = metaRec.county_interest
+                      || fdPrev.county_interest
+                      || Object.entries(fdPrev).find(([k]) => k.toLowerCase().includes('county') && !k.toLowerCase().includes('credit'))?.[1]
+                      || '';
                     const variables: TemplateVariables = {
                       fname: record.first_name || 'there',
                       loFullname: currentLOInfo 
@@ -3091,6 +3228,8 @@ export function LeadDetailView({
                       loEmail: currentLOInfo?.email || '[Email]',
                       company: currentLOInfo?.company || '[Company]',
                       platform: isMeta ? (record as MetaLead).platform || 'Facebook' : 'our website',
+                      creditRange: crPrev,
+                      county: countyPrev,
                     };
                     const templateText = getTemplateText(template, useSpanishTemplates);
                     const preview = fillTemplate(templateText, variables);

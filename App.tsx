@@ -406,7 +406,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         let metaQuery = supabase
           .from('meta_ads')
           .select(
-            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, source_detail, loan_purpose, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary'
+            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, source_detail, loan_purpose, county_interest, monthly_income, meta_ad_notes, form_data, lo_id, realtor_id, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary'
           )
           .order('created_at', { ascending: false });
 
@@ -705,7 +705,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
       let metaQuery = supabase
         .from('meta_ads')
-        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, source_detail, loan_purpose, county_interest, monthly_income, meta_ad_notes, lo_id, realtor_id, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary')
+        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, source_detail, loan_purpose, county_interest, monthly_income, meta_ad_notes, form_data, lo_id, realtor_id, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary')
         .order('created_at', { ascending: false});
 
       if (!canSeeAllLeads(userRole)) {
@@ -853,6 +853,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             l.id === id ? { ...l, ...updateData } : l
           )
         );
+        // Invalidate AI attention cache after status change
+        invalidateAttention(id);
       } else {
         const currentLead = metaLeads.find(l => l.id === id);
         const currentIsTracked = currentLead?.is_tracked || false;
@@ -887,6 +889,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             m.id === id ? { ...m, ...updateData } : m
           )
         );
+        // Invalidate AI attention cache after status change
+        invalidateAttention(id);
       }
     } finally {
       setStatusUpdating(false);
@@ -1299,7 +1303,18 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       ? { label: aiAttention.badge, color: aiAttention.priority <= 2 ? '#EF4444' : aiAttention.priority <= 4 ? '#F59E0B' : '#22C55E' }
       : getLeadAlert(item);
     const borderColor = alert ? alert.color : '#7C3AED';
-    const isUnread = !item.last_contact_date && (item.status === 'new' || !item.status);
+    const isUnread = (unreadMessageCounts[item.id] || 0) > 0;
+    // Priority dot color for lead list (green for priority 5 = "On Track")
+    const getPriorityDotColor = () => {
+      if (aiAttention?.badge) {
+        if (aiAttention.priority <= 1) return '#EF4444';
+        if (aiAttention.priority <= 2) return '#F97316';
+        if (aiAttention.priority <= 3) return '#EAB308';
+        return '#22C55E'; // priority 4 and 5
+      }
+      return alert ? alert.color : null;
+    };
+    const dotColor = getPriorityDotColor();
 
     // Right-side swipe actions for website leads
     const renderRightActions = () => (
@@ -1364,67 +1379,41 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               <Text style={[styles.leadName, { color: colors.textPrimary }]} numberOfLines={1}>
                 {fullName}
               </Text>
-              {isUnread && <View style={styles.unreadDot} />}
             </View>
-            {item.source === 'My Lead' ? (
-              <View style={styles.myLeadBadge}>
-                <Ionicons
-                  name="person-add-outline"
-                  size={12}
-                  color="#16A34A"
-                />
-                <Text style={styles.myLeadBadgeText}>My Lead</Text>
-              </View>
-            ) : (
-              <View style={styles.leadSourceBadge}>
-                <Ionicons
-                  name="globe-outline"
-                  size={12}
-                  color="#0F172A"
-                  style={{ marginRight: 4 }}
-                />
-                <Text style={styles.leadSourceText}>Web</Text>
-              </View>
-            )}
-          </View>
-          {alert && (
-            <TouchableOpacity
-              style={[styles.attentionBadge, { backgroundColor: alert.color }]}
-              onPress={() => {
-                if (aiAttention?.reason) {
-                  setSelectedAiAttention({
-                    reason: aiAttention.reason,
-                    suggestedAction: aiAttention.suggestedAction || '',
-                    badge: aiAttention.badge,
-                    leadId: item.id,
-                    source: 'lead',
-                    phone: item.phone || '',
-                    firstName: item.first_name || 'there',
-                  });
-                  setShowAiRecommendationModal(true);
-                }
-              }}
-              activeOpacity={aiAttention?.reason ? 0.7 : 1}
-            >
-              <Ionicons
-                name="warning-outline"
-                size={12}
-                color="#FFF"
-                style={{ marginRight: 4 }}
-              />
-              <Text style={styles.attentionBadgeText}>{alert.label}</Text>
-              {aiAttention?.reason && (
-                <Ionicons name="information-circle-outline" size={12} color="#FFF" style={{ marginLeft: 4 }} />
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              {isUnread && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, marginRight: 8 }}>
+                  <Ionicons name="chatbubble-ellipses" size={12} color="#2563EB" />
+                  {(unreadMessageCounts[item.id] || 0) > 1 && (
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#2563EB', marginLeft: 3 }}>{unreadMessageCounts[item.id]}</Text>
+                  )}
+                </View>
               )}
-            </TouchableOpacity>
-          )}
-          <View style={[
-            styles.statusBadge,
-            { backgroundColor: statusColors.bg, borderColor: statusColors.border }
-          ]}>
-            <Text style={[styles.statusBadgeText, { color: statusColors.text }]}>
-              {statusDisplay}
-            </Text>
+            {item.source === 'My Lead' ? (
+                <View style={styles.myLeadBadge}>
+                  <Ionicons name="person-add-outline" size={12} color="#16A34A" />
+                  <Text style={styles.myLeadBadgeText}>My Lead</Text>
+                </View>
+            ) : (
+                <View style={styles.leadSourceBadge}>
+                  <Ionicons name="globe-outline" size={12} color="#0F172A" style={{ marginRight: 4 }} />
+                  <Text style={styles.leadSourceText}>Web</Text>
+                </View>
+            )}
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {dotColor && (
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: dotColor, marginRight: 6 }} />
+            )}
+            <View style={[
+              styles.statusBadge,
+              { backgroundColor: statusColors.bg, borderColor: statusColors.border }
+            ]}>
+              <Text style={[styles.statusBadgeText, { color: statusColors.text }]}>
+                {statusDisplay}
+              </Text>
+            </View>
           </View>
           {item.email && (
             <View style={styles.leadContactRow}>
@@ -1505,36 +1494,52 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const statusColors =
       STATUS_COLOR_MAP[item.status || 'new'] || STATUS_COLOR_MAP['new'];
     const hasUnreadMessages = (unreadMessageCounts[item.id] || 0) > 0;
-    const isNewLead = !item.last_contact_date && (item.status === 'new' || !item.status);
-    const isUnread = isNewLead || hasUnreadMessages;
+    const isUnread = hasUnreadMessages;
+    // Priority dot color for lead list (green for priority 5 = "On Track")
+    const getPriorityDotColor = () => {
+      if (aiAttention?.badge) {
+        if (aiAttention.priority <= 1) return '#EF4444';
+        if (aiAttention.priority <= 2) return '#F97316';
+        if (aiAttention.priority <= 3) return '#EAB308';
+        return '#22C55E'; // priority 4 and 5
+      }
+      return alert ? alert.color : null;
+    };
+    const dotColor = getPriorityDotColor();
 
     const getPlatformBadge = (platform: string) => {
       const platformLower = platform.toLowerCase();
 
-      let badgeText = 'FB';
-      let badgeColor = '#1877F2'; // Facebook blue
+      let badgeText = 'Facebook';
+      let badgeColor = '#1877F2';
       let badgeBg = '#E7F3FF';
+      let iconName: keyof typeof Ionicons.glyphMap = 'logo-facebook';
 
-      if (platformLower.includes('instagram') || platformLower.includes('ig')) {
-        badgeText = 'IG';
+      if (platformLower.includes('instagram') || platformLower === 'ig') {
+        badgeText = 'Instagram';
         badgeColor = '#E4405F';
         badgeBg = '#FFE8ED';
-      } else if (platformLower.includes('facebook') || platformLower.includes('fb')) {
-        badgeText = 'FB';
+        iconName = 'logo-instagram';
+      } else if (platformLower.includes('facebook') || platformLower === 'fb') {
+        badgeText = 'Facebook';
         badgeColor = '#1877F2';
         badgeBg = '#E7F3FF';
+        iconName = 'logo-facebook';
       } else if (platformLower.includes('messenger')) {
-        badgeText = 'MSG';
+        badgeText = 'Messenger';
         badgeColor = '#0084FF';
         badgeBg = '#E5F2FF';
+        iconName = 'chatbubble-outline';
       } else if (platformLower.includes('whatsapp')) {
-        badgeText = 'WA';
+        badgeText = 'WhatsApp';
         badgeColor = '#25D366';
         badgeBg = '#E8F8EF';
+        iconName = 'logo-whatsapp';
       }
 
       return (
         <View style={[styles.platformBadge, { backgroundColor: badgeBg }]}>
+          <Ionicons name={iconName} size={12} color={badgeColor} style={{ marginRight: 4 }} />
           <Text style={[styles.platformBadgeText, { color: badgeColor }]}>
             {badgeText}
           </Text>
@@ -1591,48 +1596,31 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               <Text style={[styles.leadName, { color: colors.textPrimary }]} numberOfLines={1}>
                 {fullName}
               </Text>
-              {isUnread && <View style={styles.unreadDot} />}
             </View>
-            {getPlatformBadge(platform)}
-          </View>
-          {alert && (
-            <TouchableOpacity
-              style={[styles.attentionBadge, { backgroundColor: alert.color }]}
-              onPress={() => {
-                if (aiAttention?.reason) {
-                  setSelectedAiAttention({
-                    reason: aiAttention.reason,
-                    suggestedAction: aiAttention.suggestedAction || '',
-                    badge: aiAttention.badge,
-                    leadId: item.id,
-                    source: 'meta',
-                    phone: item.phone || '',
-                    firstName: item.first_name || 'there',
-                  });
-                  setShowAiRecommendationModal(true);
-                }
-              }}
-              activeOpacity={aiAttention?.reason ? 0.7 : 1}
-            >
-              <Ionicons
-                name="warning-outline"
-                size={12}
-                color="#FFF"
-                style={{ marginRight: 4 }}
-              />
-              <Text style={styles.attentionBadgeText}>{alert.label}</Text>
-              {aiAttention?.reason && (
-                <Ionicons name="information-circle-outline" size={12} color="#FFF" style={{ marginLeft: 4 }} />
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              {isUnread && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, marginRight: 8 }}>
+                  <Ionicons name="chatbubble-ellipses" size={12} color="#2563EB" />
+                  {(unreadMessageCounts[item.id] || 0) > 1 && (
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#2563EB', marginLeft: 3 }}>{unreadMessageCounts[item.id]}</Text>
+                  )}
+                </View>
               )}
-            </TouchableOpacity>
-          )}
-          <View style={[
-            styles.statusBadge,
-            { backgroundColor: statusColors.bg, borderColor: statusColors.border }
-          ]}>
-            <Text style={[styles.statusBadgeText, { color: statusColors.text }]}>
-              {status}
-            </Text>
+              {getPlatformBadge(platform)}
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            {dotColor && (
+              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: dotColor, marginRight: 6 }} />
+            )}
+            <View style={[
+              styles.statusBadge,
+              { backgroundColor: statusColors.bg, borderColor: statusColors.border }
+            ]}>
+              <Text style={[styles.statusBadgeText, { color: statusColors.text }]}>
+                {status}
+              </Text>
+            </View>
           </View>
           {campaign ? (
             <View style={styles.campaignRow}>
