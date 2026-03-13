@@ -109,6 +109,7 @@ export default function RealtorDetailScreen({
   const [loadingActivities, setLoadingActivities] = useState(true);
   const [leads, setLeads] = useState<any[]>([]);
   const [loadingLeads, setLoadingLeads] = useState(true);
+  const [showAllLeads, setShowAllLeads] = useState(false);
 
   // Editable realtor settings
   const [active, setActive] = useState(realtor.active);
@@ -1204,34 +1205,47 @@ export default function RealtorDetailScreen({
               No leads linked to this realtor yet
             </Text>
           ) : (
-            leads.slice(0, 5).map((lead) => (
-              <TouchableOpacity 
-                key={lead.id} 
-                style={styles.leadItem}
-                onPress={() => onLeadSelect?.(lead.id, lead.source || 'lead')}
-                disabled={!onLeadSelect}
-              >
-                <View style={styles.leadInfo}>
-                  <Text style={[styles.leadName, { color: colors.textPrimary }]}>
-                    {lead.first_name} {lead.last_name}
-                  </Text>
-                  <View style={[
-                    styles.leadStatusBadge, 
-                    { backgroundColor: getLeadStatusDisplay(lead.status).bgColor }
-                  ]}>
-                    <Text style={[
-                      styles.leadStatusText, 
-                      { color: getLeadStatusDisplay(lead.status).color }
-                    ]}>
-                      {getLeadStatusDisplay(lead.status).label}
+            <>
+              {(showAllLeads ? leads : leads.slice(0, 5)).map((lead) => (
+                <TouchableOpacity 
+                  key={lead.id} 
+                  style={styles.leadItem}
+                  onPress={() => onLeadSelect?.(lead.id, lead.source || 'lead')}
+                  disabled={!onLeadSelect}
+                >
+                  <View style={styles.leadInfo}>
+                    <Text style={[styles.leadName, { color: colors.textPrimary }]}>
+                      {lead.first_name} {lead.last_name}
                     </Text>
+                    <View style={[
+                      styles.leadStatusBadge, 
+                      { backgroundColor: getLeadStatusDisplay(lead.status).bgColor }
+                    ]}>
+                      <Text style={[
+                        styles.leadStatusText, 
+                        { color: getLeadStatusDisplay(lead.status).color }
+                      ]}>
+                        {getLeadStatusDisplay(lead.status).label}
+                      </Text>
+                    </View>
                   </View>
-                </View>
-                {onLeadSelect && (
-                  <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-                )}
-              </TouchableOpacity>
-            ))
+                  {onLeadSelect && (
+                    <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+              {leads.length > 5 && (
+                <TouchableOpacity
+                  onPress={() => setShowAllLeads(!showAllLeads)}
+                  style={{ paddingVertical: 10, alignItems: 'center' }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#7C3AED' }}>
+                    {showAllLeads ? 'Show Less' : `Show All ${leads.length} Leads`}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
           )}
         </View>
 
