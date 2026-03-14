@@ -29,6 +29,17 @@ export type AiRewriteToolbarRef = {
   resetBadge: () => void;
 };
 
+/**
+ * Post-process AI output to add paragraph breaks between sentences.
+ * Makes SMS/text messages much more readable.
+ */
+function formatWithParagraphs(text: string): string {
+  // If the text already has line breaks, respect them
+  if (text.includes('\n')) return text;
+  // Split on sentence boundaries: period/exclamation/question followed by a space and a capital letter
+  return text.replace(/([.!?])\s+(?=[A-Z])/g, '$1\n\n');
+}
+
 export const AiRewriteToolbar = forwardRef<AiRewriteToolbarRef, AiRewriteToolbarProps>(function AiRewriteToolbar({ text, onTextRewritten, context, hasAccess }, ref) {
   const [aiTone, setAiTone] = useState<AiTone>('friendly');
   const [rewriting, setRewriting] = useState(false);
@@ -51,7 +62,7 @@ export const AiRewriteToolbar = forwardRef<AiRewriteToolbarRef, AiRewriteToolbar
         context,
       });
       if (result) {
-        onTextRewritten(result);
+        onTextRewritten(formatWithParagraphs(result));
         setRewrittenByAi(true);
         setRefineInput('');
       }
@@ -78,7 +89,7 @@ export const AiRewriteToolbar = forwardRef<AiRewriteToolbarRef, AiRewriteToolbar
         refinement: refineInput.trim(),
       });
       if (result) {
-        onTextRewritten(result);
+        onTextRewritten(formatWithParagraphs(result));
         setRefineInput('');
         setRewrittenByAi(true);
       }
