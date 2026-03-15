@@ -157,7 +157,7 @@ export function LeadDetailView({
   // Open to messages tab if coming from notification
   useEffect(() => {
     console.log('📱 LeadDetailView openToMessages effect:', { openToMessages, source: selected.source, id: selected.id });
-    if (openToMessages && selected.source === 'meta') {
+    if (openToMessages && phone) {
       console.log('📱 Switching to messages tab');
       setActiveDetailTab('messages');
       onMarkMessagesRead?.(selected.id);
@@ -1884,8 +1884,8 @@ export function LeadDetailView({
         </View>
       </View>
 
-      {/* Tab Bar - Details / Messages (only for Meta leads) */}
-      {phone && isMeta && (
+      {/* Tab Bar - Details / Messages */}
+      {phone && (
         <View style={detailTabStyles.tabBar}>
           <TouchableOpacity
             style={[
@@ -1935,8 +1935,8 @@ export function LeadDetailView({
         </View>
       )}
 
-      {/* Messages Tab Content (only for Meta leads) */}
-      {activeDetailTab === 'messages' && phone && isMeta ? (
+      {/* Messages Tab Content */}
+      {activeDetailTab === 'messages' && phone ? (
         <View style={{ flex: 1 }}>
           <SmsMessaging
             leadId={record.id}
