@@ -31,12 +31,13 @@ interface SmsMessagingProps {
   leadId: string;
   leadPhone: string;
   leadName: string;
+  onMessageSent?: () => void;
 }
 
 // API base URL - uses the same backend as the website (www to avoid redirect)
 const API_BASE_URL = 'https://www.closewithmario.com';
 
-export function SmsMessaging({ leadId, leadPhone, leadName }: SmsMessagingProps) {
+export function SmsMessaging({ leadId, leadPhone, leadName, onMessageSent }: SmsMessagingProps) {
   const [messages, setMessages] = useState<SmsMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -159,6 +160,7 @@ export function SmsMessaging({ leadId, leadPhone, leadName }: SmsMessagingProps)
       setNewMessage('');
       Keyboard.dismiss();
       await fetchMessages();
+      onMessageSent?.();
     } catch (err: any) {
       console.log('📱 [SMS] Error:', err.name, err.message || err);
       if (err.name === 'AbortError') {

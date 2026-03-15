@@ -156,7 +156,8 @@ export function useAiLeadAttention(): UseAiLeadAttentionResult {
     return attentionMap.get(leadId) || null;
   }, [attentionMap]);
 
-  // Invalidate clears local state AND deletes from Supabase cache so next fetch triggers fresh AI analysis
+  // Invalidate clears local state, calls the API with force=true to trigger fresh AI analysis,
+  // then re-fetches the updated cache entry
   const invalidateAttention = useCallback(async (leadId: string): Promise<void> => {
     console.log('[useAiLeadAttention] Invalidating cache for lead:', leadId);
     
@@ -167,20 +168,50 @@ export function useAiLeadAttention(): UseAiLeadAttentionResult {
       return next;
     });
 
-    // Delete from Supabase cache so next fetch triggers fresh AI analysis
+    // Call the API with force=true to trigger fresh AI re-analysis
     try {
-      const { error } = await supabase
-        .from('lead_attention_cache')
-        .delete()
-        .eq('lead_id', leadId);
-      
-      if (error) {
-        console.error('[useAiLeadAttention] Error deleting cache entry:', error);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        
+        const response = await fetch(
+          `https://www.closewithmario.com/api/get-lead-attention?lead_id=${leadId}&force=true`,
+          {
+            headers: { 'Authorization': `Bearer ${session.access_token}` },
+            signal: controller.signal,
+          }
+        );
+        clearTimeout(timeoutId);
+        
+        if (response.ok) {
+          console.log('[useAiLeadAttention] Force-refreshed AI analysis for lead:', leadId);
+        } else {
+          console.warn('[useAiLeadAttention] API force-refresh returned status:', response.status);
+        }
+      }
+    } catch (e: any) {
+      if (e.name === 'AbortError') {
+        console.warn('[useAiLeadAttention] Force-refresh timed out for lead:', leadId);
       } else {
-        console.log('[useAiLeadAttention] Deleted cache entry for lead:', leadId);
+        console.error('[useAiLeadAttention] Error calling force-refresh API:', e);
+      }
+    }
+
+    // Re-fetch the updated cache entry from Supabase
+    try {
+      const results = await fetchAttentionFromSupabase([leadId]);
+      const result = results.get(leadId);
+      if (result) {
+        setAttentionMap(prev => {
+          const next = new Map(prev);
+          next.set(leadId, result);
+          return next;
+        });
+        console.log('[useAiLeadAttention] Re-fetched updated attention for lead:', leadId);
       }
     } catch (e) {
-      console.error('[useAiLeadAttention] Error invalidating cache:', e);
+      console.error('[useAiLeadAttention] Error re-fetching after invalidation:', e);
     }
   }, []);
 

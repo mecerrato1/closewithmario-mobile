@@ -1461,7 +1461,55 @@ export function LeadDetailView({
     setShowQuickPhrases(false);
   };
 
-  type ActivityType = 'call' | 'text' | 'email' | 'note';
+  const [savingDocsReceived, setSavingDocsReceived] = useState(false);
+
+  const handleDocsReceived = async () => {
+    if (!record) return;
+
+    setSavingDocsReceived(true);
+    try {
+      const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
+      const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
+
+      const activityData = {
+        [foreignKeyColumn]: record.id,
+        activity_type: 'docs_received',
+        notes: 'Documents received — under review',
+        created_by: session?.user?.id || null,
+        user_email: session?.user?.email || 'Mobile App User',
+      };
+
+      const { data: newActivity, error } = await supabase
+        .from(tableName)
+        .insert([activityData])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error logging docs received:', error);
+        Alert.alert('Error', 'Failed to log docs received. Please try again.');
+        return;
+      }
+
+      // Add to activity timeline immediately
+      if (newActivity) {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+        setActivities([newActivity, ...activities]);
+      }
+
+      // Invalidate AI attention badge cache
+      if (onInvalidateAttention) {
+        onInvalidateAttention(record.id);
+      }
+    } catch (e) {
+      console.error('Unexpected error logging docs received:', e);
+      Alert.alert('Error', 'Failed to log docs received. Please try again.');
+    } finally {
+      setSavingDocsReceived(false);
+    }
+  };
+
+  type ActivityType = 'call' | 'text' | 'email' | 'note' | 'docs_received';
 
   const getActivityIconName = (
     type: ActivityType
@@ -1473,17 +1521,20 @@ export function LeadDetailView({
         return 'chatbubble-ellipses-outline';
       case 'email':
         return 'mail-outline';
+      case 'docs_received':
+        return 'folder-open-outline';
       case 'note':
       default:
         return 'document-text-outline';
     }
   };
 
-  const getActivityLabel = (type: 'call' | 'text' | 'email' | 'note') => {
+  const getActivityLabel = (type: ActivityType) => {
     switch (type) {
       case 'call': return 'Call';
       case 'text': return 'Text';
       case 'email': return 'Email';
+      case 'docs_received': return 'Docs Received';
       case 'note': return 'Note';
     }
   };
@@ -1891,6 +1942,11 @@ export function LeadDetailView({
             leadId={record.id}
             leadPhone={phone}
             leadName={fullName}
+            onMessageSent={() => {
+              if (onInvalidateAttention && record) {
+                onInvalidateAttention(record.id);
+              }
+            }}
           />
         </View>
       ) : (
@@ -2244,6 +2300,37 @@ export function LeadDetailView({
               </View>
             </TouchableOpacity>
           </View>
+
+          {/* Docs Received Button - shown when status is gathering_docs */}
+          {status === 'gathering_docs' && (
+            <View style={{ marginTop: 12 }}>
+              <TouchableOpacity
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: '#F0FDF4',
+                  borderRadius: 12,
+                  padding: 14,
+                  borderWidth: 1,
+                  borderColor: '#BBF7D0',
+                }}
+                onPress={handleDocsReceived}
+                disabled={savingDocsReceived}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="folder-open-outline" size={22} color="#16A34A" style={{ marginRight: 10 }} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '600', color: '#16A34A' }}>
+                    {savingDocsReceived ? 'Saving…' : 'Docs Received'}
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#4ADE80', marginTop: 2 }}>
+                    Mark documents as received for review
+                  </Text>
+                </View>
+                {savingDocsReceived && <ActivityIndicator size="small" color="#16A34A" />}
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Divider */}
           <View style={styles.sectionDivider} />
