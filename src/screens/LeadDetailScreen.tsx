@@ -2301,33 +2301,33 @@ export function LeadDetailView({
             </TouchableOpacity>
           </View>
 
-          {/* Docs Received Button - shown when status is gathering_docs */}
+          {/* Mark Docs Received Button - shown when status is gathering_docs */}
           {status === 'gathering_docs' && (
             <View style={{ marginTop: 12 }}>
               <TouchableOpacity
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
-                  backgroundColor: '#F0FDF4',
+                  backgroundColor: '#F5F0FF',
                   borderRadius: 12,
                   padding: 14,
                   borderWidth: 1,
-                  borderColor: '#BBF7D0',
+                  borderColor: '#E9D5FF',
                 }}
                 onPress={handleDocsReceived}
                 disabled={savingDocsReceived}
                 activeOpacity={0.7}
               >
-                <Ionicons name="folder-open-outline" size={22} color="#16A34A" style={{ marginRight: 10 }} />
+                <Ionicons name="checkmark-circle-outline" size={22} color="#7C3AED" style={{ marginRight: 10 }} />
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 15, fontWeight: '600', color: '#16A34A' }}>
-                    {savingDocsReceived ? 'Saving…' : 'Docs Received'}
+                  <Text style={{ fontSize: 15, fontWeight: '600', color: '#7C3AED' }}>
+                    {savingDocsReceived ? 'Saving…' : 'Mark Docs Received'}
                   </Text>
-                  <Text style={{ fontSize: 12, color: '#4ADE80', marginTop: 2 }}>
-                    Mark documents as received for review
+                  <Text style={{ fontSize: 12, color: '#A78BFA', marginTop: 2 }}>
+                    Logs activity & stops AI doc reminders
                   </Text>
                 </View>
-                {savingDocsReceived && <ActivityIndicator size="small" color="#16A34A" />}
+                {savingDocsReceived && <ActivityIndicator size="small" color="#7C3AED" />}
               </TouchableOpacity>
             </View>
           )}
@@ -2728,17 +2728,86 @@ export function LeadDetailView({
                 const hasFormData = formData && Object.keys(formData).length > 0;
 
                 if (hasFormData) {
-                  // form_data is the source of truth — exclude identity & campaign keys shown elsewhere
+                  // form_data is the source of truth — exclude identity, campaign & internal keys
                   const excludeKeys = new Set([
                     'first_name', 'last_name', 'email', 'phone_number', 'phone', 'full_name', 'name',
                     'campaign_name', 'ad_name', 'platform', 'ad_set',
+                    'inbox_url', 'leadgen_id', 'created_time', 'id', 'form_id',
+                    'meta_ad_notes', 'notes',
                   ]);
-                  const entries = Object.entries(formData).filter(
-                    ([key]) => !excludeKeys.has(key)
-                  );
-                  if (entries.length === 0) return null;
-                  const formatStr = (s: string) =>
+                  // Normalize long question-style keys to clean short labels
+                  const labelMap: Record<string, string> = {
+                    'are_you_working_with_a_realtor': 'Has Realtor',
+                    'are_you_working_with_a_realtor_': 'Has Realtor',
+                    'do_you_currently_work_with_a_realtor': 'Has Realtor',
+                    'what_type_of_income_do_you_earn': 'Income Type',
+                    'what_type_of_income_do_you_earn_': 'Income Type',
+                    'what_price_range_are_you_shopping_in': 'Price Range',
+                    'what_price_range_are_you_shopping_in_': 'Price Range',
+                    'when_are_you_looking_to_buy_your_home': 'Purchase Timeline',
+                    'when_are_you_looking_to_buy_your_home_': 'Purchase Timeline',
+                    'which_county_you_are_looking_to_buy_in': 'County Interest',
+                    'which_county_are_you_looking_to_buy_in': 'County Interest',
+                    'what_is_your_current_credit_score_range': 'Credit Range',
+                    'what_is_your_current_credit_score_range_': 'Credit Range',
+                    'how_much_have_you_saved_or_plan_to_save_for_your_home_purchase': 'Down Payment Saved',
+                    'how_much_have_you_saved__or_plan_to_save_for_your_home_purchase': 'Down Payment Saved',
+                    'how_much_have_you_saved__or_plan_to_save__for_your_home_purchase_': 'Down Payment Saved',
+                    'monthly_income': 'Monthly Income',
+                    'county_interest': 'County Interest',
+                    'preferred_language': 'Preferred Language',
+                    'has_realtor': 'Has Realtor',
+                    'income_type': 'Income Type',
+                    'price_range': 'Price Range',
+                    'credit_range': 'Credit Range',
+                    'purchase_timeline': 'Purchase Timeline',
+                    'down_payment_saved': 'Down Payment Saved',
+                    'loan_purpose': 'Loan Purpose',
+                    'subject_address': 'Property Address',
+                    'do_you_have_a_va_certificate': 'VA Certificate',
+                    'how_did_you_hear_about_us': 'How Did You Hear About Us',
+                    'additional_notes': 'Additional Notes',
+                  };
+                  // Preferred display order — fields not listed appear at the end
+                  const fieldOrder = [
+                    'county_interest', 'which_county_you_are_looking_to_buy_in', 'which_county_are_you_looking_to_buy_in',
+                    'preferred_language',
+                    'has_realtor', 'are_you_working_with_a_realtor', 'are_you_working_with_a_realtor_', 'do_you_currently_work_with_a_realtor',
+                    'income_type', 'what_type_of_income_do_you_earn', 'what_type_of_income_do_you_earn_',
+                    'monthly_income',
+                    'price_range', 'what_price_range_are_you_shopping_in', 'what_price_range_are_you_shopping_in_',
+                    'purchase_timeline', 'when_are_you_looking_to_buy_your_home', 'when_are_you_looking_to_buy_your_home_',
+                    'credit_range', 'what_is_your_current_credit_score_range', 'what_is_your_current_credit_score_range_',
+                    'down_payment_saved', 'how_much_have_you_saved_or_plan_to_save_for_your_home_purchase', 'how_much_have_you_saved__or_plan_to_save_for_your_home_purchase', 'how_much_have_you_saved__or_plan_to_save__for_your_home_purchase_',
+                    'do_you_have_a_va_certificate',
+                    'loan_purpose',
+                    'subject_address',
+                    'how_did_you_hear_about_us',
+                    'additional_notes',
+                  ];
+                  const formatLabel = (key: string) =>
+                    labelMap[key] || key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+                  const formatValue = (s: string) =>
                     s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+                  // Sort by preferred order, filter excluded keys, then deduplicate by resolved label
+                  const seenLabels = new Set<string>();
+                  const entries = Object.entries(formData)
+                    .filter(([key]) => !excludeKeys.has(key))
+                    .sort((a, b) => {
+                      const ai = fieldOrder.indexOf(a[0]);
+                      const bi = fieldOrder.indexOf(b[0]);
+                      if (ai !== -1 && bi !== -1) return ai - bi;
+                      if (ai !== -1) return -1;
+                      if (bi !== -1) return 1;
+                      return 0;
+                    })
+                    .filter(([key]) => {
+                      const label = formatLabel(key);
+                      if (seenLabels.has(label)) return false;
+                      seenLabels.add(label);
+                      return true;
+                    });
+                  if (entries.length === 0) return null;
                   return (
                     <View style={{ marginTop: 4 }}>
                       <Text style={{ fontSize: 13, fontWeight: '600', color: '#7C3AED', marginBottom: 8, letterSpacing: 0.3 }}>
@@ -2758,10 +2827,10 @@ export function LeadDetailView({
                           }}
                         >
                           <Text style={{ fontSize: 11, fontWeight: '600', color: '#94A3B8', marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.3 }}>
-                            {formatStr(key)}
+                            {formatLabel(key)}
                           </Text>
                           <Text style={{ fontSize: 14, color: colors.textPrimary, fontWeight: '500' }} selectable={true}>
-                            {formatStr(value)}
+                            {formatValue(value)}
                           </Text>
                         </View>
                       ))}
