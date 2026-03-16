@@ -136,6 +136,10 @@ export function LeadDetailView({
   const [partnerUpdateMessage, setPartnerUpdateMessage] = useState('');
   const [sendingPartnerUpdate, setSendingPartnerUpdate] = useState(false);
   
+  // Docs-received SMS toast state
+  const [smsToast, setSmsToast] = useState<{ visible: boolean; message: string; type: 'info' | 'success' | 'error' }>({ visible: false, message: '', type: 'info' });
+  const smsToastOpacity = useRef(new Animated.Value(0)).current;
+  
   // AI Rewrite refs
   const partnerAiRef = useRef<AiRewriteToolbarRef>(null);
   const customMsgAiRef = useRef<AiRewriteToolbarRef>(null);
@@ -1075,6 +1079,7 @@ export function LeadDetailView({
           console.error('Error loading activities:', error);
         } else {
           setActivities(data || []);
+          setDocsReceivedLogged((data || []).some((a: any) => a.activity_type === 'docs_received'));
         }
       } catch (e) {
         console.error('Unexpected error loading activities:', e);
@@ -1462,6 +1467,58 @@ export function LeadDetailView({
   };
 
   const [savingDocsReceived, setSavingDocsReceived] = useState(false);
+  const [docsReceivedLogged, setDocsReceivedLogged] = useState(false);
+
+  // Show/auto-dismiss the SMS toast banner
+  const showSmsToast = (message: string, type: 'info' | 'success' | 'error') => {
+    setSmsToast({ visible: true, message, type });
+    Animated.timing(smsToastOpacity, { toValue: 1, duration: 250, useNativeDriver: true }).start();
+    const dismissDelay = type === 'info' ? 3000 : 4000;
+    setTimeout(() => {
+      Animated.timing(smsToastOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
+        setSmsToast(prev => ({ ...prev, visible: false }));
+      });
+    }, dismissDelay);
+  };
+
+  // Call the docs-received SMS API
+  const sendDocsReceivedSms = async () => {
+    if (!record) return;
+
+    const firstName = record.first_name || 'client';
+    showSmsToast(`Sending text to ${firstName}...`, 'info');
+
+    try {
+      const API_BASE_URL = 'https://www.closewithmario.com';
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      const response = await fetch(`${API_BASE_URL}/api/send-docs-received-sms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadId: record.id,
+          leadTable: isMeta ? 'meta_ads' : 'leads',
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      const result = await response.json().catch(() => ({ success: false, status: 'error' }));
+
+      if (result.success && result.status === 'sent') {
+        showSmsToast(`Gio sent docs-received text to ${firstName}`, 'success');
+      } else if (result.status === 'skipped') {
+        showSmsToast(`SMS not sent: ${result.skipReason || 'skipped'}`, 'error');
+      } else {
+        showSmsToast('Failed to send docs-received SMS', 'error');
+      }
+    } catch (error: any) {
+      console.error('Error sending docs-received SMS:', error);
+      showSmsToast('Failed to send docs-received SMS', 'error');
+    }
+  };
 
   const handleDocsReceived = async () => {
     if (!record) return;
@@ -1495,11 +1552,28 @@ export function LeadDetailView({
       if (newActivity) {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         setActivities([newActivity, ...activities]);
+        setDocsReceivedLogged(true);
       }
 
       // Invalidate AI attention badge cache
       if (onInvalidateAttention) {
         onInvalidateAttention(record.id);
+      }
+
+      // If lead has a phone number, prompt to send docs-received SMS via Gio
+      const firstName = record.first_name || 'client';
+      if (phone) {
+        Alert.alert(
+          `Text ${firstName}?`,
+          `Would you like Gio to send ${firstName} a quick text confirming their documents were received and are under review?\n\nvia Gio, your AI assistant`,
+          [
+            { text: 'No thanks', style: 'cancel' },
+            {
+              text: 'Yes, send text',
+              onPress: () => sendDocsReceivedSms(),
+            },
+          ]
+        );
       }
     } catch (e) {
       console.error('Unexpected error logging docs received:', e);
@@ -2301,8 +2375,8 @@ export function LeadDetailView({
             </TouchableOpacity>
           </View>
 
-          {/* Mark Docs Received Button - shown when status is gathering_docs */}
-          {status === 'gathering_docs' && (
+          {/* Mark Docs Received Button - shown when status is gathering_docs and not already logged */}
+          {status === 'gathering_docs' && !docsReceivedLogged && (
             <View style={{ marginTop: 12 }}>
               <TouchableOpacity
                 style={{
@@ -3841,6 +3915,40 @@ export function LeadDetailView({
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+
+      {/* Docs-received SMS toast banner */}
+      {smsToast.visible && (
+        <Animated.View
+          style={{
+            position: 'absolute',
+            bottom: 36,
+            left: 16,
+            right: 16,
+            opacity: smsToastOpacity,
+            backgroundColor: smsToast.type === 'success' ? '#059669' : smsToast.type === 'error' ? '#DC2626' : '#7C3AED',
+            borderRadius: 12,
+            paddingVertical: 12,
+            paddingHorizontal: 16,
+            flexDirection: 'row',
+            alignItems: 'center',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.2,
+            shadowRadius: 6,
+            elevation: 6,
+          }}
+        >
+          <Ionicons
+            name={smsToast.type === 'success' ? 'checkmark-circle' : smsToast.type === 'error' ? 'alert-circle' : 'chatbubble-ellipses'}
+            size={18}
+            color="#FFFFFF"
+            style={{ marginRight: 8 }}
+          />
+          <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '600', flex: 1 }}>
+            {smsToast.message}
+          </Text>
+        </Animated.View>
+      )}
     </View>
   );
 }
