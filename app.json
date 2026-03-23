@@ -2,7 +2,7 @@
   "expo": {
     "name": "closewithmario-mobile",
     "slug": "closewithmario-mobile",
-    "version": "1.1.87",
+    "version": "1.1.88",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -13,11 +13,10 @@
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
-
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.closewithmario.mobile",
-      "buildNumber": "104", 
+      "buildNumber": "105",
       "usesAppleSignIn": true,
       "associatedDomains": [
         "applinks:hxpvcaspgdgsehrehbhl.supabase.co",
@@ -25,21 +24,16 @@
       ],
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-
         "NSUserNotificationUsageDescription": "We use notifications to remind you to follow up with your leads.",
-
         "NSMicrophoneUsageDescription": "Close With Mario uses your microphone to record voice notes on leads, such as when you want to add spoken updates instead of typing.",
-
         "NSContactsUsageDescription": "Close With Mario uses your contacts only when you choose to save a lead into your device's address book.",
-
         "NSPhotoLibraryUsageDescription": "Close With Mario uses your photo library only when you choose an image for your profile picture. For example, you may select a headshot so teammates can recognize your account.",
-
         "NSCameraUsageDescription": "Close With Mario uses your camera only when you take a profile picture so your team can recognize your account.",
-
-        "LSApplicationQueriesSchemes": ["ms-outlook"]
+        "LSApplicationQueriesSchemes": [
+          "ms-outlook"
+        ]
       }
     },
-
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -58,24 +52,23 @@
               "pathPrefix": "/callback"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
-
     "web": {
       "favicon": "./assets/favicon.png"
     },
-
     "extra": {
       "eas": {
         "projectId": "3bda627c-9ee3-4942-ac21-3123e862b310"
       }
     },
-
     "plugins": [
       "expo-font",
-
       [
         "expo-notifications",
         {
@@ -84,21 +77,18 @@
           "sounds": []
         }
       ],
-
       [
         "expo-av",
         {
           "microphonePermission": "Close With Mario uses your microphone to record voice notes for lead updates."
         }
       ],
-
       [
         "expo-contacts",
         {
           "contactsPermission": "Close With Mario uses your contacts only when you choose to save a lead to your phone's address book."
         }
       ],
-
       [
         "expo-image-picker",
         {
@@ -106,8 +96,8 @@
           "cameraPermission": "Close With Mario uses your camera only to take a profile picture so your teammates can recognize your account."
         }
       ],
-
-      "expo-apple-authentication"
+      "expo-apple-authentication",
+      "expo-secure-store"
     ]
   }
 }

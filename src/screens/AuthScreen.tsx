@@ -9,9 +9,12 @@ import {
   Platform,
   ScrollView,
   Image,
+  Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Session } from '@supabase/supabase-js';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useThemeColors } from '../styles/theme';
 import { supabase } from '../lib/supabase';
 import { ALLOW_SIGNUP } from '../lib/featureFlags';
@@ -20,6 +23,14 @@ import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import {
+  checkBiometricCapabilities,
+  isBiometricLoginEnabled,
+  getStoredEmail,
+  saveRefreshToken,
+  biometricSignIn,
+  clearBiometricCredentials,
+} from '../lib/secure-auth-storage';
 
 // This must match:
 // - app.json: "scheme": "com.closewithmario.mobile"
@@ -42,6 +53,14 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
   const [password, setPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Biometric state
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricType, setBiometricType] = useState<string>('Face ID');
+  const [biometricEmail, setBiometricEmail] = useState<string | null>(null);
+  const [biometricLoading, setBiometricLoading] = useState(false);
 
   useEffect(() => {
     if (!ALLOW_SIGNUP && mode === 'signUp') {
@@ -51,7 +70,28 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
 
   useEffect(() => {
     loadSavedEmail();
+    initBiometrics();
   }, []);
+
+  const initBiometrics = async () => {
+    try {
+      const caps = await checkBiometricCapabilities();
+      const canBiometric = caps.isAvailable && caps.isEnrolled;
+      setBiometricAvailable(canBiometric);
+      setBiometricType(caps.biometricType);
+
+      if (canBiometric) {
+        const enabled = await isBiometricLoginEnabled();
+        setBiometricEnabled(enabled);
+        if (enabled) {
+          const storedEmail = await getStoredEmail();
+          setBiometricEmail(storedEmail);
+        }
+      }
+    } catch (error) {
+      console.log('[Auth] Failed to init biometrics:', error);
+    }
+  };
 
   const loadSavedEmail = async () => {
     try {
@@ -88,6 +128,12 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
         } else if (data.session) {
           // Save email for next time
           await saveEmail(email);
+          // Save refresh token for biometric sign-in
+          if (data.session.refresh_token) {
+            await saveRefreshToken(data.session.refresh_token, email);
+            setBiometricEnabled(true);
+            setBiometricEmail(email);
+          }
           onAuth(data.session);
         }
       } else {
@@ -153,6 +199,13 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
       }
 
       if (data.session) {
+        // Save refresh token for biometric sign-in
+        if (data.session.refresh_token) {
+          const appleEmail = data.session.user?.email || 'Apple Account';
+          await saveRefreshToken(data.session.refresh_token, appleEmail);
+          setBiometricEnabled(true);
+          setBiometricEmail(appleEmail);
+        }
         onAuth(data.session);
       } else {
         setAuthError('Apple sign-in did not complete.');
@@ -238,6 +291,13 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
       console.log('Supabase session set successfully:', sessionData);
 
       if (sessionData.session) {
+        // Save refresh token for biometric sign-in
+        if (sessionData.session.refresh_token) {
+          const googleEmail = sessionData.session.user?.email || 'Google Account';
+          await saveRefreshToken(sessionData.session.refresh_token, googleEmail);
+          setBiometricEnabled(true);
+          setBiometricEmail(googleEmail);
+        }
         onAuth(sessionData.session);
       } else {
         setAuthError('Google sign-in did not complete.');
@@ -250,317 +310,533 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
     }
   };
 
+  const handleBiometricSignIn = async () => {
+    setAuthError(null);
+    setBiometricLoading(true);
+
+    try {
+      const result = await biometricSignIn();
+
+      if (!result.success || !result.refreshToken) {
+        if (result.error && result.error !== 'Authentication cancelled.') {
+          setAuthError(result.error);
+        }
+        return;
+      }
+
+      // Use refresh token to restore session
+      const { data, error } = await supabase.auth.refreshSession({
+        refresh_token: result.refreshToken,
+      });
+
+      if (error) {
+        // If token is invalid/expired, clear biometric credentials
+        if (error.message?.includes('Invalid') || (error as any).code === 'invalid_grant') {
+          await clearBiometricCredentials();
+          setBiometricEnabled(false);
+          setBiometricEmail(null);
+          setAuthError('Session expired. Please sign in with your password.');
+        } else {
+          setAuthError(error.message);
+        }
+        return;
+      }
+
+      if (data.session) {
+        // Update stored refresh token with the new one
+        if (data.session.refresh_token) {
+          const userEmail = data.session.user?.email || biometricEmail || '';
+          await saveRefreshToken(data.session.refresh_token, userEmail);
+        }
+        onAuth(data.session);
+      }
+    } catch (error: any) {
+      console.error('[Auth] Biometric sign-in error:', error);
+      if (error?.message && error.message !== 'Authentication cancelled.') {
+        setAuthError(error.message);
+      }
+    } finally {
+      setBiometricLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    const resetEmail = email.trim();
+    if (!resetEmail) {
+      Alert.alert('Enter your email', 'Please type your email address above, then tap Forgot password again.');
+      return;
+    }
+
+    Alert.alert(
+      'Reset Password',
+      `Send a password reset link to ${resetEmail}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send',
+          onPress: async () => {
+            try {
+              const { error } = await supabase.auth.resetPasswordForEmail(resetEmail);
+              if (error) {
+                Alert.alert('Error', error.message);
+              } else {
+                Alert.alert('Check your email', `We sent a password reset link to ${resetEmail}.`);
+              }
+            } catch (e: any) {
+              Alert.alert('Error', e?.message || 'Failed to send reset email.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const isAnyLoading = authLoading || biometricLoading;
+
   return (
-    <KeyboardAvoidingView
-      style={[styles.authContainer, { backgroundColor: colors.background }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <View style={[s.container, { backgroundColor: isDark ? colors.background : '#F3F0FF' }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      <ScrollView 
-        contentContainerStyle={styles.authScrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Logo at Top */}
-        <View style={styles.authTopLogoContainer}>
-          <View style={[styles.authTopLogoCircle, { backgroundColor: colors.cardBackground }]}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.keyboardView}>
+        <ScrollView
+          contentContainerStyle={s.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Logo */}
+          <View style={s.logoRow}>
             <Image
               source={require('../../assets/CWMLogo.png')}
-              style={styles.authTopLogoImage}
+              style={s.logoImage}
               resizeMode="contain"
             />
           </View>
-        </View>
 
-        {/* Title with Mascot Sitting On It */}
-        <View style={styles.authTitleWithMascot}>
-          <Text style={[styles.authMainTitleWithMascot, { color: colors.textPrimary }]}>Close With Mario</Text>
-          <Image
-            source={require('../../assets/LO.png')}
-            style={styles.authMascotSitting}
-            resizeMode="contain"
-          />
-          <Text style={[styles.authSubtitleWithMascot, { color: colors.textSecondary }]}>Your mortgage workflow simplified.</Text>
-          <Text style={[styles.authWelcomeText, { color: colors.textSecondary }]}>
-            {mode === 'signIn' ? 'Welcome back! Sign in to continue' : 'Create your account to get started'}
+          {/* Tagline */}
+          <Text style={[s.tagline, { color: colors.textSecondary }]}>
+            Your mortgage workflow simplified.
           </Text>
-        </View>
 
-        {/* Form Container */}
-        <View style={styles.authFormCompact}>
-          <TextInput
-            style={[styles.authInputCompact, { backgroundColor: colors.cardBackground, borderColor: colors.border, color: colors.textPrimary }]}
-            placeholder="Email address"
-            placeholderTextColor={colors.textSecondary}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            textContentType="username"
-            autoComplete="email"
-            value={email}
-            onChangeText={setEmail}
-          />
+          {/* Welcome */}
+          <View style={s.welcomeSection}>
+            <Text style={[s.welcomeTitle, { color: colors.textPrimary }]}>
+              Welcome back
+            </Text>
+            <Text style={[s.welcomeSubtitle, { color: colors.textSecondary }]}>
+              Sign in to manage your pipeline
+            </Text>
+          </View>
 
-          <TextInput
-            style={[styles.authInputCompact, { backgroundColor: colors.cardBackground, borderColor: colors.border, color: colors.textPrimary }]}
-            placeholder="Password"
-            placeholderTextColor={colors.textSecondary}
-            secureTextEntry
-            autoCapitalize="none"
-            textContentType="password"
-            autoComplete="password"
-            value={password}
-            onChangeText={setPassword}
-          />
+          {/* Login Card */}
+          <View style={[s.loginCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+            {/* Email */}
+            <View style={s.fieldGroup}>
+              <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>EMAIL</Text>
+              <TextInput
+                style={[s.input, { backgroundColor: isDark ? colors.background : '#F8FAFC', borderColor: colors.border, color: colors.textPrimary }]}
+                placeholder="you@company.com"
+                placeholderTextColor="#94A3B8"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                textContentType="username"
+                autoComplete="email"
+                value={email}
+                onChangeText={setEmail}
+                editable={!isAnyLoading}
+              />
+            </View>
 
-          {authError && (
-            <View style={styles.authErrorContainer}>
-              <Text style={styles.authErrorText}>⚠️ {authError}</Text>
+            {/* Password */}
+            <View style={s.fieldGroup}>
+              <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>PASSWORD</Text>
+              <View style={s.inputWrapper}>
+                <TextInput
+                  style={[s.input, { backgroundColor: isDark ? colors.background : '#F8FAFC', borderColor: colors.border, color: colors.textPrimary, paddingRight: 48 }]}
+                  placeholder="Enter your password"
+                  placeholderTextColor="#94A3B8"
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  textContentType="password"
+                  autoComplete="password"
+                  value={password}
+                  onChangeText={setPassword}
+                  editable={!isAnyLoading}
+                />
+                <TouchableOpacity style={s.visibilityToggle} onPress={() => setShowPassword(!showPassword)} disabled={isAnyLoading}>
+                  <Ionicons name={showPassword ? 'eye-outline' : 'eye-off-outline'} size={20} color="#94A3B8" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Forgot Password */}
+            {mode === 'signIn' && (
+              <TouchableOpacity onPress={handleForgotPassword} disabled={isAnyLoading} style={s.forgotLink}>
+                <Text style={s.forgotText}>Forgot password?</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Error */}
+            {authError && (
+              <View style={s.errorBanner}>
+                <Ionicons name="warning-outline" size={15} color="#991B1B" style={{ marginRight: 6 }} />
+                <Text style={s.errorText}>{authError}</Text>
+              </View>
+            )}
+
+            {/* Sign In Button */}
+            <TouchableOpacity
+              style={[s.signInButton, isAnyLoading && s.buttonDisabled]}
+              onPress={handleEmailPasswordAuth}
+              disabled={isAnyLoading}
+              activeOpacity={0.85}
+            >
+              {authLoading ? (
+                <Text style={s.signInButtonText}>Signing in...</Text>
+              ) : (
+                <>
+                  <Text style={s.signInButtonText}>
+                    {mode === 'signIn' ? 'Sign In' : 'Create Account'}
+                  </Text>
+                  <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={{ marginLeft: 6 }} />
+                </>
+              )}
+            </TouchableOpacity>
+
+            {ALLOW_SIGNUP && (
+              <TouchableOpacity
+                onPress={() => setMode(mode === 'signIn' ? 'signUp' : 'signIn')}
+                style={s.switchModeLink}
+              >
+                <Text style={[s.switchModeText, { color: colors.textSecondary }]}>
+                  {mode === 'signIn' ? "Don't have an account? " : 'Already have an account? '}
+                  <Text style={s.switchModeBold}>{mode === 'signIn' ? 'Sign up' : 'Sign in'}</Text>
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Biometric Sign In */}
+          {biometricAvailable && biometricEnabled && (
+            <View style={s.biometricWrap}>
+              <TouchableOpacity
+                style={[s.biometricCircle, isAnyLoading && s.buttonDisabled]}
+                onPress={handleBiometricSignIn}
+                disabled={isAnyLoading}
+                activeOpacity={0.7}
+              >
+                {biometricLoading ? (
+                  <ActivityIndicator size="small" color="#7C3AED" />
+                ) : (
+                  biometricType === 'Face ID' ? (
+                    <MaterialCommunityIcons name="face-recognition" size={32} color="#7C3AED" />
+                  ) : (
+                    <Ionicons name="finger-print-outline" size={30} color="#7C3AED" />
+                  )
+                )}
+              </TouchableOpacity>
+              <Text style={[s.biometricLabel, { color: colors.textSecondary }]}>
+                Use {biometricType}
+              </Text>
             </View>
           )}
 
-          <TouchableOpacity
-            style={[styles.authSignInButtonCompact, authLoading && styles.authButtonDisabled]}
-            onPress={handleEmailPasswordAuth}
-            disabled={authLoading}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.authSignInButtonText}>
-              {authLoading ? 'Please wait...' : mode === 'signIn' ? 'Sign In' : 'Create Account'}
-            </Text>
-          </TouchableOpacity>
+          {/* OAuth Divider */}
+          <View style={s.oauthDivider}>
+            <View style={[s.oauthDividerLine, { backgroundColor: colors.border }]} />
+            <Text style={[s.oauthDividerText, { color: '#94A3B8' }]}>or continue with</Text>
+            <View style={[s.oauthDividerLine, { backgroundColor: colors.border }]} />
+          </View>
 
-          {ALLOW_SIGNUP && (
+          {/* OAuth Buttons */}
+          <View style={s.oauthRow}>
             <TouchableOpacity
-              onPress={() => setMode(mode === 'signIn' ? 'signUp' : 'signIn')}
-              style={styles.authSignUpLinkCompact}
+              style={[s.oauthButton, { backgroundColor: colors.cardBackground, borderColor: colors.border }, isAnyLoading && s.buttonDisabled]}
+              onPress={handleGoogleSignIn}
+              disabled={isAnyLoading}
+              activeOpacity={0.85}
             >
-              <Text style={styles.authSignUpText}>
-                {mode === 'signIn' ? "Don't have an account? " : 'Already have an account? '}
-                <Text style={styles.authSignUpTextBold}>
-                  {mode === 'signIn' ? 'Sign up' : 'Sign in'}
-                </Text>
-              </Text>
+              <View style={s.googleIconCircle}>
+                <Text style={s.googleG}>G</Text>
+              </View>
+              <Text style={[s.oauthButtonText, { color: colors.textPrimary }]}>Google</Text>
             </TouchableOpacity>
-          )}
 
-          <Text style={styles.authOrTextCompact}>OR</Text>
+            {Platform.OS === 'ios' && (
+              <TouchableOpacity
+                style={[s.oauthButton, s.oauthButtonApple, isAnyLoading && s.buttonDisabled]}
+                onPress={handleAppleSignIn}
+                disabled={isAnyLoading}
+                activeOpacity={0.85}
+              >
+                <Ionicons name="logo-apple" size={19} color="#FFFFFF" />
+                <Text style={[s.oauthButtonText, { color: '#FFFFFF' }]}>Apple</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
-          <TouchableOpacity
-            style={[styles.authGoogleButtonCompact, { backgroundColor: colors.cardBackground, borderColor: colors.border }, authLoading && styles.authButtonDisabled]}
-            onPress={handleGoogleSignIn}
-            disabled={authLoading}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.authGoogleIconNew}>G</Text>
-            <Text style={[styles.authGoogleButtonTextNew, { color: colors.textPrimary }]}>Continue with Google</Text>
-          </TouchableOpacity>
-
-          {Platform.OS === 'ios' && (
-            <AppleAuthentication.AppleAuthenticationButton
-              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-              buttonStyle={isDark ? AppleAuthentication.AppleAuthenticationButtonStyle.WHITE : AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-              cornerRadius={14}
-              style={styles.authAppleButton}
-              onPress={handleAppleSignIn}
-            />
-          )}
-
-          <Text style={[styles.authCreateAccountHint, { color: colors.textSecondary }]}>
-            Don't have an account? Create one at closewithmario.com
+          {/* Bottom Hint */}
+          <Text style={[s.bottomHint, { color: colors.textSecondary }]}>
+            Need an account? Visit closewithmario.com
           </Text>
-        </View>
 
-        {/* Version Info */}
-        <Text style={styles.authVersionText}>
-          v{Constants.expoConfig?.version} (Build {Constants.expoConfig?.ios?.buildNumber})
-        </Text>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          {/* Version */}
+          <Text style={s.versionText}>
+            v{Constants.expoConfig?.version} (Build {Constants.expoConfig?.ios?.buildNumber})
+          </Text>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  authContainer: {
+const s = StyleSheet.create({
+  container: {
     flex: 1,
-    backgroundColor: '#E8DFF5',
   },
-  authScrollContent: {
+  keyboardView: {
+    flex: 1,
+  },
+  scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'ios' ? 80 : 60,
-    paddingBottom: 20,
+    paddingHorizontal: 28,
+    paddingTop: Platform.OS === 'ios' ? 56 : 44,
+    paddingBottom: 32,
   },
-  authTopLogoContainer: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  authTopLogoCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 6,
-  },
-  authTopLogoImage: {
-    width: 70,
-    height: 70,
-  },
-  authTitleWithMascot: {
+
+  // Logo
+  logoRow: {
     alignItems: 'center',
     marginBottom: 24,
+  },
+  logoImage: {
+    width: 72,
+    height: 72,
+  },
+
+  // Tagline
+  tagline: {
+    fontSize: 14,
+    fontWeight: '500',
+    textAlign: 'center' as const,
+    marginBottom: 4,
+  },
+
+  // Welcome
+  welcomeSection: {
+    alignItems: 'center',
+    marginBottom: 28,
+  },
+  welcomeTitle: {
+    fontSize: 32,
+    fontWeight: '800',
+    letterSpacing: -1,
+  },
+  welcomeSubtitle: {
+    fontSize: 15,
+    fontWeight: '500',
+    marginTop: 6,
+  },
+
+  // Login Card
+  loginCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 22,
+    gap: 18,
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 3,
+  },
+  fieldGroup: {
+    gap: 6,
+  },
+  fieldLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  inputWrapper: {
     position: 'relative',
   },
-  authMainTitleWithMascot: {
-    fontSize: 40,
-    fontWeight: '800',
-    color: '#1F2937',
-    textAlign: 'center',
-    marginBottom: -30,
-    zIndex: 1,
-  },
-  authMascotSitting: {
-    width: 180,
-    height: 180,
-    zIndex: 2,
-    marginBottom: -20,
-  },
-  authSubtitleWithMascot: {
+  input: {
+    height: 52,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingHorizontal: 16,
     fontSize: 15,
-    color: '#6B7280',
-    textAlign: 'center',
-    zIndex: 1,
-  },
-  authWelcomeText: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    marginTop: 8,
     fontWeight: '500',
   },
-  authFormCompact: {
-    width: '100%',
+  visibilityToggle: {
+    position: 'absolute',
+    right: 14,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
   },
-  authInputCompact: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    marginBottom: 12,
-    fontSize: 15,
-    color: '#1F2937',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  authSignInButtonCompact: {
-    backgroundColor: '#7C3AED',
-    borderRadius: 14,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 4,
-    shadowColor: '#7C3AED',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-  authSignUpLinkCompact: {
-    marginTop: 14,
-    alignItems: 'center',
-    paddingVertical: 4,
-  },
-  authOrTextCompact: {
-    textAlign: 'center',
-    fontSize: 13,
-    color: '#9CA3AF',
-    fontWeight: '600',
-    marginVertical: 14,
-  },
-  authGoogleButtonCompact: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingVertical: 14,
+
+  // Error
+  errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
-    marginBottom: 8,
-  },
-  authVersionText: {
-    fontSize: 11,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    marginTop: 20,
-    marginBottom: 10,
-    fontWeight: '500',
-  },
-  authErrorContainer: {
     backgroundColor: '#FEE2E2',
     borderRadius: 10,
-    padding: 12,
-    marginBottom: 16,
-    borderLeftWidth: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderLeftWidth: 3,
     borderLeftColor: '#DC2626',
   },
-  authErrorText: {
+  errorText: {
     fontSize: 13,
     color: '#991B1B',
     fontWeight: '600',
+    flex: 1,
   },
-  authButtonDisabled: {
+
+  // Forgot password
+  forgotLink: {
+    alignSelf: 'flex-end',
+    marginTop: -10,
+  },
+  forgotText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#7C3AED',
+  },
+
+  // Sign In Button
+  signInButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 52,
+    backgroundColor: '#7C3AED',
+    borderRadius: 12,
+    marginTop: 2,
+    shadowColor: '#7C3AED',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  signInButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.3,
+  },
+  buttonDisabled: {
     opacity: 0.6,
   },
-  authSignInButtonText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 0.5,
+
+  // Switch mode
+  switchModeLink: {
+    alignItems: 'center',
+    paddingVertical: 2,
   },
-  authSignUpText: {
-    fontSize: 15,
-    color: '#374151',
+  switchModeText: {
+    fontSize: 14,
     fontWeight: '500',
   },
-  authSignUpTextBold: {
+  switchModeBold: {
     color: '#7C3AED',
     fontWeight: '700',
   },
-  authGoogleIconNew: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#4285F4',
-    marginRight: 12,
+
+  // OAuth Divider
+  oauthDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 28,
   },
-  authGoogleButtonTextNew: {
-    color: '#1F2937',
-    fontSize: 16,
+  oauthDividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  oauthDividerText: {
+    fontSize: 11,
     fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
-  authCreateAccountHint: {
-    fontSize: 12,
-    color: '#9CA3AF',
+
+  // OAuth Buttons
+  oauthRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 18,
+  },
+  oauthButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 50,
+    borderRadius: 12,
+    borderWidth: 1.5,
+  },
+  oauthButtonApple: {
+    backgroundColor: '#000000',
+    borderColor: '#000000',
+  },
+  googleIconCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  googleG: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#4285F4',
+    marginTop: -1,
+  },
+  oauthButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+
+  // Bottom
+  bottomHint: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 28,
+    fontWeight: '500',
+  },
+  versionText: {
+    fontSize: 11,
+    color: '#94A3B8',
     textAlign: 'center',
     marginTop: 12,
-    fontWeight: '400',
+    fontWeight: '500',
   },
-  authAppleButton: {
-    width: '100%',
+
+  // Biometric
+  biometricWrap: {
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: -8,
+  },
+  biometricCircle: {
+    width: 50,
     height: 50,
-    marginTop: 8,
+    borderRadius: 25,
+    backgroundColor: '#F3F0FF',
+    borderWidth: 1.5,
+    borderColor: '#E9E0FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  biometricLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 5,
   },
 });

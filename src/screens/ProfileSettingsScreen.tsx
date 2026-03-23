@@ -12,6 +12,9 @@ import {
   BackHandler,
   TextInput,
   Switch,
+  Modal,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Session } from '@supabase/supabase-js';
@@ -139,6 +142,10 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
   const [nmlsId, setNmlsId] = useState('');
   const [company, setCompany] = useState('');
   const [companyNmlsId, setCompanyNmlsId] = useState('');
+
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   const avatarUrl = getAvatarUrl(session?.user?.user_metadata, realtorProfilePicUrl);
   const isRealtor = userRole === 'realtor';
@@ -325,6 +332,50 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
       console.error('Unexpected error saving LO profile:', err);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText.toUpperCase() !== 'DELETE') {
+      Alert.alert('Error', 'Please type DELETE exactly to confirm.');
+      return;
+    }
+
+    setIsDeletingAccount(true);
+    try {
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      if (!currentSession?.access_token) {
+        Alert.alert('Error', 'No active session. Please sign in again.');
+        return;
+      }
+
+      const response = await fetch(
+        `${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/delete-account`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${currentSession.access_token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || data.error || 'Failed to delete account');
+      }
+
+      setShowDeleteModal(false);
+      Alert.alert('Account Deleted', 'Your account has been permanently deleted.');
+      onSignOut();
+    } catch (error) {
+      Alert.alert(
+        'Error',
+        error instanceof Error ? error.message : 'Failed to delete account. Please try again.'
+      );
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -919,6 +970,28 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
           </TouchableOpacity>
         </View>
 
+        {/* Delete Account */}
+        <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: '#FECACA' }]}>
+          <View style={localStyles.dangerHeader}>
+            <View style={localStyles.dangerIconCircle}>
+              <Ionicons name="warning-outline" size={18} color="#DC2626" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={localStyles.dangerTitle}>Delete Account</Text>
+              <Text style={[localStyles.dangerSubtitle, { color: colors.textSecondary }]}>
+                Permanently delete your account and all data
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={localStyles.deleteButton}
+            onPress={() => setShowDeleteModal(true)}
+          >
+            <Ionicons name="trash-outline" size={16} color="#DC2626" />
+            <Text style={localStyles.deleteButtonText}>Delete Account</Text>
+          </TouchableOpacity>
+        </View>
+
         <TouchableOpacity
           style={[localStyles.doneButton, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
           onPress={onBack}
@@ -926,6 +999,89 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
           <Text style={[localStyles.doneButtonText, { color: colors.textPrimary }]}>Done</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Delete Account Modal */}
+      <Modal
+        visible={showDeleteModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setShowDeleteModal(false);
+          setDeleteConfirmText('');
+        }}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={localStyles.modalOverlay}
+        >
+          <View style={[localStyles.modalContent, { backgroundColor: colors.cardBackground }]}>
+            <View style={localStyles.modalHeader}>
+              <Text style={localStyles.modalTitle}>Delete Account</Text>
+              <TouchableOpacity onPress={() => {
+                setShowDeleteModal(false);
+                setDeleteConfirmText('');
+              }}>
+                <Ionicons name="close" size={24} color={colors.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={localStyles.warningBox}>
+                <Ionicons name="warning" size={24} color="#DC2626" />
+                <Text style={localStyles.warningTitle}>This action is permanent!</Text>
+                <Text style={localStyles.warningText}>Deleting your account will:</Text>
+                <View style={localStyles.warningList}>
+                  <Text style={localStyles.warningItem}>• Remove your profile and login credentials</Text>
+                  <Text style={localStyles.warningItem}>• Remove your push notification subscriptions</Text>
+                  <Text style={localStyles.warningItem}>• Unlink all leads associated with your account</Text>
+                  <Text style={localStyles.warningItem}>• This cannot be undone</Text>
+                </View>
+              </View>
+
+              <Text style={[localStyles.confirmLabel, { color: colors.textPrimary }]}>
+                Type <Text style={localStyles.confirmKeyword}>DELETE</Text> to confirm
+              </Text>
+              <TextInput
+                style={[localStyles.confirmInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                placeholder="Type DELETE"
+                placeholderTextColor={colors.textSecondary}
+                value={deleteConfirmText}
+                onChangeText={setDeleteConfirmText}
+                autoCapitalize="characters"
+                autoCorrect={false}
+              />
+
+              <TouchableOpacity
+                style={[
+                  localStyles.confirmDeleteButton,
+                  deleteConfirmText.toUpperCase() !== 'DELETE' && localStyles.confirmDeleteButtonDisabled,
+                ]}
+                onPress={handleDeleteAccount}
+                disabled={deleteConfirmText.toUpperCase() !== 'DELETE' || isDeletingAccount}
+              >
+                {isDeletingAccount ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="trash" size={18} color="#FFFFFF" />
+                    <Text style={localStyles.confirmDeleteButtonText}>Permanently Delete My Account</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[localStyles.cancelButton, { borderColor: colors.border }]}
+                onPress={() => {
+                  setShowDeleteModal(false);
+                  setDeleteConfirmText('');
+                }}
+              >
+                <Text style={[localStyles.cancelButtonText, { color: colors.textPrimary }]}>Cancel</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1164,5 +1320,149 @@ const localStyles = StyleSheet.create({
     paddingHorizontal: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#E5E7EB',
+  },
+  // Delete Account
+  dangerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  dangerIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dangerTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
+  dangerSubtitle: {
+    fontSize: 12,
+    marginTop: 1,
+  },
+  deleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+  },
+  deleteButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
+  // Modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '85%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#DC2626',
+  },
+  warningBox: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  warningTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#DC2626',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  warningText: {
+    fontSize: 13,
+    color: '#991B1B',
+    marginBottom: 8,
+  },
+  warningList: {
+    alignSelf: 'stretch',
+    gap: 4,
+  },
+  warningItem: {
+    fontSize: 13,
+    color: '#991B1B',
+  },
+  confirmLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  confirmKeyword: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    color: '#DC2626',
+    fontWeight: '800',
+    backgroundColor: '#FEE2E2',
+  },
+  confirmInput: {
+    height: 48,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    fontSize: 16,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    letterSpacing: 2,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  confirmDeleteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 50,
+    borderRadius: 12,
+    backgroundColor: '#DC2626',
+    marginBottom: 10,
+  },
+  confirmDeleteButtonDisabled: {
+    opacity: 0.4,
+  },
+  confirmDeleteButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  cancelButton: {
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  cancelButtonText: {
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

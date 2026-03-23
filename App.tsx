@@ -3947,7 +3947,7 @@ function RootApp() {
       <AuthenticatedRoot
         session={session}
         onSignOut={async () => {
-          await supabase.auth.signOut();
+          await supabase.auth.signOut({ scope: 'local' });
           setSession(null);
         }}
         notificationLead={notificationLead}
