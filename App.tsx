@@ -24,7 +24,6 @@ import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler'
 import { Ionicons } from '@expo/vector-icons';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './src/lib/supabase';
-import { saveRefreshToken, isBiometricLoginEnabled } from './src/lib/secure-auth-storage';
 import { getUserRole, getUserTeamMemberId, canSeeAllLeads, type UserRole } from './src/lib/roles';
 import { TEXT_TEMPLATES, fillTemplate, getTemplateText, getTemplateName, type TemplateVariables } from './src/lib/textTemplates';
 import type { Lead, MetaLead, SelectedLeadRef, LoanOfficer, Realtor, Activity, AttentionBadge } from './src/lib/types/leads';
@@ -3886,13 +3885,6 @@ function RootApp() {
           console.log('📱 [Auth] Auth state changed - registering for notifications');
           registerForPushNotifications(newSession.user.id);
         }
-        // Keep biometric refresh token up-to-date on every token rotation
-        if (_event === 'TOKEN_REFRESHED' && newSession?.refresh_token && newSession?.user?.email) {
-          const bioEnabled = await isBiometricLoginEnabled();
-          if (bioEnabled) {
-            await saveRefreshToken(newSession.refresh_token, newSession.user.email);
-          }
-        }
       });
 
       return () => {
@@ -3955,14 +3947,7 @@ function RootApp() {
       <AuthenticatedRoot
         session={session}
         onSignOut={async () => {
-          // Save the latest refresh token before signing out so Face ID can use it
-          if (session?.refresh_token && session?.user?.email) {
-            const bioEnabled = await isBiometricLoginEnabled();
-            if (bioEnabled) {
-              await saveRefreshToken(session.refresh_token, session.user.email);
-            }
-          }
-          await supabase.auth.signOut({ scope: 'local' });
+          await supabase.auth.signOut();
           setSession(null);
         }}
         notificationLead={notificationLead}

@@ -27,7 +27,7 @@ import {
   checkBiometricCapabilities,
   isBiometricLoginEnabled,
   getStoredEmail,
-  saveRefreshToken,
+  saveBiometricCredentials,
   biometricSignIn,
   clearBiometricCredentials,
 } from '../lib/secure-auth-storage';
@@ -128,12 +128,10 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
         } else if (data.session) {
           // Save email for next time
           await saveEmail(email);
-          // Save refresh token for biometric sign-in
-          if (data.session.refresh_token) {
-            await saveRefreshToken(data.session.refresh_token, email);
-            setBiometricEnabled(true);
-            setBiometricEmail(email);
-          }
+          // Save credentials for biometric sign-in (stored in iOS Keychain)
+          await saveBiometricCredentials(email, password);
+          setBiometricEnabled(true);
+          setBiometricEmail(email);
           onAuth(data.session);
         }
       } else {
@@ -199,13 +197,6 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
       }
 
       if (data.session) {
-        // Save refresh token for biometric sign-in
-        if (data.session.refresh_token) {
-          const appleEmail = data.session.user?.email || 'Apple Account';
-          await saveRefreshToken(data.session.refresh_token, appleEmail);
-          setBiometricEnabled(true);
-          setBiometricEmail(appleEmail);
-        }
         onAuth(data.session);
       } else {
         setAuthError('Apple sign-in did not complete.');
@@ -291,13 +282,6 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
       console.log('Supabase session set successfully:', sessionData);
 
       if (sessionData.session) {
-        // Save refresh token for biometric sign-in
-        if (sessionData.session.refresh_token) {
-          const googleEmail = sessionData.session.user?.email || 'Google Account';
-          await saveRefreshToken(sessionData.session.refresh_token, googleEmail);
-          setBiometricEnabled(true);
-          setBiometricEmail(googleEmail);
-        }
         onAuth(sessionData.session);
       } else {
         setAuthError('Google sign-in did not complete.');
@@ -317,25 +301,26 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
     try {
       const result = await biometricSignIn();
 
-      if (!result.success || !result.refreshToken) {
+      if (!result.success || !result.email || !result.password) {
         if (result.error && result.error !== 'Authentication cancelled.') {
           setAuthError(result.error);
         }
         return;
       }
 
-      // Use refresh token to restore session
-      const { data, error } = await supabase.auth.refreshSession({
-        refresh_token: result.refreshToken,
+      // Sign in with stored credentials
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: result.email,
+        password: result.password,
       });
 
       if (error) {
-        // If token is invalid/expired, clear biometric credentials
-        if (error.message?.includes('Invalid') || (error as any).code === 'invalid_grant') {
+        // If credentials are invalid, clear biometric data
+        if (error.message?.includes('Invalid') || error.message?.includes('credentials')) {
           await clearBiometricCredentials();
           setBiometricEnabled(false);
           setBiometricEmail(null);
-          setAuthError('Session expired. Please sign in with your password.');
+          setAuthError('Saved credentials are no longer valid. Please sign in with your password.');
         } else {
           setAuthError(error.message);
         }
@@ -343,11 +328,6 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
       }
 
       if (data.session) {
-        // Update stored refresh token with the new one
-        if (data.session.refresh_token) {
-          const userEmail = data.session.user?.email || biometricEmail || '';
-          await saveRefreshToken(data.session.refresh_token, userEmail);
-        }
         onAuth(data.session);
       }
     } catch (error: any) {

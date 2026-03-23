@@ -1,6 +1,6 @@
 // src/lib/secure-auth-storage.ts
 // Secure storage for biometric sign-in using expo-secure-store.
-// Stores the Supabase refresh token so users can sign in with Face ID / Touch ID.
+// Stores credentials in iOS Keychain so users can sign in with Face ID / Touch ID.
 
 import * as LocalAuthentication from 'expo-local-authentication';
 
@@ -13,8 +13,8 @@ try {
   console.warn('[secure-auth] expo-secure-store native module not available — biometric sign-in disabled');
 }
 
-const REFRESH_TOKEN_KEY = 'cwm_biometric_refresh_token';
 const BIOMETRIC_EMAIL_KEY = 'cwm_biometric_email';
+const BIOMETRIC_PASSWORD_KEY = 'cwm_biometric_password';
 const BIOMETRIC_ENABLED_KEY = 'cwm_biometric_enabled';
 
 // ── Biometric capabilities ──
@@ -44,25 +44,27 @@ export async function checkBiometricCapabilities(): Promise<{
 
 // ── Store / retrieve credentials ──
 
-export async function saveRefreshToken(refreshToken: string, email: string): Promise<void> {
+export async function saveBiometricCredentials(email: string, password: string): Promise<void> {
   if (!SecureStore) return;
   try {
-    await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken, {
+    await SecureStore.setItemAsync(BIOMETRIC_EMAIL_KEY, email, {
       keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
     });
-    await SecureStore.setItemAsync(BIOMETRIC_EMAIL_KEY, email);
+    await SecureStore.setItemAsync(BIOMETRIC_PASSWORD_KEY, password, {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
     await SecureStore.setItemAsync(BIOMETRIC_ENABLED_KEY, 'true');
   } catch (error) {
-    console.error('[secure-auth] Failed to save refresh token:', error);
+    console.error('[secure-auth] Failed to save biometric credentials:', error);
   }
 }
 
-export async function getRefreshToken(): Promise<string | null> {
+export async function getStoredPassword(): Promise<string | null> {
   if (!SecureStore) return null;
   try {
-    return await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+    return await SecureStore.getItemAsync(BIOMETRIC_PASSWORD_KEY);
   } catch (error) {
-    console.error('[secure-auth] Failed to get refresh token:', error);
+    console.error('[secure-auth] Failed to get stored password:', error);
     return null;
   }
 }
@@ -89,8 +91,8 @@ export async function isBiometricLoginEnabled(): Promise<boolean> {
 export async function clearBiometricCredentials(): Promise<void> {
   if (!SecureStore) return;
   try {
-    await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
     await SecureStore.deleteItemAsync(BIOMETRIC_EMAIL_KEY);
+    await SecureStore.deleteItemAsync(BIOMETRIC_PASSWORD_KEY);
     await SecureStore.deleteItemAsync(BIOMETRIC_ENABLED_KEY);
   } catch (error) {
     console.error('[secure-auth] Failed to clear credentials:', error);
@@ -101,19 +103,20 @@ export async function clearBiometricCredentials(): Promise<void> {
 
 export async function biometricSignIn(): Promise<{
   success: boolean;
-  refreshToken: string | null;
+  email: string | null;
+  password: string | null;
   error?: string;
 }> {
   // 1. Check if biometric login is enabled
   const enabled = await isBiometricLoginEnabled();
   if (!enabled) {
-    return { success: false, refreshToken: null, error: 'Biometric login not enabled.' };
+    return { success: false, email: null, password: null, error: 'Biometric login not enabled.' };
   }
 
   // 2. Check device capabilities
   const caps = await checkBiometricCapabilities();
   if (!caps.isAvailable || !caps.isEnrolled) {
-    return { success: false, refreshToken: null, error: 'Biometric authentication not available.' };
+    return { success: false, email: null, password: null, error: 'Biometric authentication not available.' };
   }
 
   // 3. Prompt user for biometric auth
@@ -124,14 +127,15 @@ export async function biometricSignIn(): Promise<{
   });
 
   if (!result.success) {
-    return { success: false, refreshToken: null, error: 'Authentication cancelled.' };
+    return { success: false, email: null, password: null, error: 'Authentication cancelled.' };
   }
 
-  // 4. Retrieve stored refresh token
-  const refreshToken = await getRefreshToken();
-  if (!refreshToken) {
-    return { success: false, refreshToken: null, error: 'No saved session found. Please sign in with your password.' };
+  // 4. Retrieve stored credentials
+  const email = await getStoredEmail();
+  const password = await getStoredPassword();
+  if (!email || !password) {
+    return { success: false, email: null, password: null, error: 'No saved credentials found. Please sign in with your password.' };
   }
 
-  return { success: true, refreshToken };
+  return { success: true, email, password };
 }
