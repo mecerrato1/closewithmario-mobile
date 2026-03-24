@@ -11,8 +11,10 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Session } from '@supabase/supabase-js';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useThemeColors } from '../styles/theme';
@@ -375,6 +377,12 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
 
   return (
     <View style={[s.container, { backgroundColor: isDark ? colors.background : '#F3F0FF' }]}>
+      {!isDark && (
+        <LinearGradient
+          colors={['#F3F0FF', '#EDE9FE', '#E8E0FF']}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.keyboardView}>
         <ScrollView
@@ -401,36 +409,37 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
             <Text style={[s.welcomeTitle, { color: colors.textPrimary }]}>
               Welcome back
             </Text>
-            <Text style={[s.welcomeSubtitle, { color: colors.textSecondary }]}>
-              Sign in to manage your pipeline
-            </Text>
           </View>
 
           {/* Login Card */}
-          <View style={[s.loginCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+          <View style={[s.loginCard, { backgroundColor: colors.cardBackground }]}>
             {/* Email */}
             <View style={s.fieldGroup}>
               <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>EMAIL</Text>
-              <TextInput
-                style={[s.input, { backgroundColor: isDark ? colors.background : '#F8FAFC', borderColor: colors.border, color: colors.textPrimary }]}
-                placeholder="you@company.com"
-                placeholderTextColor="#94A3B8"
-                autoCapitalize="none"
-                keyboardType="email-address"
-                textContentType="username"
-                autoComplete="email"
-                value={email}
-                onChangeText={setEmail}
-                editable={!isAnyLoading}
-              />
+              <View style={s.inputWrapper}>
+                <Ionicons name="mail-outline" size={18} color="#94A3B8" style={s.inputIcon} />
+                <TextInput
+                  style={[s.input, s.inputWithIcon, { backgroundColor: isDark ? colors.background : '#FAFAFE', borderColor: isDark ? colors.border : '#DDD6FE', color: colors.textPrimary }]}
+                  placeholder="you@company.com"
+                  placeholderTextColor="#94A3B8"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  textContentType="username"
+                  autoComplete="email"
+                  value={email}
+                  onChangeText={setEmail}
+                  editable={!isAnyLoading}
+                />
+              </View>
             </View>
 
             {/* Password */}
             <View style={s.fieldGroup}>
               <Text style={[s.fieldLabel, { color: colors.textSecondary }]}>PASSWORD</Text>
               <View style={s.inputWrapper}>
+                <Ionicons name="lock-closed-outline" size={18} color="#94A3B8" style={s.inputIcon} />
                 <TextInput
-                  style={[s.input, { backgroundColor: isDark ? colors.background : '#F8FAFC', borderColor: colors.border, color: colors.textPrimary, paddingRight: 48 }]}
+                  style={[s.input, s.inputWithIcon, { backgroundColor: isDark ? colors.background : '#FAFAFE', borderColor: isDark ? colors.border : '#DDD6FE', color: colors.textPrimary, paddingRight: 48 }]}
                   placeholder="Enter your password"
                   placeholderTextColor="#94A3B8"
                   secureTextEntry={!showPassword}
@@ -464,22 +473,55 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
 
             {/* Sign In Button */}
             <TouchableOpacity
-              style={[s.signInButton, isAnyLoading && s.buttonDisabled]}
               onPress={handleEmailPasswordAuth}
               disabled={isAnyLoading}
               activeOpacity={0.85}
+              style={isAnyLoading ? s.buttonDisabled : undefined}
             >
-              {authLoading ? (
-                <Text style={s.signInButtonText}>Signing in...</Text>
-              ) : (
-                <>
-                  <Text style={s.signInButtonText}>
-                    {mode === 'signIn' ? 'Sign In' : 'Create Account'}
-                  </Text>
-                  <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={{ marginLeft: 6 }} />
-                </>
-              )}
+              <LinearGradient
+                colors={['#8B5CF6', '#7C3AED', '#6D28D9']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={s.signInButton}
+              >
+                {authLoading ? (
+                  <Text style={s.signInButtonText}>Signing in...</Text>
+                ) : (
+                  <>
+                    <Text style={s.signInButtonText}>
+                      {mode === 'signIn' ? 'Sign In' : 'Create Account'}
+                    </Text>
+                    <Ionicons name="arrow-forward" size={20} color="#F59E0B" style={{ marginLeft: 6 }} />
+                  </>
+                )}
+              </LinearGradient>
             </TouchableOpacity>
+
+            {/* Biometric Sign In — inside card */}
+            {biometricAvailable && biometricEnabled && (
+              <View style={s.biometricWrap}>
+                <View style={s.biometricDivider}>
+                  <View style={[s.biometricDividerLine, { backgroundColor: colors.border }]} />
+                  <Text style={[s.biometricDividerText, { color: '#94A3B8' }]}>or</Text>
+                  <View style={[s.biometricDividerLine, { backgroundColor: colors.border }]} />
+                </View>
+                <TouchableOpacity
+                  style={[s.biometricButton, isAnyLoading && s.buttonDisabled]}
+                  onPress={handleBiometricSignIn}
+                  disabled={isAnyLoading}
+                  activeOpacity={0.7}
+                >
+                  {biometricLoading ? (
+                    <ActivityIndicator size="small" color="#7C3AED" />
+                  ) : (
+                    <>
+                      <Ionicons name="finger-print-outline" size={24} color="#7C3AED" />
+                      <Text style={s.biometricButtonText}>Use {biometricType}</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
 
             {ALLOW_SIGNUP && (
               <TouchableOpacity
@@ -493,31 +535,6 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
               </TouchableOpacity>
             )}
           </View>
-
-          {/* Biometric Sign In */}
-          {biometricAvailable && biometricEnabled && (
-            <View style={s.biometricWrap}>
-              <TouchableOpacity
-                style={[s.biometricCircle, isAnyLoading && s.buttonDisabled]}
-                onPress={handleBiometricSignIn}
-                disabled={isAnyLoading}
-                activeOpacity={0.7}
-              >
-                {biometricLoading ? (
-                  <ActivityIndicator size="small" color="#7C3AED" />
-                ) : (
-                  biometricType === 'Face ID' ? (
-                    <MaterialCommunityIcons name="face-recognition" size={32} color="#7C3AED" />
-                  ) : (
-                    <Ionicons name="finger-print-outline" size={30} color="#7C3AED" />
-                  )
-                )}
-              </TouchableOpacity>
-              <Text style={[s.biometricLabel, { color: colors.textSecondary }]}>
-                Use {biometricType}
-              </Text>
-            </View>
-          )}
 
           {/* OAuth Divider */}
           <View style={s.oauthDivider}>
@@ -542,21 +559,24 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
 
             {Platform.OS === 'ios' && (
               <TouchableOpacity
-                style={[s.oauthButton, s.oauthButtonApple, isAnyLoading && s.buttonDisabled]}
+                style={[s.oauthButton, { backgroundColor: colors.cardBackground, borderColor: colors.border }, isAnyLoading && s.buttonDisabled]}
                 onPress={handleAppleSignIn}
                 disabled={isAnyLoading}
                 activeOpacity={0.85}
               >
-                <Ionicons name="logo-apple" size={19} color="#FFFFFF" />
-                <Text style={[s.oauthButtonText, { color: '#FFFFFF' }]}>Apple</Text>
+                <Ionicons name="logo-apple" size={19} color={colors.textPrimary} />
+                <Text style={[s.oauthButtonText, { color: colors.textPrimary }]}>Apple</Text>
               </TouchableOpacity>
             )}
           </View>
 
           {/* Bottom Hint */}
-          <Text style={[s.bottomHint, { color: colors.textSecondary }]}>
-            Need an account? Visit closewithmario.com
-          </Text>
+          <TouchableOpacity onPress={() => Linking.openURL('https://closewithmario.com/login?tab=signup')}>
+            <Text style={[s.bottomHint, { color: colors.textSecondary }]}>
+              Need an account?{' '}
+              <Text style={s.bottomHintLink}>Create one here</Text>
+            </Text>
+          </TouchableOpacity>
 
           {/* Version */}
           <Text style={s.versionText}>
@@ -577,8 +597,9 @@ const s = StyleSheet.create({
   },
   scrollContent: {
     flexGrow: 1,
+    justifyContent: 'center',
     paddingHorizontal: 28,
-    paddingTop: Platform.OS === 'ios' ? 56 : 44,
+    paddingTop: Platform.OS === 'ios' ? 20 : 16,
     paddingBottom: 32,
   },
 
@@ -610,23 +631,17 @@ const s = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -1,
   },
-  welcomeSubtitle: {
-    fontSize: 15,
-    fontWeight: '500',
-    marginTop: 6,
-  },
 
   // Login Card
   loginCard: {
-    borderRadius: 16,
-    borderWidth: 1,
+    borderRadius: 18,
     padding: 22,
     gap: 18,
     shadowColor: '#7C3AED',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 6,
   },
   fieldGroup: {
     gap: 6,
@@ -639,6 +654,12 @@ const s = StyleSheet.create({
   },
   inputWrapper: {
     position: 'relative',
+    justifyContent: 'center',
+  },
+  inputIcon: {
+    position: 'absolute',
+    left: 14,
+    zIndex: 1,
   },
   input: {
     height: 52,
@@ -647,6 +668,9 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     fontSize: 15,
     fontWeight: '500',
+  },
+  inputWithIcon: {
+    paddingLeft: 42,
   },
   visibilityToggle: {
     position: 'absolute',
@@ -691,14 +715,12 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     height: 52,
-    backgroundColor: '#7C3AED',
     borderRadius: 12,
-    marginTop: 2,
-    shadowColor: '#7C3AED',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowColor: '#6D28D9',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 5,
   },
   signInButtonText: {
     fontSize: 16,
@@ -729,7 +751,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginTop: 28,
+    marginTop: 24,
   },
   oauthDividerLine: {
     flex: 1,
@@ -757,10 +779,6 @@ const s = StyleSheet.create({
     height: 50,
     borderRadius: 12,
     borderWidth: 1.5,
-  },
-  oauthButtonApple: {
-    backgroundColor: '#000000',
-    borderColor: '#000000',
   },
   googleIconCircle: {
     width: 22,
@@ -790,6 +808,10 @@ const s = StyleSheet.create({
     marginTop: 28,
     fontWeight: '500',
   },
+  bottomHintLink: {
+    color: '#7C3AED',
+    fontWeight: '700',
+  },
   versionText: {
     fontSize: 11,
     color: '#94A3B8',
@@ -801,22 +823,39 @@ const s = StyleSheet.create({
   // Biometric
   biometricWrap: {
     alignItems: 'center',
-    marginTop: 16,
-    marginBottom: -8,
+    gap: 0,
   },
-  biometricCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#F3F0FF',
-    borderWidth: 1.5,
-    borderColor: '#E9E0FF',
+  biometricDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    width: '100%',
+    marginBottom: 14,
+  },
+  biometricDividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  biometricDividerText: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'lowercase',
+  },
+  biometricButton: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 10,
+    height: 52,
+    width: '100%',
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#E9E0FF',
+    backgroundColor: '#F9F5FF',
   },
-  biometricLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: 5,
+  biometricButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#7C3AED',
   },
 });
