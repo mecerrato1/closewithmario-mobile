@@ -1371,6 +1371,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           }}
           activeOpacity={0.7}
         >
+          {/* Row 1: Name + Source badge */}
           <View style={styles.leadHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
               {item.is_tracked && (
@@ -1379,100 +1380,63 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               <Text style={[styles.leadName, { color: colors.textPrimary }]} numberOfLines={1}>
                 {fullName}
               </Text>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               {isUnread && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, marginRight: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, marginLeft: 8 }}>
                   <Ionicons name="chatbubble-ellipses" size={12} color="#2563EB" />
                   {(unreadMessageCounts[item.id] || 0) > 1 && (
                     <Text style={{ fontSize: 10, fontWeight: '700', color: '#2563EB', marginLeft: 3 }}>{unreadMessageCounts[item.id]}</Text>
                   )}
                 </View>
               )}
+            </View>
             {item.source === 'My Lead' ? (
-                <View style={styles.myLeadBadge}>
-                  <Ionicons name="person-add-outline" size={12} color="#16A34A" />
-                  <Text style={styles.myLeadBadgeText}>My Lead</Text>
-                </View>
+              <View style={styles.myLeadBadge}>
+                <Ionicons name="person-add-outline" size={12} color="#16A34A" />
+                <Text style={styles.myLeadBadgeText}>My Lead</Text>
+              </View>
             ) : (
-                <View style={styles.leadSourceBadge}>
-                  <Ionicons name="globe-outline" size={12} color="#0F172A" style={{ marginRight: 4 }} />
-                  <Text style={styles.leadSourceText}>Web</Text>
+              <View style={styles.leadSourceBadge}>
+                <Ionicons name="globe-outline" size={12} color="#0F172A" style={{ marginRight: 4 }} />
+                <Text style={styles.leadSourceText}>Web</Text>
+              </View>
+            )}
+          </View>
+          {/* Row 2: Phone (left) + Date & Status (right) */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <View style={{ flex: 1, marginRight: 12 }}>
+              {item.phone && (
+                <View style={[styles.leadContactRow, { marginBottom: 0 }]}>
+                  <Ionicons name="call-outline" size={14} color={colors.textSecondary} style={styles.leadContactIcon as any} />
+                  <Text style={[styles.leadContact, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {formatPhoneNumber(item.phone)}
+                  </Text>
                 </View>
-            )}
+              )}
+              {userRole === 'super_admin' && item.lo_id && (
+                <View style={[styles.leadLORow, { marginBottom: 0, marginTop: 4 }]}>
+                  <Ionicons name="person-circle-outline" size={14} color="#64748B" style={styles.leadLOIcon as any} />
+                  <Text style={styles.leadLOText} numberOfLines={1}>
+                    {loanOfficers.find(lo => lo.id === item.lo_id)?.name || 'Unknown LO'}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <View style={{ alignItems: 'flex-end', flexShrink: 0 }}>
+              <Text style={[styles.leadTimestamp, { marginBottom: 4 }]}>
+                {new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {dotColor && (
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dotColor, marginRight: 5 }} />
+                )}
+                <View style={[styles.statusBadge, { backgroundColor: statusColors.bg, borderColor: statusColors.border, marginBottom: 0 }]}>
+                  <Text style={[styles.statusBadgeText, { color: statusColors.text }]}>
+                    {statusDisplay}
+                  </Text>
+                </View>
+              </View>
             </View>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            {dotColor && (
-              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: dotColor, marginRight: 6 }} />
-            )}
-            <View style={[
-              styles.statusBadge,
-              { backgroundColor: statusColors.bg, borderColor: statusColors.border }
-            ]}>
-              <Text style={[styles.statusBadgeText, { color: statusColors.text }]}>
-                {statusDisplay}
-              </Text>
-            </View>
-          </View>
-          {item.email && (
-            <View style={styles.leadContactRow}>
-              <Ionicons
-                name="mail-outline"
-                size={14}
-                color={colors.textSecondary}
-                style={styles.leadContactIcon as any}
-              />
-              <Text style={[styles.leadContact, { color: colors.textSecondary }]} numberOfLines={1}>{item.email}</Text>
-            </View>
-          )}
-          {item.phone && (
-            <View style={styles.leadContactRow}>
-              <Ionicons
-                name="call-outline"
-                size={14}
-                color={colors.textSecondary}
-                style={styles.leadContactIcon as any}
-              />
-              <Text style={[styles.leadContact, { color: colors.textSecondary }]} numberOfLines={1}>
-                {formatPhoneNumber(item.phone)}
-              </Text>
-            </View>
-          )}
-          {item.source_detail && (
-            <View style={styles.leadContactRow}>
-              <Ionicons
-                name="megaphone-outline"
-                size={14}
-                color="#16A34A"
-                style={styles.leadContactIcon as any}
-              />
-              <Text style={[styles.leadContact, { color: '#16A34A' }]} numberOfLines={1}>
-                {item.source_detail}
-              </Text>
-            </View>
-          )}
-          {userRole === 'super_admin' && item.lo_id && (
-            <View style={styles.leadLORow}>
-              <Ionicons
-                name="person-circle-outline"
-                size={14}
-                color="#64748B"
-                style={styles.leadLOIcon as any}
-              />
-              <Text style={styles.leadLOText} numberOfLines={1}>
-                {loanOfficers.find(lo => lo.id === item.lo_id)?.name || 'Unknown LO'}
-              </Text>
-            </View>
-          )}
-          <Text style={styles.leadTimestamp}>
-            {new Date(item.created_at).toLocaleDateString('en-US', { 
-              month: 'short', 
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
-          </Text>
         </TouchableOpacity>
       </Swipeable>
     );
@@ -1588,6 +1552,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           }}
           activeOpacity={0.7}
         >
+          {/* Row 1: Name + Platform badge */}
           <View style={styles.leadHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
               {item.is_tracked && (
@@ -1596,86 +1561,51 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               <Text style={[styles.leadName, { color: colors.textPrimary }]} numberOfLines={1}>
                 {fullName}
               </Text>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               {isUnread && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, marginRight: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, marginLeft: 8 }}>
                   <Ionicons name="chatbubble-ellipses" size={12} color="#2563EB" />
                   {(unreadMessageCounts[item.id] || 0) > 1 && (
                     <Text style={{ fontSize: 10, fontWeight: '700', color: '#2563EB', marginLeft: 3 }}>{unreadMessageCounts[item.id]}</Text>
                   )}
                 </View>
               )}
-              {getPlatformBadge(platform)}
+            </View>
+            {getPlatformBadge(platform)}
+          </View>
+          {/* Row 2: Phone (left) + Date & Status (right) */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <View style={{ flex: 1, marginRight: 12 }}>
+              {item.phone && (
+                <View style={[styles.leadContactRow, { marginBottom: 0 }]}>
+                  <Ionicons name="call-outline" size={14} color={colors.textSecondary} style={styles.leadContactIcon as any} />
+                  <Text style={[styles.leadContact, { color: colors.textSecondary }]} numberOfLines={1}>{formatPhoneNumber(item.phone)}</Text>
+                </View>
+              )}
+              {userRole === 'super_admin' && item.lo_id && (
+                <View style={[styles.leadLORow, { marginBottom: 0, marginTop: 4 }]}>
+                  <Ionicons name="person-circle-outline" size={14} color={colors.textSecondary} style={styles.leadLOIcon as any} />
+                  <Text style={[styles.leadLOText, { color: colors.textSecondary }]} numberOfLines={1}>
+                    {loanOfficers.find(lo => lo.id === item.lo_id)?.name || 'Unknown LO'}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <View style={{ alignItems: 'flex-end', flexShrink: 0 }}>
+              <Text style={[styles.leadTimestamp, { color: colors.textSecondary, marginBottom: 4 }]}>
+                {new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {dotColor && (
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dotColor, marginRight: 5 }} />
+                )}
+                <View style={[styles.statusBadge, { backgroundColor: statusColors.bg, borderColor: statusColors.border, marginBottom: 0 }]}>
+                  <Text style={[styles.statusBadgeText, { color: statusColors.text }]}>
+                    {status}
+                  </Text>
+                </View>
+              </View>
             </View>
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            {dotColor && (
-              <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: dotColor, marginRight: 6 }} />
-            )}
-            <View style={[
-              styles.statusBadge,
-              { backgroundColor: statusColors.bg, borderColor: statusColors.border }
-            ]}>
-              <Text style={[styles.statusBadgeText, { color: statusColors.text }]}>
-                {status}
-              </Text>
-            </View>
-          </View>
-          {campaign ? (
-            <View style={styles.campaignRow}>
-              <Ionicons
-                name="megaphone-outline"
-                size={14}
-                color={colors.textSecondary}
-                style={{ marginRight: 4 }}
-              />
-              <Text style={[styles.leadCampaign, { color: colors.textSecondary }]} numberOfLines={1}>{campaign}</Text>
-            </View>
-          ) : null}
-          {item.email && (
-            <View style={styles.leadContactRow}>
-              <Ionicons
-                name="mail-outline"
-                size={14}
-                color={colors.textSecondary}
-                style={styles.leadContactIcon as any}
-              />
-              <Text style={[styles.leadContact, { color: colors.textSecondary }]} numberOfLines={1}>{item.email}</Text>
-            </View>
-          )}
-          {item.phone && (
-            <View style={styles.leadContactRow}>
-              <Ionicons
-                name="call-outline"
-                size={14}
-                color={colors.textSecondary}
-                style={styles.leadContactIcon as any}
-              />
-              <Text style={[styles.leadContact, { color: colors.textSecondary }]} numberOfLines={1}>{formatPhoneNumber(item.phone)}</Text>
-            </View>
-          )}
-          {userRole === 'super_admin' && item.lo_id && (
-            <View style={styles.leadLORow}>
-              <Ionicons
-                name="person-circle-outline"
-                size={14}
-                color={colors.textSecondary}
-                style={styles.leadLOIcon as any}
-              />
-              <Text style={[styles.leadLOText, { color: colors.textSecondary }]} numberOfLines={1}>
-                {loanOfficers.find(lo => lo.id === item.lo_id)?.name || 'Unknown LO'}
-              </Text>
-            </View>
-          )}
-          <Text style={[styles.leadTimestamp, { color: colors.textSecondary }]}>
-            {new Date(item.created_at).toLocaleDateString('en-US', { 
-              month: 'short', 
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
-          </Text>
         </TouchableOpacity>
       </Swipeable>
     );

@@ -39,6 +39,7 @@ import { saveContact } from '../utils/vcard';
 import { SmsMessaging } from '../components/SmsMessaging';
 import { toggleLeadTracking, updateTrackingNote, getTrackingReasonLabel } from '../lib/supabase/leadTracking';
 import { AiRewriteToolbar, AiRewriteToolbarRef } from '../components/AiRewriteToolbar';
+import { ReferralAgreementsSection } from '../components/ReferralAgreementsSection';
 
 export type LeadDetailViewProps = {
   selected: SelectedLeadRef;
@@ -135,6 +136,9 @@ export function LeadDetailView({
   const [showPartnerUpdateModal, setShowPartnerUpdateModal] = useState(false);
   const [partnerUpdateMessage, setPartnerUpdateMessage] = useState('');
   const [sendingPartnerUpdate, setSendingPartnerUpdate] = useState(false);
+  
+  // Licensed realtor flag (for referral agreements visibility gate)
+  const [isLicensedRealtor, setIsLicensedRealtor] = useState(false);
   
   // Docs-received SMS toast state
   const [smsToast, setSmsToast] = useState<{ visible: boolean; message: string; type: 'info' | 'success' | 'error' }>({ visible: false, message: '', type: 'info' });
@@ -979,6 +983,7 @@ export function LeadDetailView({
         if (superAdminContacts[emailLower]) {
           console.log('Using hardcoded super admin contact info');
           setCurrentLOInfo(superAdminContacts[emailLower]);
+          setIsLicensedRealtor(true);
           return;
         }
         
@@ -1002,7 +1007,7 @@ export function LeadDetailView({
         if (memberId) {
           const { data, error } = await supabase
             .from('loan_officers')
-            .select('first_name, last_name, phone, email, ai_draft_access, company')
+            .select('first_name, last_name, phone, email, ai_draft_access, company, is_licensed_realtor')
             .eq('id', memberId)
             .single();
           
@@ -1020,6 +1025,7 @@ export function LeadDetailView({
             };
             console.log('Setting LO Info:', loInfo);
             setCurrentLOInfo(loInfo);
+            setIsLicensedRealtor(!!(data as any).is_licensed_realtor);
           }
         } else {
           // No LO record found - check if user is a realtor
@@ -2973,6 +2979,17 @@ export function LeadDetailView({
                   </>
                 );
               })()}
+            </>
+          )}
+
+          {/* Referral Agreements Section (read-only, gated by is_licensed_realtor) */}
+          {isLicensedRealtor && record && (
+            <>
+              <View style={styles.sectionDivider} />
+              <ReferralAgreementsSection
+                leadId={record.id}
+                leadSource={isMeta ? 'meta_ads' : 'leads'}
+              />
             </>
           )}
 

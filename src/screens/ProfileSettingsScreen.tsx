@@ -133,6 +133,7 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
   const [leadEligible, setLeadEligible] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [showPrimaryLangPicker, setShowPrimaryLangPicker] = useState(false);
   const [showSecondaryLangPicker, setShowSecondaryLangPicker] = useState(false);
@@ -142,6 +143,12 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
   const [nmlsId, setNmlsId] = useState('');
   const [company, setCompany] = useState('');
   const [companyNmlsId, setCompanyNmlsId] = useState('');
+  
+  // Licensed Realtor fields (LO only)
+  const [isLicensedRealtor, setIsLicensedRealtor] = useState(false);
+  const [realtorBrokerageName, setRealtorBrokerageName] = useState('');
+  const [realtorLicenseNumber, setRealtorLicenseNumber] = useState('');
+  const [realtorEmail, setRealtorEmail] = useState('');
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
@@ -227,14 +234,16 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
       if (error) {
         Alert.alert('Error', 'Failed to save profile. Please try again.');
         console.error('Error saving realtor profile:', error);
+        setSaving(false);
       } else {
         setHasChanges(false);
-        Alert.alert('Success', 'Profile updated!');
+        setSaving(false);
+        setSavedFlash(true);
+        setTimeout(() => onBack(), 800);
       }
     } catch (err) {
       Alert.alert('Error', 'An unexpected error occurred.');
       console.error('Unexpected error saving realtor profile:', err);
-    } finally {
       setSaving(false);
     }
   };
@@ -265,7 +274,7 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
 
       const { data } = await supabase
         .from('loan_officers')
-        .select('first_name, last_name, email, phone, nmls_id, company, company_nmls_id, preferred_language, secondary_language, lead_eligible')
+        .select('first_name, last_name, email, phone, nmls_id, company, company_nmls_id, preferred_language, secondary_language, lead_eligible, is_licensed_realtor, realtor_brokerage_name, realtor_license_number, realtor_email')
         .eq('id', memberId)
         .single();
 
@@ -280,6 +289,10 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
         setPrimaryLanguage(toLangDisplay(data.preferred_language));
         setSecondaryLanguage(toLangDisplay(data.secondary_language));
         setLeadEligible(!!data.lead_eligible);
+        setIsLicensedRealtor(!!(data as any).is_licensed_realtor);
+        setRealtorBrokerageName((data as any).realtor_brokerage_name || '');
+        setRealtorLicenseNumber((data as any).realtor_license_number || '');
+        setRealtorEmail((data as any).realtor_email || '');
       }
     } catch (err) {
       console.error('Error fetching LO profile:', err);
@@ -317,20 +330,26 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
           preferred_language: toLangCode(primaryLanguage),
           secondary_language: toLangCode(secondaryLanguage),
           lead_eligible: leadEligible,
+          is_licensed_realtor: isLicensedRealtor,
+          realtor_brokerage_name: isLicensedRealtor ? realtorBrokerageName.trim() : null,
+          realtor_license_number: isLicensedRealtor ? realtorLicenseNumber.trim() : null,
+          realtor_email: isLicensedRealtor ? realtorEmail.trim() : null,
         })
         .eq('id', loId);
 
       if (error) {
         Alert.alert('Error', 'Failed to save profile. Please try again.');
         console.error('Error saving LO profile:', error);
+        setSaving(false);
       } else {
         setHasChanges(false);
-        Alert.alert('Success', 'Profile updated!');
+        setSaving(false);
+        setSavedFlash(true);
+        setTimeout(() => onBack(), 800);
       }
     } catch (err) {
       Alert.alert('Error', 'An unexpected error occurred.');
       console.error('Unexpected error saving LO profile:', err);
-    } finally {
       setSaving(false);
     }
   };
@@ -693,16 +712,16 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
             </View>
 
             {/* Save Button */}
-            {hasChanges && (
+            {(hasChanges || savedFlash) && (
               <TouchableOpacity
-                style={[localStyles.saveButton, { backgroundColor: '#7C3AED' }]}
+                style={[localStyles.saveButton, { backgroundColor: savedFlash ? '#16A34A' : '#7C3AED' }]}
                 onPress={handleSaveRealtorProfile}
-                disabled={saving}
+                disabled={saving || savedFlash}
               >
                 {saving ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Text style={localStyles.saveButtonText}>Save Changes</Text>
+                  <Text style={localStyles.saveButtonText}>{savedFlash ? 'Saved!' : 'Save Changes'}</Text>
                 )}
               </TouchableOpacity>
             )}
@@ -855,6 +874,59 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
               </View>
             </View>
 
+            {/* Licensed Realtor Section */}
+            <View style={{ marginTop: 8, marginBottom: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                  <Ionicons name="home-outline" size={18} color="#7C3AED" style={{ marginRight: 8 }} />
+                  <Text style={[localStyles.fieldLabel, { color: colors.textPrimary, marginBottom: 0, fontWeight: '600' }]}>Licensed Realtor</Text>
+                </View>
+                <Switch
+                  value={isLicensedRealtor}
+                  onValueChange={(v) => { setIsLicensedRealtor(v); setHasChanges(true); }}
+                  trackColor={{ false: '#D1D5DB', true: '#7C3AED' }}
+                />
+              </View>
+              {isLicensedRealtor && (
+                <View style={{ gap: 8, marginTop: 4 }}>
+                  <View>
+                    <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Brokerage Name</Text>
+                    <TextInput
+                      style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                      value={realtorBrokerageName}
+                      onChangeText={(t) => { setRealtorBrokerageName(t); setHasChanges(true); }}
+                      placeholder="Brokerage Name"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+                  <View style={localStyles.fieldRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>License Number</Text>
+                      <TextInput
+                        style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                        value={realtorLicenseNumber}
+                        onChangeText={(t) => { setRealtorLicenseNumber(t); setHasChanges(true); }}
+                        placeholder="License #"
+                        placeholderTextColor={colors.textSecondary}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Realtor Email</Text>
+                      <TextInput
+                        style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                        value={realtorEmail}
+                        onChangeText={(t) => { setRealtorEmail(t); setHasChanges(true); }}
+                        placeholder="Realtor Email"
+                        placeholderTextColor={colors.textSecondary}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                      />
+                    </View>
+                  </View>
+                </View>
+              )}
+            </View>
+
             {/* Language Row */}
             <View style={localStyles.fieldRow}>
               <View style={{ flex: 1 }}>
@@ -906,16 +978,16 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
             </View>
 
             {/* Save Button */}
-            {hasChanges && (
+            {(hasChanges || savedFlash) && (
               <TouchableOpacity
-                style={[localStyles.saveButton, { backgroundColor: '#7C3AED' }]}
+                style={[localStyles.saveButton, { backgroundColor: savedFlash ? '#16A34A' : '#7C3AED' }]}
                 onPress={handleSaveLOProfile}
-                disabled={saving}
+                disabled={saving || savedFlash}
               >
                 {saving ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
-                  <Text style={localStyles.saveButtonText}>Save Changes</Text>
+                  <Text style={localStyles.saveButtonText}>{savedFlash ? 'Saved!' : 'Save Changes'}</Text>
                 )}
               </TouchableOpacity>
             )}

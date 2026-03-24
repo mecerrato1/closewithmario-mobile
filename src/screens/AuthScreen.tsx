@@ -439,7 +439,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
               <View style={s.inputWrapper}>
                 <Ionicons name="lock-closed-outline" size={18} color="#94A3B8" style={s.inputIcon} />
                 <TextInput
-                  style={[s.input, s.inputWithIcon, { backgroundColor: isDark ? colors.background : '#FAFAFE', borderColor: isDark ? colors.border : '#DDD6FE', color: colors.textPrimary, paddingRight: 48 }]}
+                  style={[s.input, s.inputWithIcon, { backgroundColor: isDark ? colors.background : '#FAFAFE', borderColor: isDark ? colors.border : '#DDD6FE', color: colors.textPrimary, paddingRight: 72 }]}
                   placeholder="Enter your password"
                   placeholderTextColor="#94A3B8"
                   secureTextEntry={!showPassword}
@@ -674,7 +674,7 @@ const s = StyleSheet.create({
   },
   visibilityToggle: {
     position: 'absolute',
-    right: 14,
+    right: 42,
     top: 0,
     bottom: 0,
     justifyContent: 'center',
