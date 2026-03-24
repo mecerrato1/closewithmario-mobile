@@ -65,7 +65,7 @@ export function ReferralAgreementsSection({ leadId, leadSource }: Props) {
   const [expanded, setExpanded] = useState(true);
 
   const handleOpenPdf = async (path: string) => {
-    const url = `${SUPABASE_STORAGE_BASE}/${path}`;
+    const url = `${SUPABASE_STORAGE_BASE}/${path}?t=${Date.now()}`;
     await WebBrowser.openBrowserAsync(url);
   };
 
