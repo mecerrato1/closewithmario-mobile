@@ -1567,9 +1567,11 @@ export function LeadDetailView({
         onInvalidateAttention(record.id);
       }
 
+      const isSmsOptedOut = !!record.sms_opted_out || record.sms_opt_in === false;
+
       // If lead has a phone number, prompt to send docs-received SMS via Gio
       const firstName = record.first_name || 'client';
-      if (phone) {
+      if (phone && !isSmsOptedOut) {
         Alert.alert(
           `Text ${firstName}?`,
           `Would you like Gio to send ${firstName} a quick text confirming their documents were received and are under review?\n\nvia Gio, your AI assistant`,
@@ -1581,6 +1583,8 @@ export function LeadDetailView({
             },
           ]
         );
+      } else if (phone && isSmsOptedOut) {
+        showSmsToast(`${firstName} has opted out of SMS, so no confirmation text will be sent`, 'info');
       }
     } catch (e) {
       console.error('Unexpected error logging docs received:', e);

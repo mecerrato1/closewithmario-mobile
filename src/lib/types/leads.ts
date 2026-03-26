@@ -19,6 +19,8 @@ export type Lead = {
   message?: string | null;
   source?: string | null; // e.g., 'My Lead', 'CTA Form', etc.
   source_detail?: string | null; // Referral source for self-created leads
+  sms_opt_in?: boolean | null;
+  sms_opted_out?: boolean | null;
   // Tracking fields
   is_tracked?: boolean;
   tracking_reason?: TrackingReason;
@@ -60,6 +62,8 @@ export type MetaLead = {
   monthly_income?: string | null;
   meta_ad_notes?: string | null;
   form_data?: Record<string, string> | null;
+  sms_opt_in?: boolean | null;
+  sms_opted_out?: boolean | null;
   // Tracking fields
   is_tracked?: boolean;
   tracking_reason?: TrackingReason;
