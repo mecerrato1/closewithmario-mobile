@@ -1488,7 +1488,7 @@ export function LeadDetailView({
   };
 
   // Call the docs-received SMS API
-  const sendDocsReceivedSms = async () => {
+  const sendDocsReceivedSms = async (docsActivityId?: string) => {
     if (!record) return;
 
     const firstName = record.first_name || 'client';
@@ -1505,6 +1505,7 @@ export function LeadDetailView({
         body: JSON.stringify({
           leadId: record.id,
           leadTable: isMeta ? 'meta_ads' : 'leads',
+          docsActivityId: docsActivityId || null,
         }),
         signal: controller.signal,
       });
@@ -1576,7 +1577,7 @@ export function LeadDetailView({
             { text: 'No thanks', style: 'cancel' },
             {
               text: 'Yes, send text',
-              onPress: () => sendDocsReceivedSms(),
+              onPress: () => sendDocsReceivedSms(newActivity?.id),
             },
           ]
         );

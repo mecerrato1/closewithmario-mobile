@@ -112,7 +112,7 @@ export type Activity = {
   id: string;
   lead_id?: string;
   meta_ad_id?: string;
-  activity_type: 'call' | 'text' | 'email' | 'note';
+  activity_type: 'call' | 'text' | 'email' | 'note' | 'docs_received';
   notes: string;
   created_at: string;
   created_by?: string;
