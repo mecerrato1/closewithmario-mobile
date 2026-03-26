@@ -605,7 +605,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   // State for opening directly to messages tab (from notification)
   const [openToMessages, setOpenToMessages] = useState(false);
 
-  // Subscribe to new inbound SMS messages to update unread dots in real-time
+  // Subscribe to new SMS messages to refresh attention, while only inbound
+  // unread messages update the unread counters.
   useEffect(() => {
     if (metaLeads.length === 0) return;
 
@@ -613,9 +614,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       .channel('sms_messages_realtime')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'sms_messages', filter: 'direction=eq.inbound' },
+        { event: 'INSERT', schema: 'public', table: 'sms_messages' },
         (payload) => {
           const newMessage = payload.new as { lead_id: string | null; direction: string; read_at: string | null };
+          if (newMessage.lead_id) {
+            invalidateAttention(newMessage.lead_id);
+          }
+
           if (newMessage.lead_id && newMessage.direction === 'inbound' && !newMessage.read_at) {
             console.log('📬 New inbound SMS received for lead:', newMessage.lead_id);
             setUnreadMessageCounts(prev => ({
@@ -630,7 +635,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     return () => {
       subscription.unsubscribe();
     };
-  }, [metaLeads.length > 0]);
+  }, [metaLeads.length > 0, invalidateAttention]);
 
   // Handle notification tap to navigate to lead
   useEffect(() => {
