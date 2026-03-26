@@ -31,19 +31,33 @@ interface SmsMessagingProps {
   leadId: string;
   leadPhone: string;
   leadName: string;
+  leadSource: 'leads' | 'meta_ads';
+  initialSmsOptIn?: boolean | null;
+  initialSmsOptedOut?: boolean | null;
   onMessageSent?: () => void;
 }
 
 // API base URL - uses the same backend as the website (www to avoid redirect)
 const API_BASE_URL = 'https://www.closewithmario.com';
 
-export function SmsMessaging({ leadId, leadPhone, leadName, onMessageSent }: SmsMessagingProps) {
+export function SmsMessaging({
+  leadId,
+  leadPhone,
+  leadName,
+  leadSource,
+  initialSmsOptIn,
+  initialSmsOptedOut,
+  onMessageSent,
+}: SmsMessagingProps) {
   const [messages, setMessages] = useState<SmsMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [smsOptIn, setSmsOptIn] = useState<boolean | null | undefined>(initialSmsOptIn);
+  const [smsOptedOut, setSmsOptedOut] = useState<boolean | null | undefined>(initialSmsOptedOut);
   const flatListRef = useRef<FlatList>(null);
+  const isSmsOptedOut = !!smsOptedOut || smsOptIn === false;
 
   // Scroll to bottom (newest messages)
   const scrollToBottom = () => {
@@ -55,6 +69,7 @@ export function SmsMessaging({ leadId, leadPhone, leadName, onMessageSent }: Sms
   // Fetch messages on mount and set up realtime subscription
   useEffect(() => {
     fetchMessages();
+    refreshSmsStatus();
 
     // Set up realtime subscription for new messages
     const subscription = supabase
@@ -70,6 +85,7 @@ export function SmsMessaging({ leadId, leadPhone, leadName, onMessageSent }: Sms
         (payload) => {
           console.log('📱 SMS message change detected:', payload);
           fetchMessages();
+          refreshSmsStatus();
         }
       )
       .subscribe();
@@ -77,7 +93,26 @@ export function SmsMessaging({ leadId, leadPhone, leadName, onMessageSent }: Sms
     return () => {
       subscription.unsubscribe();
     };
-  }, [leadId]);
+  }, [leadId, leadSource]);
+
+  async function refreshSmsStatus() {
+    try {
+      const { data, error: statusError } = await supabase
+        .from(leadSource)
+        .select('sms_opt_in, sms_opted_out')
+        .eq('id', leadId)
+        .maybeSingle();
+
+      if (statusError) throw statusError;
+
+      if (data) {
+        setSmsOptIn(data.sms_opt_in);
+        setSmsOptedOut(data.sms_opted_out);
+      }
+    } catch (err) {
+      console.error('Error fetching SMS opt-out state:', err);
+    }
+  }
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -108,6 +143,11 @@ export function SmsMessaging({ leadId, leadPhone, leadName, onMessageSent }: Sms
   async function sendMessage() {
     if (!newMessage.trim() || !leadPhone) {
       console.log('📱 [SMS] Send aborted - empty message or no phone');
+      return;
+    }
+
+    if (isSmsOptedOut) {
+      setError(`${leadName || 'This lead'} has opted out of SMS. Reply START from their phone to re-enable texting.`);
       return;
     }
 
@@ -288,6 +328,15 @@ export function SmsMessaging({ leadId, leadPhone, leadName, onMessageSent }: Sms
         </View>
       )}
 
+      {isSmsOptedOut && (
+        <View style={smsStyles.optOutBanner}>
+          <Ionicons name="alert-circle" size={16} color="#C2410C" />
+          <Text style={smsStyles.optOutBannerText}>
+            SMS opted out via STOP. Reply START from the lead&apos;s phone to re-enable texting.
+          </Text>
+        </View>
+      )}
+
       {/* Messages List */}
       <FlatList
         ref={flatListRef}
@@ -311,21 +360,21 @@ export function SmsMessaging({ leadId, leadPhone, leadName, onMessageSent }: Sms
       <View style={smsStyles.inputContainer}>
         <TextInput
           style={smsStyles.textInput}
-          placeholder="Type a message..."
+          placeholder={isSmsOptedOut ? 'SMS disabled until the lead replies START' : 'Type a message...'}
           placeholderTextColor="#94A3B8"
           value={newMessage}
           onChangeText={setNewMessage}
           multiline
           maxLength={1600}
-          editable={!sending}
+          editable={!sending && !isSmsOptedOut}
         />
         <TouchableOpacity
           style={[
             smsStyles.sendButton,
-            (!newMessage.trim() || sending) && smsStyles.sendButtonDisabled,
+            (!newMessage.trim() || sending || isSmsOptedOut) && smsStyles.sendButtonDisabled,
           ]}
           onPress={sendMessage}
-          disabled={!newMessage.trim() || sending}
+          disabled={!newMessage.trim() || sending || isSmsOptedOut}
         >
           {sending ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
@@ -388,6 +437,26 @@ const smsStyles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     color: '#DC2626',
+  },
+  optOutBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FDBA74',
+    marginHorizontal: 12,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    gap: 8,
+  },
+  optOutBannerText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#9A3412',
+    fontWeight: '600',
   },
   messagesList: {
     paddingHorizontal: 12,

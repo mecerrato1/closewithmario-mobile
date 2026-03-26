@@ -2027,6 +2027,9 @@ export function LeadDetailView({
             leadId={record.id}
             leadPhone={phone}
             leadName={fullName}
+            leadSource={isMeta ? 'meta_ads' : 'leads'}
+            initialSmsOptIn={record.sms_opt_in}
+            initialSmsOptedOut={record.sms_opted_out}
             onMessageSent={() => {
               if (onInvalidateAttention && record) {
                 onInvalidateAttention(record.id);
