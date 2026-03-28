@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  AppState,
   StyleSheet,
   Text,
   View,
@@ -75,10 +76,21 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
     initBiometrics();
   }, []);
 
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        loadSavedEmail();
+        initBiometrics();
+      }
+    });
+
+    return () => subscription.remove();
+  }, []);
+
   const initBiometrics = async () => {
     try {
       const caps = await checkBiometricCapabilities();
-      const canBiometric = caps.isAvailable && caps.isEnrolled;
+      const canBiometric = caps.isAvailable;
       setBiometricAvailable(canBiometric);
       setBiometricType(caps.biometricType);
 
@@ -88,7 +100,12 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
         if (enabled) {
           const storedEmail = await getStoredEmail();
           setBiometricEmail(storedEmail);
+        } else {
+          setBiometricEmail(null);
         }
+      } else {
+        setBiometricEnabled(false);
+        setBiometricEmail(null);
       }
     } catch (error) {
       console.log('[Auth] Failed to init biometrics:', error);
@@ -131,9 +148,9 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
           // Save email for next time
           await saveEmail(email);
           // Save credentials for biometric sign-in (stored in iOS Keychain)
-          await saveBiometricCredentials(email, password);
-          setBiometricEnabled(true);
-          setBiometricEmail(email);
+          const biometricSaved = await saveBiometricCredentials(email, password);
+          setBiometricEnabled(biometricSaved);
+          setBiometricEmail(biometricSaved ? email : null);
           onAuth(data.session);
         }
       } else {
@@ -374,6 +391,15 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
   };
 
   const isAnyLoading = authLoading || biometricLoading;
+  const showBiometricSection = mode === 'signIn' && Platform.OS === 'ios';
+  const biometricReady = biometricAvailable && biometricEnabled;
+  const biometricHelperText = biometricReady
+    ? biometricEmail
+      ? `Use ${biometricType} for ${biometricEmail}.`
+      : `Use ${biometricType} to sign in faster on this device.`
+    : biometricAvailable
+      ? `Sign in with your password once on this device to enable ${biometricType}. If it stays disabled, this build may not have secure storage available yet.`
+      : `${biometricType} is not available in the current simulator or build.`;
 
   return (
     <View style={[s.container, { backgroundColor: isDark ? colors.background : '#F3F0FF' }]}>
@@ -498,7 +524,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
             </TouchableOpacity>
 
             {/* Biometric Sign In — inside card */}
-            {biometricAvailable && biometricEnabled && (
+            {showBiometricSection && (
               <View style={s.biometricWrap}>
                 <View style={s.biometricDivider}>
                   <View style={[s.biometricDividerLine, { backgroundColor: colors.border }]} />
@@ -506,20 +532,36 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
                   <View style={[s.biometricDividerLine, { backgroundColor: colors.border }]} />
                 </View>
                 <TouchableOpacity
-                  style={[s.biometricButton, isAnyLoading && s.buttonDisabled]}
+                  style={[
+                    s.biometricButton,
+                    !biometricReady && s.biometricButtonDisabled,
+                    isAnyLoading && s.buttonDisabled,
+                  ]}
                   onPress={handleBiometricSignIn}
-                  disabled={isAnyLoading}
+                  disabled={isAnyLoading || !biometricReady}
                   activeOpacity={0.7}
                 >
                   {biometricLoading ? (
                     <ActivityIndicator size="small" color="#7C3AED" />
                   ) : (
                     <>
-                      <Ionicons name="finger-print-outline" size={24} color="#7C3AED" />
-                      <Text style={s.biometricButtonText}>Use {biometricType}</Text>
+                      <Ionicons
+                        name="finger-print-outline"
+                        size={24}
+                        color={biometricReady ? '#7C3AED' : '#A78BFA'}
+                      />
+                      <Text
+                        style={[
+                          s.biometricButtonText,
+                          !biometricReady && s.biometricButtonTextDisabled,
+                        ]}
+                      >
+                        Use {biometricType}
+                      </Text>
                     </>
                   )}
                 </TouchableOpacity>
+                <Text style={s.biometricHelperText}>{biometricHelperText}</Text>
               </View>
             )}
 
@@ -599,52 +641,52 @@ const s = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     paddingHorizontal: 28,
-    paddingTop: Platform.OS === 'ios' ? 20 : 16,
-    paddingBottom: 32,
+    paddingTop: Platform.OS === 'ios' ? 12 : 10,
+    paddingBottom: Platform.OS === 'ios' ? 18 : 14,
   },
 
   // Logo
   logoRow: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
   },
   logoImage: {
-    width: 72,
-    height: 72,
+    width: 108,
+    height: 108,
   },
 
   // Tagline
   tagline: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
     textAlign: 'center' as const,
-    marginBottom: 4,
+    marginBottom: 8,
   },
 
   // Welcome
   welcomeSection: {
     alignItems: 'center',
-    marginBottom: 28,
+    marginBottom: 20,
   },
   welcomeTitle: {
-    fontSize: 32,
+    fontSize: 40,
     fontWeight: '800',
-    letterSpacing: -1,
+    letterSpacing: -1.4,
   },
 
   // Login Card
   loginCard: {
-    borderRadius: 18,
-    padding: 22,
-    gap: 18,
+    borderRadius: 22,
+    padding: 20,
+    gap: 16,
     shadowColor: '#7C3AED',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.12,
-    shadowRadius: 24,
+    shadowRadius: 28,
     elevation: 6,
   },
   fieldGroup: {
-    gap: 6,
+    gap: 5,
   },
   fieldLabel: {
     fontSize: 11,
@@ -701,7 +743,7 @@ const s = StyleSheet.create({
   // Forgot password
   forgotLink: {
     alignSelf: 'flex-end',
-    marginTop: -10,
+    marginTop: -6,
   },
   forgotText: {
     fontSize: 13,
@@ -751,7 +793,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginTop: 24,
+    marginTop: 16,
   },
   oauthDividerLine: {
     flex: 1,
@@ -768,7 +810,7 @@ const s = StyleSheet.create({
   oauthRow: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 18,
+    marginTop: 12,
   },
   oauthButton: {
     flex: 1,
@@ -803,9 +845,9 @@ const s = StyleSheet.create({
 
   // Bottom
   bottomHint: {
-    fontSize: 13,
+    fontSize: 12.5,
     textAlign: 'center',
-    marginTop: 28,
+    marginTop: 18,
     fontWeight: '500',
   },
   bottomHintLink: {
@@ -813,10 +855,10 @@ const s = StyleSheet.create({
     fontWeight: '700',
   },
   versionText: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#94A3B8',
     textAlign: 'center',
-    marginTop: 12,
+    marginTop: 8,
     fontWeight: '500',
   },
 
@@ -830,7 +872,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     width: '100%',
-    marginBottom: 14,
+    marginBottom: 10,
   },
   biometricDividerLine: {
     flex: 1,
@@ -846,16 +888,31 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,
-    height: 52,
+    height: 50,
     width: '100%',
     borderRadius: 12,
     borderWidth: 1.5,
     borderColor: '#E9E0FF',
     backgroundColor: '#F9F5FF',
   },
+  biometricButtonDisabled: {
+    backgroundColor: '#F5F3FF',
+    borderColor: '#DDD6FE',
+  },
   biometricButtonText: {
     fontSize: 15,
     fontWeight: '700',
     color: '#7C3AED',
+  },
+  biometricButtonTextDisabled: {
+    color: '#8B5CF6',
+  },
+  biometricHelperText: {
+    marginTop: 8,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
+    color: '#7C3AED',
+    opacity: 0.78,
   },
 });

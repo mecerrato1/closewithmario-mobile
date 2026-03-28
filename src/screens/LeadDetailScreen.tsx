@@ -27,7 +27,7 @@ import type { Lead, MetaLead, SelectedLeadRef, Activity, LoanOfficer, Realtor, T
 import type { UserRole } from '../lib/roles';
 import { supabase } from '../lib/supabase';
 import { getUserRole, getUserTeamMemberId, canSeeAllLeads } from '../lib/roles';
-import { TEXT_TEMPLATES, fillTemplate, getTemplateText, getTemplateName, getTemplateSubject, formatPhoneNumber, type TemplateVariables } from '../lib/textTemplates';
+import { TEXT_TEMPLATES, fetchLeadTemplates, fillTemplate, getTemplateText, getTemplateName, getTemplateSubject, formatPhoneNumber, type TemplateVariables, type TextTemplate } from '../lib/textTemplates';
 import { STATUSES, STATUS_DISPLAY_MAP, STATUS_COLOR_MAP, getLeadAlert, formatStatus, getTimeAgo } from '../lib/leadsHelpers';
 import { scheduleLeadCallback } from '../lib/callbacks';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -120,6 +120,7 @@ export function LeadDetailView({
   const [useSpanishTemplates, setUseSpanishTemplates] = useState(false);
   const [deletingLead, setDeletingLead] = useState(false);
   const [templateMode, setTemplateMode] = useState<'text' | 'email'>('text');
+  const [templates, setTemplates] = useState<TextTemplate[]>(TEXT_TEMPLATES);
   const [showCustomMessage, setShowCustomMessage] = useState(false);
   const [customMessageText, setCustomMessageText] = useState('');
   const [showAiRecommendation, setShowAiRecommendation] = useState(false);
@@ -172,6 +173,23 @@ export function LeadDetailView({
       onMessagesOpened?.();
     }
   }, [openToMessages, selected.id]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadTemplates = async () => {
+      const remoteTemplates = await fetchLeadTemplates();
+      if (isMounted && remoteTemplates.length > 0) {
+        setTemplates(remoteTemplates);
+      }
+    };
+
+    loadTemplates();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const animateLogButton = () => {
     Animated.sequence([
@@ -575,7 +593,7 @@ export function LeadDetailView({
   };
 
   const handleTemplateSelect = async (templateId: string) => {
-    const template = TEXT_TEMPLATES.find(t => t.id === templateId);
+    const template = templates.find(t => t.id === templateId);
     if (!template) return;
     if (!record) return;
     const r = record;
@@ -3462,7 +3480,7 @@ export function LeadDetailView({
                 </View>
                 
                 <ScrollView style={styles.templateList} showsVerticalScrollIndicator={false}>
-                  {TEXT_TEMPLATES.map((template) => {
+                  {templates.map((template) => {
                     const metaRec = record as MetaLead;
                     const fdPrev = metaRec.form_data || {};
                     const crPrev = metaRec.credit_range

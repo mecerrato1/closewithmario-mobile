@@ -1,3 +1,5 @@
+import { supabase } from './supabase';
+
 export type TextTemplate = {
   id: string;
   name: string;
@@ -445,6 +447,57 @@ No he sabido nada de usted, así que quería ver cómo está todo.
 📧 Email {LO email}`,
   },
 ];
+
+type MessageTemplateRow = {
+  key: string;
+  name: string;
+  name_es: string;
+  subject: string;
+  subject_es: string;
+  template: string;
+  template_es: string;
+};
+
+let cachedLeadTemplates: TextTemplate[] | null = null;
+
+function mapLeadTemplateRow(row: MessageTemplateRow): TextTemplate {
+  return {
+    id: row.key,
+    name: row.name,
+    nameEs: row.name_es,
+    subject: row.subject,
+    subjectEs: row.subject_es,
+    template: row.template,
+    templateEs: row.template_es,
+  };
+}
+
+export async function fetchLeadTemplates(forceRefresh = false): Promise<TextTemplate[]> {
+  if (cachedLeadTemplates && !forceRefresh) {
+    return cachedLeadTemplates;
+  }
+
+  const { data, error } = await supabase
+    .from('message_templates')
+    .select('key, name, name_es, subject, subject_es, template, template_es')
+    .eq('audience', 'lead')
+    .eq('active', true)
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true });
+
+  if (error) {
+    console.warn('Error fetching lead templates from Supabase:', error.message);
+    return cachedLeadTemplates || TEXT_TEMPLATES;
+  }
+
+  const mappedTemplates = ((data || []) as MessageTemplateRow[]).map(mapLeadTemplateRow);
+  if (mappedTemplates.length === 0) {
+    return cachedLeadTemplates || TEXT_TEMPLATES;
+  }
+
+  cachedLeadTemplates = mappedTemplates;
+  return mappedTemplates;
+}
 
 export type TemplateVariables = {
   fname: string;

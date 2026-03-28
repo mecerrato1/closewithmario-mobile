@@ -27,6 +27,7 @@ export async function checkBiometricCapabilities(): Promise<{
   const hasHardware = await LocalAuthentication.hasHardwareAsync();
   const isEnrolled = await LocalAuthentication.isEnrolledAsync();
   const supported = await LocalAuthentication.supportedAuthenticationTypesAsync();
+  const canAuthenticate = hasHardware && supported.length > 0;
 
   let biometricType: 'Face ID' | 'Touch ID' | 'Biometrics' = 'Biometrics';
   if (supported.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
@@ -36,7 +37,7 @@ export async function checkBiometricCapabilities(): Promise<{
   }
 
   return {
-    isAvailable: hasHardware,
+    isAvailable: canAuthenticate,
     isEnrolled,
     biometricType,
   };
@@ -44,18 +45,18 @@ export async function checkBiometricCapabilities(): Promise<{
 
 // ── Store / retrieve credentials ──
 
-export async function saveBiometricCredentials(email: string, password: string): Promise<void> {
-  if (!SecureStore) return;
+export async function saveBiometricCredentials(email: string, password: string): Promise<boolean> {
+  if (!SecureStore) return false;
   try {
-    await SecureStore.setItemAsync(BIOMETRIC_EMAIL_KEY, email, {
-      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-    });
+    await SecureStore.setItemAsync(BIOMETRIC_EMAIL_KEY, email);
     await SecureStore.setItemAsync(BIOMETRIC_PASSWORD_KEY, password, {
       keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
     });
     await SecureStore.setItemAsync(BIOMETRIC_ENABLED_KEY, 'true');
+    return true;
   } catch (error) {
     console.error('[secure-auth] Failed to save biometric credentials:', error);
+    return false;
   }
 }
 
@@ -115,7 +116,7 @@ export async function biometricSignIn(): Promise<{
 
   // 2. Check device capabilities
   const caps = await checkBiometricCapabilities();
-  if (!caps.isAvailable || !caps.isEnrolled) {
+  if (!caps.isAvailable) {
     return { success: false, email: null, password: null, error: 'Biometric authentication not available.' };
   }
 

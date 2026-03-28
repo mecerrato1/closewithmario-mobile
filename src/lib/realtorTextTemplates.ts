@@ -1,3 +1,5 @@
+import { supabase } from './supabase';
+
 // Text templates for realtor communication
 export type RealtorTextTemplate = {
   id: string;
@@ -200,6 +202,57 @@ Espero conectar pronto.
 📧 {LO email}`,
   },
 ];
+
+type MessageTemplateRow = {
+  key: string;
+  name: string;
+  name_es: string;
+  subject: string;
+  subject_es: string;
+  template: string;
+  template_es: string;
+};
+
+let cachedRealtorTemplates: RealtorTextTemplate[] | null = null;
+
+function mapRealtorTemplateRow(row: MessageTemplateRow): RealtorTextTemplate {
+  return {
+    id: row.key,
+    name: row.name,
+    nameEs: row.name_es,
+    subject: row.subject,
+    subjectEs: row.subject_es,
+    template: row.template,
+    templateEs: row.template_es,
+  };
+}
+
+export async function fetchRealtorTemplates(forceRefresh = false): Promise<RealtorTextTemplate[]> {
+  if (cachedRealtorTemplates && !forceRefresh) {
+    return cachedRealtorTemplates;
+  }
+
+  const { data, error } = await supabase
+    .from('message_templates')
+    .select('key, name, name_es, subject, subject_es, template, template_es')
+    .eq('audience', 'realtor')
+    .eq('active', true)
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true });
+
+  if (error) {
+    console.warn('Error fetching realtor templates from Supabase:', error.message);
+    return cachedRealtorTemplates || REALTOR_TEXT_TEMPLATES;
+  }
+
+  const mappedTemplates = ((data || []) as MessageTemplateRow[]).map(mapRealtorTemplateRow);
+  if (mappedTemplates.length === 0) {
+    return cachedRealtorTemplates || REALTOR_TEXT_TEMPLATES;
+  }
+
+  cachedRealtorTemplates = mappedTemplates;
+  return mappedTemplates;
+}
 
 export type RealtorTemplateVariables = {
   realtorFname: string;

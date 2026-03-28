@@ -21,10 +21,12 @@ import { useThemeColors } from '../../styles/theme';
 import { formatPhoneNumber } from '../../lib/textTemplates';
 import {
   REALTOR_TEXT_TEMPLATES,
+  fetchRealtorTemplates,
   fillRealtorTemplate,
   getRealtorTemplateText,
   getRealtorTemplateName,
   getRealtorTemplateSubject,
+  type RealtorTextTemplate,
   type RealtorTemplateVariables,
 } from '../../lib/realtorTextTemplates';
 import {
@@ -133,6 +135,7 @@ export default function RealtorDetailScreen({
   // Text template state
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [templateMode, setTemplateMode] = useState<'text' | 'email'>('text');
+  const [realtorTemplates, setRealtorTemplates] = useState<RealtorTextTemplate[]>(REALTOR_TEXT_TEMPLATES);
   const [useSpanishTemplates, setUseSpanishTemplates] = useState(false);
   const [showCustomMessage, setShowCustomMessage] = useState(false);
   const [customMessageText, setCustomMessageText] = useState('');
@@ -156,6 +159,23 @@ export default function RealtorDetailScreen({
     };
     loadData();
   }, [realtor.realtor_id, userId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadTemplates = async () => {
+      const remoteTemplates = await fetchRealtorTemplates();
+      if (isMounted && remoteTemplates.length > 0) {
+        setRealtorTemplates(remoteTemplates);
+      }
+    };
+
+    loadTemplates();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleStageChange = async (newStage: RelationshipStage) => {
     setStage(newStage);
@@ -331,7 +351,7 @@ export default function RealtorDetailScreen({
   };
 
   const handleTemplateSelect = async (templateId: string) => {
-    const template = REALTOR_TEXT_TEMPLATES.find(t => t.id === templateId);
+    const template = realtorTemplates.find(t => t.id === templateId);
     if (!template) return;
 
     const variables: RealtorTemplateVariables = {
@@ -1017,7 +1037,7 @@ export default function RealtorDetailScreen({
                   </TouchableOpacity>
 
                   <ScrollView style={styles.templateList} showsVerticalScrollIndicator={false}>
-                    {REALTOR_TEXT_TEMPLATES.map((template) => (
+                    {realtorTemplates.map((template) => (
                       <TouchableOpacity
                         key={template.id}
                         style={[styles.templateOption, { borderColor: colors.border }]}
