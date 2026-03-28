@@ -40,7 +40,6 @@ import ProfileSettingsScreen from './src/screens/ProfileSettingsScreen';
 import { AppLockProvider, useAppLock } from './src/contexts/AppLockContext';
 import { useAiLeadAttention } from './src/hooks/useAiLeadAttention';
 import LockScreen from './src/screens/LockScreen';
-import QuoteOfTheDay from './src/components/dashboard/QuoteOfTheDay';
 import { registerForPushNotifications } from './src/lib/notifications';
 import { styles } from './src/styles/appStyles';
 import { useThemeColors } from './src/styles/theme';
@@ -140,6 +139,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   // Add Lead Modal state
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
+  const [returnToDashboardAfterAddLead, setReturnToDashboardAfterAddLead] = useState(false);
   const [savingNewLead, setSavingNewLead] = useState(false);
   const [addLeadError, setAddLeadError] = useState<string | null>(null);
   const [newLead, setNewLead] = useState({
@@ -219,8 +219,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   // Collapsing header animation for dashboard view
   const dashboardScrollY = useRef(new Animated.Value(0)).current;
-  const DASHBOARD_HEADER_EXPANDED = userRole === 'super_admin' ? 440 : 460;
-  const DASHBOARD_HEADER_COLLAPSED = 230;
+  const DASHBOARD_HEADER_EXPANDED = 356;
+  const DASHBOARD_HEADER_COLLAPSED = 152;
   const HEADER_SCROLL_DISTANCE = DASHBOARD_HEADER_EXPANDED - DASHBOARD_HEADER_COLLAPSED;
 
   const dashboardHeaderTranslateY = dashboardScrollY.interpolate({
@@ -236,20 +236,20 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   });
 
   const dashboardContentOpacity = dashboardScrollY.interpolate({
-    inputRange: [0, 80],
+    inputRange: [0, 56],
     outputRange: [1, 0],
     extrapolate: 'clamp',
   });
 
   const dashboardStatsScale = dashboardScrollY.interpolate({
     inputRange: [0, HEADER_SCROLL_DISTANCE],
-    outputRange: [1, 0.7],
+    outputRange: [1, 0.98],
     extrapolate: 'clamp',
   });
 
   const dashboardStatsTranslateY = dashboardScrollY.interpolate({
     inputRange: [0, HEADER_SCROLL_DISTANCE],
-    outputRange: [0, 20], // Push chips down further to clear taller super admin header content
+    outputRange: [0, -8],
     extrapolate: 'clamp',
   });
 
@@ -951,6 +951,25 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
   };
 
+  const openAddLeadModal = ({ fromDashboard = false }: { fromDashboard?: boolean } = {}) => {
+    setAddLeadError(null);
+    setReturnToDashboardAfterAddLead(fromDashboard);
+    if (fromDashboard) {
+      setShowDashboard(false);
+    }
+    setShowAddLeadModal(true);
+  };
+
+  const closeAddLeadModal = () => {
+    setShowAddLeadModal(false);
+    setAddLeadError(null);
+
+    if (returnToDashboardAfterAddLead) {
+      setShowDashboard(true);
+      setReturnToDashboardAfterAddLead(false);
+    }
+  };
+
   // Save new lead function
   const saveNewLead = async () => {
     // Validation
@@ -1056,7 +1075,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           loan_purpose: 'Home Buying',
           message: '',
         });
-        setShowAddLeadModal(false);
+        closeAddLeadModal();
         
         // Show success feedback
         alert('Lead added successfully!');
@@ -1836,6 +1855,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     
     // Separate count for unqualified leads
     const unqualifiedLeads = [...filteredLeads, ...filteredMetaLeads].filter(l => l.status === 'unqualified').length;
+    const unreadMessagesCount = Object.values(unreadMessageCounts).reduce((a, b) => a + b, 0);
+    const trackedLeadsCount = [...leads, ...metaLeads].filter(l => l.is_tracked).length;
+    const callbacksDueToday = todayCallbacks.length;
 
     // Leads that currently have an attention badge (AI-powered with fallback)
     const attentionLeadsCount = [...activeFilteredLeads, ...activeFilteredMetaLeads]
@@ -1857,6 +1879,111 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const userFirstName = session?.user?.user_metadata?.full_name?.split(' ')[0] || 
                           session?.user?.user_metadata?.name?.split(' ')[0] || 
                           'there';
+    const focusLine = callbacksDueToday > 0
+      ? `${callbacksDueToday} callbacks due today`
+      : unreadMessagesCount > 0
+        ? `${unreadMessagesCount} unread conversations to review`
+        : `${attentionLeadsCount} leads need active follow-up`;
+
+    const openDashboardList = ({
+      tab = 'all',
+      status = 'all',
+      attention = false,
+      unread = false,
+      tracked = false,
+    }: {
+      tab?: 'leads' | 'meta' | 'all';
+      status?: string;
+      attention?: boolean;
+      unread?: boolean;
+      tracked?: boolean;
+    }) => {
+      triggerListAnimation();
+      setAttentionFilter(attention);
+      setUnreadFilter(unread);
+      setTrackedFilter(tracked);
+      setActiveTab(tab);
+      setSelectedStatusFilter(status);
+      setSelectedSourceFilter('all');
+      setSelectedLOFilter(null);
+      setShowDashboard(false);
+    };
+
+    const heroFocusCards: Array<{
+      key: string;
+      icon: keyof typeof Ionicons.glyphMap;
+      value: number;
+      label: string;
+      tone: any;
+      onPress?: () => void;
+    }> = [
+      {
+        key: 'callbacks',
+        icon: 'calendar-clear-outline' as const,
+        value: callbacksDueToday,
+        label: 'Due Today',
+        tone: styles.dashboardHeroCardBlue,
+      },
+      {
+        key: 'attention',
+        icon: 'alert-circle-outline' as const,
+        value: attentionLeadsCount,
+        label: 'Needs Attention',
+        tone: styles.dashboardHeroCardAmber,
+        onPress: () => openDashboardList({ tab: 'all', attention: true }),
+      },
+    ];
+
+    const snapshotCards = [
+      {
+        key: 'new',
+        icon: 'flash-outline' as const,
+        value: newLeads,
+        label: 'New Leads',
+        tone: styles.dashboardSnapshotIconBlue,
+        onPress: () => openDashboardList({ tab: 'all', status: 'new' }),
+      },
+      {
+        key: 'qualified',
+        icon: 'checkmark-circle-outline' as const,
+        value: qualifiedLeads,
+        label: 'Qualified',
+        tone: styles.dashboardSnapshotIconGreen,
+        onPress: () => openDashboardList({ tab: 'all', status: 'qualified' }),
+      },
+      {
+        key: 'attention',
+        icon: 'alert-circle-outline' as const,
+        value: attentionLeadsCount,
+        label: 'Needs Attention',
+        tone: styles.dashboardSnapshotIconAmber,
+        onPress: () => openDashboardList({ tab: 'all', attention: true }),
+      },
+      {
+        key: 'tracked',
+        icon: 'bookmark-outline' as const,
+        value: trackedLeadsCount,
+        label: 'Tracked',
+        tone: styles.dashboardSnapshotIconIndigo,
+        onPress: () => openDashboardList({ tab: 'all', tracked: true }),
+      },
+      {
+        key: 'closed',
+        icon: 'trophy-outline' as const,
+        value: closedLeads,
+        label: 'Closed',
+        tone: styles.dashboardSnapshotIconPink,
+        onPress: () => openDashboardList({ tab: 'all', status: 'closed' }),
+      },
+      {
+        key: 'unqualified',
+        icon: 'remove-circle-outline' as const,
+        value: unqualifiedLeads,
+        label: 'Unqualified',
+        tone: styles.dashboardSnapshotIconMuted,
+        onPress: () => openDashboardList({ tab: 'all', status: 'unqualified' }),
+      },
+    ];
 
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -1926,7 +2053,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         <Animated.View style={[
           styles.newDashboardHeader, 
           { 
-            backgroundColor: colors.headerBackground,
+            backgroundColor: '#4C1D95',
             height: DASHBOARD_HEADER_EXPANDED,
             position: 'absolute',
             top: 0,
@@ -1950,7 +2077,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 {/* Notification Bell */}
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => {
                     setShowDashboard(false);
                     setSelectedStatusFilter('all');
@@ -2007,73 +2134,45 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           <Animated.View style={{ 
             opacity: dashboardContentOpacity,
           }}>
-            <Text style={styles.newGreeting}>Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {userFirstName}!</Text>
-            <Text style={styles.newSubGreeting}>Here's your lead overview</Text>
+            <View style={styles.dashboardHeroBadge}>
+              <Ionicons name="sparkles-outline" size={14} color="#FDE68A" />
+              <Text style={styles.dashboardHeroBadgeText}>{focusLine}</Text>
+            </View>
+            <Text style={styles.newGreeting}>Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {userFirstName}</Text>
+            <Text style={styles.newSubGreeting}>Start with follow-ups, unread conversations, and today&apos;s callbacks.</Text>
 
-            {/* Quote of the Day */}
-            <QuoteOfTheDay userKey={session?.user?.email} />
+            <View style={styles.dashboardHeroGrid}>
+              {heroFocusCards.map((card) => (
+                card.onPress ? (
+                  <TouchableOpacity
+                    key={card.key}
+                    style={[styles.dashboardHeroCard, card.tone]}
+                    onPress={card.onPress}
+                    activeOpacity={0.85}
+                  >
+                    <View style={styles.dashboardHeroCardTop}>
+                      <View style={styles.dashboardHeroIconWrap}>
+                        <Ionicons name={card.icon} size={18} color="#FFFFFF" />
+                      </View>
+                      <Text style={styles.dashboardHeroCardValue}>{card.value}</Text>
+                    </View>
+                    <Text style={styles.dashboardHeroCardLabel}>{card.label}</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View key={card.key} style={[styles.dashboardHeroCard, card.tone]}>
+                    <View style={styles.dashboardHeroCardTop}>
+                      <View style={styles.dashboardHeroIconWrap}>
+                        <Ionicons name={card.icon} size={18} color="#FFFFFF" />
+                      </View>
+                      <Text style={styles.dashboardHeroCardValue}>{card.value}</Text>
+                    </View>
+                    <Text style={styles.dashboardHeroCardLabel}>{card.label}</Text>
+                  </View>
+                )
+              ))}
+            </View>
           </Animated.View>
 
-          {/* Stats Grid in Header - Moves up and scales */}
-          <Animated.View style={[
-            styles.newHeaderStatsRow, 
-            { 
-              gap: 8,
-              transform: [
-                { scale: dashboardStatsScale },
-                { translateY: dashboardStatsTranslateY }
-              ],
-            }
-          ]}>
-              <TouchableOpacity 
-                style={[styles.newHeaderStatCard, { flex: 1 }]}
-                onPress={() => {
-                  triggerListAnimation();
-                  setAttentionFilter(false);
-                  setUnreadFilter(false);
-                  setActiveTab('meta');
-                  setSelectedStatusFilter('all');
-                  setSelectedSourceFilter('all');
-                  setSelectedLOFilter(null);
-                  setShowDashboard(false);
-                }}
-              >
-                <Text style={styles.newHeaderStatNumber}>{metaLeadsCount}</Text>
-                <Text style={styles.newHeaderStatLabel}>Meta Ads</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.newHeaderStatCard, { flex: 1 }]}
-                onPress={() => {
-                  triggerListAnimation();
-                  setAttentionFilter(false);
-                  setUnreadFilter(false);
-                  setActiveTab('leads');
-                  setSelectedStatusFilter('all');
-                  setSelectedSourceFilter('all');
-                  setSelectedLOFilter(null);
-                  setShowDashboard(false);
-                }}
-              >
-                <Text style={styles.newHeaderStatNumber}>{organicLeadsCount}</Text>
-                <Text style={styles.newHeaderStatLabel}>My Leads</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.newHeaderStatCard, { flex: 1 }]}
-                onPress={() => {
-                  triggerListAnimation();
-                  setAttentionFilter(false);
-                  setUnreadFilter(false);
-                  setActiveTab('all');
-                  setSelectedStatusFilter('all');
-                  setSelectedSourceFilter('all');
-                  setSelectedLOFilter(null);
-                  setShowDashboard(false);
-                }}
-              >
-                <Text style={styles.newHeaderStatNumber}>{totalLeads}</Text>
-                <Text style={styles.newHeaderStatLabel}>Total</Text>
-              </TouchableOpacity>
-          </Animated.View>
         </Animated.View>
 
         <Animated.ScrollView 
@@ -2099,11 +2198,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           {showCallbackHistory && (
             <View style={[styles.recentLeadsSection, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
               <View style={styles.sectionHeader}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={styles.dashboardSectionHeaderContent}>
                   <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Callback History</Text>
+                  <Text style={styles.dashboardSectionCaption}>Review completed outreach and callback execution.</Text>
                 </View>
-                <TouchableOpacity onPress={() => setShowCallbackHistory(false)}>
-                  <Text style={{ color: '#6366F1', fontWeight: '600' }}>Back to Today</Text>
+                <TouchableOpacity style={styles.dashboardSectionLink} onPress={() => setShowCallbackHistory(false)}>
+                  <Text style={styles.dashboardSectionLinkText}>Back to Today</Text>
                 </TouchableOpacity>
               </View>
               {callbackHistory.length === 0 ? (
@@ -2166,25 +2266,19 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           {!showCallbackHistory && (
             <View style={[styles.recentLeadsSection, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
               <View style={styles.sectionHeader}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <View style={{
-                    width: 32,
-                    height: 32,
-                    backgroundColor: '#E5E7EB', // neutral gray instead of red
-                    borderRadius: 6,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 1 },
-                    shadowOpacity: 0.1,
-                    shadowRadius: 2,
-                    elevation: 1,
-                  }}>
-                    <Ionicons name="calendar-outline" size={18} color="#4B5563" />
+                <View style={styles.dashboardSectionHeaderContent}>
+                  <View style={styles.dashboardSectionTitleRow}>
+                  <View style={styles.dashboardSectionIconWrap}>
+                    <Ionicons name="calendar-outline" size={18} color="#4F46E5" />
                   </View>
-                  <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Today's Call Schedule</Text>
+                  <View>
+                    <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Today</Text>
+                    <Text style={styles.dashboardSectionCaption}>Callbacks and conversations that need attention today.</Text>
+                  </View>
+                  </View>
                 </View>
                 <TouchableOpacity
+                  style={styles.dashboardSectionLink}
                   onPress={() => {
                     Alert.alert(
                       'Callback History',
@@ -2216,11 +2310,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                     );
                   }}
                 >
-                  <Text style={{ color: '#6366F1', fontWeight: '600' }}>View history</Text>
+                  <Text style={styles.dashboardSectionLinkText}>View history</Text>
                 </TouchableOpacity>
               </View>
               {todayCallbacks.length === 0 && (
-                <Text style={styles.dashboardEmptyText}>No callbacks scheduled for today.</Text>
+                <Text style={styles.dashboardEmptyText}>No callbacks are scheduled today. This is a good time to work new and overdue leads.</Text>
               )}
 
               {todayCallbacks.length > 0 && todayCallbacks.map((cb) => {
@@ -2301,100 +2395,103 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             </View>
           )}
 
+          <View style={styles.dashboardActionSection}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.dashboardSectionHeaderContent}>
+                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Quick Actions</Text>
+                <Text style={styles.dashboardSectionCaption}>Shortcuts for the most common CRM tasks.</Text>
+              </View>
+            </View>
+            <View style={styles.dashboardActionGrid}>
+              <TouchableOpacity
+                style={styles.dashboardActionCard}
+                onPress={() => {
+                  openAddLeadModal({ fromDashboard: true });
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.dashboardActionIcon, styles.dashboardActionIconGreen]}>
+                  <Ionicons name="person-add-outline" size={16} color="#047857" />
+                </View>
+                <View style={styles.dashboardActionBody}>
+                  <Text style={styles.dashboardActionTitle}>Add Lead</Text>
+                  <Text style={styles.dashboardActionSubtitle}>Create a new record</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.dashboardActionCard}
+                onPress={() => {
+                  setQuickCaptureStartOnAdd(true);
+                  setShowQuickCaptures(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.dashboardActionIcon, styles.dashboardActionIconPurple]}>
+                  <Ionicons name="camera-outline" size={16} color="#7C3AED" />
+                </View>
+                <View style={styles.dashboardActionBody}>
+                  <Text style={styles.dashboardActionTitle}>Quick Capture</Text>
+                  <Text style={styles.dashboardActionSubtitle}>Photo-first intake</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+
           {/* Performance Section */}
           <View style={[styles.performanceSection, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
             <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>📈 Performance</Text>
+              <View>
+                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Pipeline Snapshot</Text>
+                <Text style={styles.dashboardSectionCaption}>Tap any metric to open the filtered lead view.</Text>
+              </View>
             </View>
             <View style={styles.performanceGrid}>
-              <TouchableOpacity 
-                style={[styles.performanceCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
-                onPress={() => {
-                  setAttentionFilter(false);
-                  setUnreadFilter(false);
-                  setActiveTab('all');
-                  setSelectedStatusFilter('new');
-                  setSelectedSourceFilter('all');
-                  setSelectedLOFilter(null);
-                  setShowDashboard(false);
-                }}
-              >
-                <Text style={[styles.perfNumber, { color: colors.textPrimary }]}>✨ {newLeads}</Text>
-                <Text style={[styles.perfLabel, { color: colors.textSecondary }]}>New Leads</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.performanceCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
-                onPress={() => {
-                  setAttentionFilter(false);
-                  setUnreadFilter(false);
-                  setActiveTab('all');
-                  setSelectedStatusFilter('qualified');
-                  setSelectedSourceFilter('all');
-                  setSelectedLOFilter(null);
-                  setShowDashboard(false);
-                }}
-              >
-                <Text style={[styles.perfNumber, { color: colors.textPrimary }]}>🎯 {qualifiedLeads}</Text>
-                <Text style={[styles.perfLabel, { color: colors.textSecondary }]}>Qualified</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.performanceCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
-                onPress={() => {
-                  setAttentionFilter(false);
-                  setUnreadFilter(false);
-                  setActiveTab('all');
-                  setSelectedStatusFilter('closed');
-                  setSelectedSourceFilter('all');
-                  setSelectedLOFilter(null);
-                  setShowDashboard(false);
-                }}
-              >
-                <Text style={[styles.perfNumber, { color: colors.textPrimary }]}>🎉 {closedLeads}</Text>
-                <Text style={[styles.perfLabel, { color: colors.textSecondary }]}>Closed</Text>
-              </TouchableOpacity>
-              {/* Needs Attention card: leads with an attention badge */}
-              <TouchableOpacity 
-                style={[styles.performanceCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
-                onPress={() => {
-                  triggerListAnimation();
-                  setAttentionFilter(true);
-                  setUnreadFilter(false);
-                  setTrackedFilter(false);
-                  setActiveTab('all');
-                  setSelectedStatusFilter('all');
-                  setSelectedSourceFilter('all');
-                  setSelectedLOFilter(null);
-                  setShowDashboard(false);
-                }}
-              >
-                <Text style={[styles.perfNumber, { color: colors.textPrimary }]}>⚠️ {attentionLeadsCount}</Text>
-                <Text style={[styles.perfLabel, { color: colors.textSecondary }]}>Needs Attention</Text>
-              </TouchableOpacity>
-              {/* Tracked Leads card */}
-              <TouchableOpacity 
-                style={[styles.performanceCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
-                onPress={() => {
-                  triggerListAnimation();
-                  setAttentionFilter(false);
-                  setUnreadFilter(false);
-                  setTrackedFilter(true);
-                  setActiveTab('all');
-                  setSelectedStatusFilter('all');
-                  setSelectedSourceFilter('all');
-                  setSelectedLOFilter(null);
-                  setShowDashboard(false);
-                }}
-              >
-                <Text style={[styles.perfNumber, { color: colors.textPrimary }]}>📌 {[...leads, ...metaLeads].filter(l => l.is_tracked).length}</Text>
-                <Text style={[styles.perfLabel, { color: colors.textSecondary }]}>Tracked</Text>
-              </TouchableOpacity>
+              {snapshotCards.map((card) => (
+                <TouchableOpacity
+                  key={card.key}
+                  style={[
+                    styles.performanceCard,
+                    { backgroundColor: colors.cardBackground, borderColor: colors.border },
+                    card.key === 'unqualified' && styles.performanceCardUnqualified,
+                  ]}
+                  onPress={card.onPress}
+                >
+                  <View style={[styles.dashboardSnapshotIconWrap, card.tone]}>
+                    <Ionicons
+                      name={card.icon}
+                      size={18}
+                      color={card.key === 'unqualified' ? '#6B7280' : '#111827'}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.perfNumber,
+                      { color: colors.textPrimary },
+                      card.key === 'unqualified' && styles.perfNumberUnqualified,
+                    ]}
+                  >
+                    {card.value}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.perfLabel,
+                      { color: colors.textSecondary },
+                      card.key === 'unqualified' && styles.perfLabelUnqualified,
+                    ]}
+                  >
+                    {card.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
 
           {/* Lead Assignment Settings (Loan Officers Only) */}
           {userRole === 'loan_officer' && (
             <View style={styles.quickStatsCard}>
-              <Text style={styles.quickStatsTitle}>⚙️ Lead Assignment</Text>
+              <Text style={styles.quickStatsTitle}>Lead Assignment</Text>
+              <Text style={styles.dashboardSectionCaption}>Control whether new auto-assigned leads enter your queue.</Text>
               <View style={styles.leadEligibleContainer}>
                 <View style={styles.leadEligibleInfo}>
                   <Text style={styles.statsLabel}>Receive Auto-Assigned Leads</Text>
@@ -2418,31 +2515,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             </View>
           )}
 
-          {/* Quick Captures Shortcut */}
-          {(userRole === 'loan_officer' || userRole === 'super_admin') && (
-            <TouchableOpacity
-              style={[styles.recentLeadsSection, { backgroundColor: colors.cardBackground, borderColor: colors.border, flexDirection: 'row', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16, gap: 12 }]}
-              onPress={() => {
-                setQuickCaptureStartOnAdd(false);
-                setShowQuickCaptures(true);
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#F5F3FF', justifyContent: 'center', alignItems: 'center' }}>
-                <Ionicons name="camera-outline" size={18} color="#7C3AED" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[{ fontSize: 15, fontWeight: '600' }, { color: colors.textPrimary }]}>Quick Captures</Text>
-                <Text style={{ fontSize: 12, color: colors.textSecondary, marginTop: 1 }}>View your captured leads & notebook photos</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
-            </TouchableOpacity>
-          )}
-
           {/* Recent Leads Section */}
           <View style={[styles.recentLeadsSection, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
             <View style={styles.sectionHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>🕒 Recent Leads</Text>
+              <View>
+                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Latest Leads</Text>
+                <Text style={styles.dashboardSectionCaption}>Most recent inbound activity across your current pipeline.</Text>
+              </View>
             </View>
             {recentLeads.length > 0 ? (
               recentLeads.map((lead) => {
@@ -3411,8 +3490,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, gap: 14 }}
               onPress={() => {
                 setShowFabActionSheet(false);
-                setAddLeadError(null);
-                setShowAddLeadModal(true);
+                openAddLeadModal();
               }}
             >
               <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#ECFDF5', justifyContent: 'center', alignItems: 'center' }}>
@@ -3432,7 +3510,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         visible={showAddLeadModal}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setShowAddLeadModal(false)}
+        onRequestClose={closeAddLeadModal}
       >
         <KeyboardAvoidingView 
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -3441,7 +3519,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           <TouchableOpacity 
             style={{ flex: 1 }} 
             activeOpacity={1} 
-            onPress={() => setShowAddLeadModal(false)}
+            onPress={closeAddLeadModal}
           />
           <View style={styles.addLeadModalContainer}>
             {/* Header */}
@@ -3449,10 +3527,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               <Text style={styles.addLeadModalTitle}>➕ Add My Lead</Text>
               <TouchableOpacity 
                 style={styles.addLeadCloseButton}
-                onPress={() => {
-                  setShowAddLeadModal(false);
-                  setAddLeadError(null);
-                }}
+                onPress={closeAddLeadModal}
               >
                 <Text style={styles.addLeadCloseText}>×</Text>
               </TouchableOpacity>
@@ -3614,10 +3689,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             <View style={styles.addLeadFooter}>
               <TouchableOpacity
                 style={styles.addLeadCancelButton}
-                onPress={() => {
-                  setShowAddLeadModal(false);
-                  setAddLeadError(null);
-                }}
+                onPress={closeAddLeadModal}
               >
                 <Text style={styles.addLeadCancelText}>Cancel</Text>
               </TouchableOpacity>
