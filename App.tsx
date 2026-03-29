@@ -219,8 +219,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   // Collapsing header animation for dashboard view
   const dashboardScrollY = useRef(new Animated.Value(0)).current;
-  const DASHBOARD_HEADER_EXPANDED = 356;
-  const DASHBOARD_HEADER_COLLAPSED = 152;
+  const DASHBOARD_HEADER_EXPANDED = 404;
+  const DASHBOARD_HEADER_COLLAPSED = 176;
   const HEADER_SCROLL_DISTANCE = DASHBOARD_HEADER_EXPANDED - DASHBOARD_HEADER_COLLAPSED;
 
   const dashboardHeaderTranslateY = dashboardScrollY.interpolate({
@@ -968,6 +968,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       setShowDashboard(true);
       setReturnToDashboardAfterAddLead(false);
     }
+  };
+
+  const openLeadListWorkspace = () => {
+    triggerListAnimation();
+    setShowDashboard(false);
   };
 
   // Save new lead function
@@ -2128,6 +2133,15 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 </TouchableOpacity>
               </View>
             </View>
+
+            <TouchableOpacity
+              onPress={openLeadListWorkspace}
+              activeOpacity={0.9}
+              style={styles.dashboardLeadListButton}
+            >
+              <Ionicons name="list-outline" size={16} color="#4C1D95" />
+              <Text style={styles.dashboardLeadListButtonText}>Lead List</Text>
+            </TouchableOpacity>
           </Animated.View>
 
           {/* Greeting and Quote - Fades out */}
@@ -2676,7 +2690,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             }} 
             style={styles.homeButton}
           >
-            <Text style={styles.homeButtonText}>← Home</Text>
+            <Text style={styles.homeButtonText}>← Dashboard</Text>
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
             <Text style={styles.headerTitle}>Close With Mario</Text>
