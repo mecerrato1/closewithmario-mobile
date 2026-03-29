@@ -25,6 +25,8 @@ import QuickCaptureAttachmentStrip from '../components/QuickCaptureAttachmentStr
 import SelectRealtorModal from '../components/SelectRealtorModal';
 import type { CreateQuickCapturePayload } from '../types';
 
+const PLUM = '#4C1D95';
+
 interface AddQuickCaptureScreenProps {
   userId: string;
   onBack: () => void;
@@ -277,7 +279,7 @@ export default function AddQuickCaptureScreen({
       <Modal visible={scanning} transparent animationType="fade">
         <View style={styles.scanOverlay}>
           <View style={styles.scanCard}>
-            <ActivityIndicator size="large" color="#7C3AED" />
+            <ActivityIndicator size="large" color={PLUM} />
             <Text style={styles.scanCardTitle}>Scanning Image</Text>
             <Text style={styles.scanCardMessage}>{scanMessage}</Text>
           </View>
@@ -296,9 +298,9 @@ export default function AddQuickCaptureScreen({
           style={styles.scanBtn}
         >
           {scanning ? (
-            <ActivityIndicator size="small" color="#7C3AED" />
+            <ActivityIndicator size="small" color={PLUM} />
           ) : (
-            <Ionicons name="camera-outline" size={18} color="#7C3AED" />
+            <Ionicons name="camera-outline" size={18} color={PLUM} />
           )}
           <Text style={styles.scanBtnText}>
             {scanning ? 'Scanning...' : 'Scan to Fill'}
@@ -409,7 +411,7 @@ export default function AddQuickCaptureScreen({
               <Ionicons
                 name={realtorId ? 'person-circle' : 'person-add-outline'}
                 size={20}
-                color={realtorId ? '#7C3AED' : '#9CA3AF'}
+                color={realtorId ? PLUM : '#9CA3AF'}
               />
               <Text
                 style={[
@@ -501,7 +503,7 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: 16,
     paddingHorizontal: 16,
-    backgroundColor: '#7C3AED',
+    backgroundColor: PLUM,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },
@@ -523,7 +525,7 @@ const styles = StyleSheet.create({
   scanBtnText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#7C3AED',
+    color: PLUM,
   },
   scanOverlay: {
     flex: 1,
@@ -632,8 +634,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   segmentedBtnActive: {
-    backgroundColor: '#7C3AED',
-    borderColor: '#7C3AED',
+    backgroundColor: PLUM,
+    borderColor: PLUM,
   },
   segmentedText: {
     fontSize: 13,
@@ -675,7 +677,7 @@ const styles = StyleSheet.create({
   },
   saveBtn: {
     flex: 1,
-    backgroundColor: '#7C3AED',
+    backgroundColor: PLUM,
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: 'center',

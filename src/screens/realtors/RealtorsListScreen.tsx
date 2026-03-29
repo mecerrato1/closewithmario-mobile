@@ -19,6 +19,8 @@ import { AssignedRealtor, RelationshipStage } from '../../lib/types/realtors';
 import type { UserRole } from '../../lib/roles';
 import RealtorCard from '../../components/realtors/RealtorCard';
 
+const PLUM = '#4C1D95';
+
 interface RealtorsListScreenProps {
   userId: string | undefined;
   onRealtorPress: (realtor: AssignedRealtor) => void;
@@ -70,7 +72,7 @@ export default function RealtorsListScreen({
             >
               <Text style={[
                 styles.filterTabText,
-                { color: isSelected ? '#7C3AED' : colors.textSecondary },
+                { color: isSelected ? PLUM : colors.textSecondary },
               ]}>
                 {option.label}
               </Text>
@@ -120,7 +122,7 @@ export default function RealtorsListScreen({
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.headerBackground }]}>
+      <View style={[styles.header, { backgroundColor: PLUM }]}>
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Realtors{' '}
             <Text style={styles.headerCount}>({realtors.length})</Text>
@@ -170,7 +172,7 @@ export default function RealtorsListScreen({
       {/* Loading State */}
       {loading && !refreshing ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#7C3AED" />
+          <ActivityIndicator size="large" color={PLUM} />
           <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
             Loading realtors...
           </Text>
@@ -187,8 +189,8 @@ export default function RealtorsListScreen({
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#7C3AED"
-              colors={['#7C3AED']}
+              tintColor={PLUM}
+              colors={[PLUM]}
             />
           }
           showsVerticalScrollIndicator={false}
@@ -354,7 +356,7 @@ const styles = StyleSheet.create({
   },
   filterTabActive: {
     borderBottomWidth: 2,
-    borderBottomColor: '#7C3AED',
+    borderBottomColor: PLUM,
   },
   filterTabText: {
     fontSize: 14,
@@ -387,7 +389,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#7C3AED',
+    backgroundColor: PLUM,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 24,
@@ -448,7 +450,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   modalCloseButton: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: PLUM,
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',

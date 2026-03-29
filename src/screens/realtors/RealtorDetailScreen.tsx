@@ -59,6 +59,8 @@ import {
   removeRealtorProfilePicture 
 } from '../../utils/profilePicture';
 
+const PLUM = '#4C1D95';
+
 interface RealtorDetailScreenProps {
   realtor: AssignedRealtor;
   userId: string;
@@ -72,7 +74,7 @@ const STAGES: RelationshipStage[] = ['hot', 'warm', 'cold'];
 
 // Lead status configuration for display
 const LEAD_STATUS_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
-  new: { label: 'New', color: '#7C3AED', bgColor: '#EDE9FE' },
+  new: { label: 'New', color: PLUM, bgColor: '#EDE9FE' },
   attempting_contact: { label: 'Attempting Contact', color: '#D97706', bgColor: '#FEF3C7' },
   contacted: { label: 'Contacted', color: '#3B82F6', bgColor: '#DBEAFE' },
   gathering_docs: { label: 'Docs Requested', color: '#F97316', bgColor: '#FFEDD5' },
@@ -580,7 +582,7 @@ export default function RealtorDetailScreen({
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: colors.headerBackground }]}>
+      <View style={[styles.header, { backgroundColor: PLUM }]}>
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
@@ -630,7 +632,7 @@ export default function RealtorDetailScreen({
               <Text style={[styles.contactLabel, { color: colors.textSecondary }]}>Call</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.contactButton} onPress={handleText}>
-              <View style={[styles.contactIcon, { backgroundColor: '#7C3AED' }]}>
+              <View style={[styles.contactIcon, { backgroundColor: PLUM }]}>
                 <Ionicons name="chatbubble" size={20} color="#FFFFFF" />
               </View>
               <Text style={[styles.contactLabel, { color: colors.textSecondary }]}>Text</Text>
@@ -686,7 +688,7 @@ export default function RealtorDetailScreen({
               value={active}
               onValueChange={handleActiveChange}
               trackColor={{ false: '#E5E7EB', true: '#C4B5FD' }}
-              thumbColor={active ? '#7C3AED' : '#9CA3AF'}
+              thumbColor={active ? PLUM : '#9CA3AF'}
             />
           </View>
 
@@ -694,7 +696,7 @@ export default function RealtorDetailScreen({
           <View style={styles.toggleRow}>
             <View style={styles.toggleInfo}>
               <View style={[styles.toggleIconContainer, { backgroundColor: campaignEligible ? '#EDE9FE' : '#F3F4F6' }]}>
-                <Ionicons name="megaphone" size={20} color={campaignEligible ? '#7C3AED' : '#9CA3AF'} />
+                <Ionicons name="megaphone" size={20} color={campaignEligible ? PLUM : '#9CA3AF'} />
               </View>
               <View style={styles.toggleTextContainer}>
                 <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>Eligible for email campaigns</Text>
@@ -707,7 +709,7 @@ export default function RealtorDetailScreen({
               value={campaignEligible}
               onValueChange={handleCampaignEligibleChange}
               trackColor={{ false: '#E5E7EB', true: '#C4B5FD' }}
-              thumbColor={campaignEligible ? '#7C3AED' : '#9CA3AF'}
+              thumbColor={campaignEligible ? PLUM : '#9CA3AF'}
             />
           </View>
 
@@ -849,7 +851,7 @@ export default function RealtorDetailScreen({
         {/* Languages Section */}
         <View style={[styles.section, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
           <View style={styles.languageHeader}>
-            <Ionicons name="globe-outline" size={20} color="#7C3AED" />
+            <Ionicons name="globe-outline" size={20} color={PLUM} />
             <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginBottom: 0, marginLeft: 8 }]}>
               Languages
             </Text>
@@ -908,12 +910,12 @@ export default function RealtorDetailScreen({
                   >
                     <Text style={[
                       styles.modalOptionText,
-                      { color: primaryLanguage === item.value ? '#7C3AED' : colors.textPrimary },
+                      { color: primaryLanguage === item.value ? PLUM : colors.textPrimary },
                     ]}>
                       {item.label}
                     </Text>
                     {primaryLanguage === item.value && (
-                      <Ionicons name="checkmark" size={20} color="#7C3AED" />
+                      <Ionicons name="checkmark" size={20} color={PLUM} />
                     )}
                   </TouchableOpacity>
                 )}
@@ -944,12 +946,12 @@ export default function RealtorDetailScreen({
                   >
                     <Text style={[
                       styles.modalOptionText,
-                      { color: secondaryLanguage === item.value ? '#7C3AED' : colors.textPrimary },
+                      { color: secondaryLanguage === item.value ? PLUM : colors.textPrimary },
                     ]}>
                       {item.label}
                     </Text>
                     {secondaryLanguage === item.value && (
-                      <Ionicons name="checkmark" size={20} color="#7C3AED" />
+                      <Ionicons name="checkmark" size={20} color={PLUM} />
                     )}
                   </TouchableOpacity>
                 )}
@@ -1185,7 +1187,7 @@ export default function RealtorDetailScreen({
             Activity Timeline
           </Text>
           {loadingActivities ? (
-            <ActivityIndicator size="small" color="#7C3AED" />
+            <ActivityIndicator size="small" color={PLUM} />
           ) : activities.length === 0 ? (
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
               No activity recorded yet
@@ -1219,7 +1221,7 @@ export default function RealtorDetailScreen({
             Linked Leads
           </Text>
           {loadingLeads ? (
-            <ActivityIndicator size="small" color="#7C3AED" />
+            <ActivityIndicator size="small" color={PLUM} />
           ) : leads.length === 0 ? (
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
               No leads linked to this realtor yet
@@ -1260,7 +1262,7 @@ export default function RealtorDetailScreen({
                   style={{ paddingVertical: 10, alignItems: 'center' }}
                   activeOpacity={0.7}
                 >
-                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#7C3AED' }}>
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: PLUM }}>
                     {showAllLeads ? 'Show Less' : `Show All ${leads.length} Leads`}
                   </Text>
                 </TouchableOpacity>
@@ -1303,7 +1305,7 @@ export default function RealtorDetailScreen({
           style={styles.footerCloseButton}
           onPress={onBack}
         >
-          <Ionicons name="arrow-back-circle" size={20} color="#7C3AED" />
+          <Ionicons name="arrow-back-circle" size={20} color={PLUM} />
           <Text style={styles.footerCloseText}>Close</Text>
         </TouchableOpacity>
       </View>
@@ -1360,7 +1362,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#7C3AED',
+    backgroundColor: PLUM,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
@@ -1380,7 +1382,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 8,
     right: -4,
-    backgroundColor: '#7C3AED',
+    backgroundColor: PLUM,
     width: 24,
     height: 24,
     borderRadius: 12,
@@ -1498,7 +1500,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   saveButton: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: PLUM,
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
@@ -1728,7 +1730,7 @@ const styles = StyleSheet.create({
     color: '#6B7280',
   },
   languageToggleTextActive: {
-    color: '#7C3AED',
+    color: PLUM,
     fontWeight: '600',
   },
   templateList: {
@@ -1764,7 +1766,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#7C3AED',
+    backgroundColor: PLUM,
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 10,
@@ -1780,7 +1782,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   backToTemplatesButtonText: {
-    color: '#7C3AED',
+    color: PLUM,
     fontSize: 15,
     fontWeight: '500',
   },
@@ -1825,7 +1827,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#7C3AED',
+    backgroundColor: PLUM,
     paddingVertical: 14,
     borderRadius: 12,
     gap: 8,
@@ -1846,7 +1848,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   footerCloseText: {
-    color: '#7C3AED',
+    color: PLUM,
     fontSize: 16,
     fontWeight: '600',
   },
