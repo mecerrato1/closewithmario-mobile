@@ -178,18 +178,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   // Collapsing header animation for leads view
   const scrollY = useRef(new Animated.Value(0)).current;
-  const HEADER_EXPANDED_HEIGHT = 310;
-  const HEADER_COLLAPSED_HEIGHT = 120;
+  const HEADER_EXPANDED_HEIGHT = 156;
+  const HEADER_COLLAPSED_HEIGHT = 112;
 
   const headerHeight = scrollY.interpolate({
     inputRange: [0, 100],
     outputRange: [HEADER_EXPANDED_HEIGHT, HEADER_COLLAPSED_HEIGHT],
-    extrapolate: 'clamp',
-  });
-
-  const headerOpacity = scrollY.interpolate({
-    inputRange: [0, 50],
-    outputRange: [1, 0],
     extrapolate: 'clamp',
   });
 
@@ -199,27 +193,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     extrapolate: 'clamp',
   });
 
-  const statsScale = scrollY.interpolate({
-    inputRange: [0, 100],
-    outputRange: [1, 0],
-    extrapolate: 'clamp',
-  });
-
-  const statsHeight = scrollY.interpolate({
-    inputRange: [0, 100],
-    outputRange: [80, 0], // Animate height to collapse/expand layout
-    extrapolate: 'clamp',
-  });
-
-  const statsOpacity = scrollY.interpolate({
-    inputRange: [0, 50],
-    outputRange: [1, 0],
-    extrapolate: 'clamp',
-  });
-
   // Collapsing header animation for dashboard view
   const dashboardScrollY = useRef(new Animated.Value(0)).current;
-  const DASHBOARD_HEADER_EXPANDED = 404;
+  const DASHBOARD_HEADER_EXPANDED = 368;
   const DASHBOARD_HEADER_COLLAPSED = 176;
   const HEADER_SCROLL_DISTANCE = DASHBOARD_HEADER_EXPANDED - DASHBOARD_HEADER_COLLAPSED;
 
@@ -975,6 +951,16 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     setShowDashboard(false);
   };
 
+  const handleSelectLeadListTab = (tab: 'leads' | 'meta' | 'all') => {
+    triggerListAnimation();
+    setActiveTab(tab);
+    setHasManuallySelectedTab(true);
+
+    if (tab !== 'meta' && unreadFilter) {
+      setUnreadFilter(false);
+    }
+  };
+
   // Save new lead function
   const saveNewLead = async () => {
     // Validation
@@ -1316,6 +1302,21 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 (lead as Lead).source;
                 
     return src === selectedSourceFilter;
+  };
+
+  const matchesLeadListBase = (lead: Lead | MetaLead) => {
+    const statusMatch = selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter;
+    const searchMatch = matchesSearch(lead);
+    const loMatch = matchesLOFilter(lead);
+    const attentionMatch = matchesAttentionFilter(lead);
+    const sourceMatch = matchesSourceFilter(lead);
+    const trackedMatch = matchesTrackedFilter(lead);
+
+    return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch && trackedMatch;
+  };
+
+  const matchesMetaLeadList = (lead: MetaLead) => {
+    return matchesLeadListBase(lead) && matchesUnreadFilter(lead);
   };
 
   const renderLeadItem = ({ item }: { item: Lead }) => {
@@ -1884,11 +1885,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const userFirstName = session?.user?.user_metadata?.full_name?.split(' ')[0] || 
                           session?.user?.user_metadata?.name?.split(' ')[0] || 
                           'there';
-    const focusLine = callbacksDueToday > 0
-      ? `${callbacksDueToday} callbacks due today`
-      : unreadMessagesCount > 0
+    const heroBadgeText =
+      callbacksDueToday > 0 && unreadMessagesCount > 0
         ? `${unreadMessagesCount} unread conversations to review`
-        : `${attentionLeadsCount} leads need active follow-up`;
+        : null;
 
     const openDashboardList = ({
       tab = 'all',
@@ -1914,6 +1914,40 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       setShowDashboard(false);
     };
 
+    const primaryHeroCard: {
+      key: string;
+      icon: keyof typeof Ionicons.glyphMap;
+      value: number;
+      label: string;
+      tone: any;
+      onPress?: () => void;
+    } =
+      callbacksDueToday > 0
+        ? {
+            key: 'callbacks',
+            icon: 'calendar-clear-outline' as const,
+            value: callbacksDueToday,
+            label: 'Due Today',
+            tone: styles.dashboardHeroCardBlue,
+          }
+        : unreadMessagesCount > 0
+          ? {
+              key: 'unread',
+              icon: 'chatbubble-ellipses-outline' as const,
+              value: unreadMessagesCount,
+              label: 'Unread',
+              tone: styles.dashboardHeroCardBlue,
+              onPress: () => openDashboardList({ tab: 'meta', unread: true }),
+            }
+          : {
+              key: 'new',
+              icon: 'flash-outline' as const,
+              value: newLeads,
+              label: 'New Leads',
+              tone: styles.dashboardHeroCardBlue,
+              onPress: () => openDashboardList({ tab: 'all', status: 'new' }),
+            };
+
     const heroFocusCards: Array<{
       key: string;
       icon: keyof typeof Ionicons.glyphMap;
@@ -1922,13 +1956,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       tone: any;
       onPress?: () => void;
     }> = [
-      {
-        key: 'callbacks',
-        icon: 'calendar-clear-outline' as const,
-        value: callbacksDueToday,
-        label: 'Due Today',
-        tone: styles.dashboardHeroCardBlue,
-      },
+      primaryHeroCard,
       {
         key: 'attention',
         icon: 'alert-circle-outline' as const,
@@ -2148,12 +2176,14 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           <Animated.View style={{ 
             opacity: dashboardContentOpacity,
           }}>
-            <View style={styles.dashboardHeroBadge}>
-              <Ionicons name="sparkles-outline" size={14} color="#FDE68A" />
-              <Text style={styles.dashboardHeroBadgeText}>{focusLine}</Text>
-            </View>
+            {heroBadgeText && (
+              <View style={styles.dashboardHeroBadge}>
+                <Ionicons name="sparkles-outline" size={14} color="#FDE68A" />
+                <Text style={styles.dashboardHeroBadgeText}>{heroBadgeText}</Text>
+              </View>
+            )}
             <Text style={styles.newGreeting}>Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {userFirstName}</Text>
-            <Text style={styles.newSubGreeting}>Start with follow-ups, unread conversations, and today&apos;s callbacks.</Text>
+            <Text style={styles.newSubGreeting}>Start with follow-ups, unread chats, and callbacks.</Text>
 
             <View style={styles.dashboardHeroGrid}>
               {heroFocusCards.map((card) => (
@@ -2601,6 +2631,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   const hasLeads = leads.length > 0;
   const hasMetaLeads = metaLeads.length > 0;
+  const filteredWebsiteLeads = leads.filter(matchesLeadListBase);
+  const filteredMetaListLeads = metaLeads.filter(matchesMetaLeadList);
+  const totalVisibleLeadCount = filteredWebsiteLeads.length + filteredMetaListLeads.length;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -2670,7 +2703,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       <Animated.View style={[
         styles.leadsHeaderContainer, 
         { 
-          backgroundColor: colors.headerBackground,
+          backgroundColor: '#4C1D95',
           height: headerHeight,
         }
       ]}>
@@ -2748,122 +2781,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             </TouchableOpacity>
           </View>
         </Animated.View>
-
-        {/* Stats Row inside Purple Header - Fades out when scrolling */}
-        <Animated.View style={[
-          styles.statsRow, 
-          { 
-            height: statsHeight,
-            opacity: statsOpacity,
-            overflow: 'hidden', // Ensure content doesn't overflow when height shrinks
-          }
-        ]}>
-        <TouchableOpacity 
-          style={[
-            styles.statCard,
-            activeTab === 'meta' && styles.statCardActive,
-          ]}
-          onPress={() => {
-            triggerListAnimation();
-            setActiveTab('meta');
-            setHasManuallySelectedTab(true);
-          }}
-        >
-          <Text style={[
-            styles.statNumber,
-            activeTab === 'meta' && styles.statNumberActive,
-          ]}>
-            {selectedStatusFilter === 'all' 
-              ? metaLeads.filter(l => matchesLOFilter(l) && matchesAttentionFilter(l) && matchesSourceFilter(l) && l.status !== 'unqualified').length 
-              : metaLeads.filter(l => l.status === selectedStatusFilter && matchesLOFilter(l) && matchesAttentionFilter(l) && matchesSourceFilter(l)).length
-            }
-          </Text>
-          <Text style={[
-            styles.statLabel,
-            activeTab === 'meta' && styles.statLabelActive,
-          ]}>Meta Ads</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[
-            styles.statCard,
-            activeTab === 'leads' && styles.statCardActive,
-          ]}
-          onPress={() => {
-            triggerListAnimation();
-            setActiveTab('leads');
-            setHasManuallySelectedTab(true);
-          }}
-        >
-          <Text style={[
-            styles.statNumber,
-            activeTab === 'leads' && styles.statNumberActive,
-          ]}>
-            {selectedStatusFilter === 'all' 
-              ? leads.filter(l => matchesLOFilter(l) && matchesAttentionFilter(l) && matchesSourceFilter(l) && l.status !== 'unqualified').length 
-              : leads.filter(l => l.status === selectedStatusFilter && matchesLOFilter(l) && matchesAttentionFilter(l) && matchesSourceFilter(l)).length
-            }
-          </Text>
-          <Text style={[
-            styles.statLabel,
-            activeTab === 'leads' && styles.statLabelActive,
-          ]}>My Leads</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[
-            styles.statCard,
-            activeTab === 'all' && styles.statCardActive,
-          ]}
-          onPress={() => {
-            triggerListAnimation();
-            setActiveTab('all');
-            setHasManuallySelectedTab(true);
-          }}
-        >
-          <Text style={[
-            styles.statNumber,
-            activeTab === 'all' && styles.statNumberActive,
-          ]}>
-            {selectedStatusFilter === 'all' 
-              ? metaLeads.filter(l => matchesLOFilter(l) && matchesAttentionFilter(l) && matchesSourceFilter(l) && l.status !== 'unqualified').length + leads.filter(l => matchesLOFilter(l) && matchesAttentionFilter(l) && matchesSourceFilter(l) && l.status !== 'unqualified').length 
-              : [...metaLeads, ...leads].filter(l => l.status === selectedStatusFilter && matchesLOFilter(l) && matchesAttentionFilter(l) && matchesSourceFilter(l)).length
-            }
-          </Text>
-          <Text style={[
-            styles.statLabel,
-            activeTab === 'all' && styles.statLabelActive,
-          ]}>Total</Text>
-        </TouchableOpacity>
-      </Animated.View>
-
-        {/* Search Bar inside Purple Header - Fades out when scrolling */}
-        <Animated.View style={[styles.leadsSearchContainer, { opacity: headerOpacity }]}>
-          <Text style={styles.leadsSearchIcon}>🔍</Text>
-          <TextInput
-            style={styles.leadsSearchInput}
-            placeholder="Search leads..."
-            placeholderTextColor="rgba(255,255,255,0.7)"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="done"
-            onSubmitEditing={() => {
-              // Dismiss keyboard when done button is pressed
-              if (Platform.OS === 'ios' || Platform.OS === 'android') {
-                // Keyboard will dismiss automatically on submit
-              }
-            }}
-            blurOnSubmit={true}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity 
-              onPress={() => setSearchQuery('')}
-              style={styles.searchClearButton}
-            >
-              <Text style={styles.searchClearText}>✕</Text>
-            </TouchableOpacity>
-          )}
-        </Animated.View>
       </Animated.View>
 
       {loading && (
@@ -2889,6 +2806,155 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
       {!loading && !errorMessage && (hasLeads || hasMetaLeads) && (
         <>
+          <View style={styles.listUtilityPanel}>
+            <View style={styles.listTabBar}>
+              {[
+                { key: 'all' as const, label: 'All', count: totalVisibleLeadCount },
+                { key: 'leads' as const, label: 'My Leads', count: filteredWebsiteLeads.length },
+                { key: 'meta' as const, label: 'Meta Ads', count: filteredMetaListLeads.length },
+              ].map((tab) => {
+                const isActive = activeTab === tab.key;
+                return (
+                  <TouchableOpacity
+                    key={tab.key}
+                    style={[styles.listTab, isActive && styles.listTabActive]}
+                    onPress={() => handleSelectLeadListTab(tab.key)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.listTabCount, isActive && styles.listTabCountActive]}>
+                      {tab.count}
+                    </Text>
+                    <Text style={[styles.listTabLabel, isActive && styles.listTabLabelActive]}>
+                      {tab.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <View style={styles.listSearchContainer}>
+              <Ionicons name="search-outline" size={18} color="#64748B" />
+              <TextInput
+                style={styles.listSearchInput}
+                placeholder="Search leads, phones, or emails"
+                placeholderTextColor="#94A3B8"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+                blurOnSubmit
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.searchClearButton}>
+                  <Ionicons name="close" size={18} color="#94A3B8" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <View style={styles.listPrimaryFilterRow}>
+              <TouchableOpacity
+                style={[styles.filterButton, styles.listStatusButton]}
+                onPress={() => setShowStatusPicker(true)}
+              >
+                <Text style={styles.filterButtonLabel}>Status</Text>
+                <Text style={styles.filterButtonValue}>
+                  {selectedStatusFilter === 'all'
+                    ? `All (${totalVisibleLeadCount})`
+                    : `${formatStatus(selectedStatusFilter)} (${[...leads, ...metaLeads].filter(l => l.status === selectedStatusFilter && matchesLOFilter(l)).length})`
+                  }
+                </Text>
+                <Text style={styles.filterButtonIcon}>▼</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.listQuickFilterRow}>
+              <TouchableOpacity
+                style={[styles.quickFilterChip, attentionFilter && styles.quickFilterChipActive]}
+                onPress={() => setAttentionFilter((current) => !current)}
+              >
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={14}
+                  color={attentionFilter ? '#FFFFFF' : '#7C3AED'}
+                />
+                <Text style={[styles.quickFilterChipText, attentionFilter && styles.quickFilterChipTextActive]}>
+                  Needs Attention
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.quickFilterChip, trackedFilter && styles.quickFilterChipActive]}
+                onPress={() => setTrackedFilter((current) => !current)}
+              >
+                <Ionicons
+                  name="bookmark-outline"
+                  size={14}
+                  color={trackedFilter ? '#FFFFFF' : '#7C3AED'}
+                />
+                <Text style={[styles.quickFilterChipText, trackedFilter && styles.quickFilterChipTextActive]}>
+                  Tracked
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.quickFilterChip, unreadFilter && styles.quickFilterChipActive]}
+                onPress={() => {
+                  const nextUnreadFilter = !unreadFilter;
+                  setUnreadFilter(nextUnreadFilter);
+                  if (nextUnreadFilter) {
+                    handleSelectLeadListTab('meta');
+                  }
+                }}
+              >
+                <Ionicons
+                  name="chatbubble-ellipses-outline"
+                  size={14}
+                  color={unreadFilter ? '#FFFFFF' : '#7C3AED'}
+                />
+                <Text style={[styles.quickFilterChipText, unreadFilter && styles.quickFilterChipTextActive]}>
+                  Unread
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {userRole === 'super_admin' && (
+              <View style={styles.listSecondaryFilterRow}>
+                <TouchableOpacity
+                  style={[styles.filterButton, styles.filterButtonHalf, styles.listSecondaryFilterButton]}
+                  onPress={() => setShowLOPicker(true)}
+                >
+                  <Text style={styles.filterButtonLabel}>LO</Text>
+                  <Text style={styles.filterButtonValue}>
+                    {selectedLOFilter === null
+                      ? 'All LOs'
+                      : selectedLOFilter === 'unassigned'
+                      ? 'Unassigned'
+                      : loanOfficers.find(lo => lo.id === selectedLOFilter)?.name || 'Unknown'
+                    }
+                  </Text>
+                  <Text style={styles.filterButtonIcon}>▼</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.filterButton, styles.filterButtonHalf, styles.listSecondaryFilterButton]}
+                  onPress={() => setShowSourcePicker(true)}
+                >
+                  <Text style={styles.filterButtonLabel}>Source</Text>
+                  <Text style={styles.filterButtonValue} numberOfLines={1}>
+                    {selectedSourceFilter === 'all'
+                      ? 'All Sources'
+                      : selectedSourceFilter.length > 15
+                      ? `${selectedSourceFilter.substring(0, 12)}...`
+                      : selectedSourceFilter
+                    }
+                  </Text>
+                  <Text style={styles.filterButtonIcon}>▼</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
           {/* Unread Filter Active Indicator */}
           {unreadFilter && (
             <View style={{ 
@@ -2968,65 +3034,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               </TouchableOpacity>
             </View>
           )}
-
-          {/* Filter Buttons Row */}
-          <View style={[styles.filterButtonContainer, { flexWrap: 'wrap' }]}>
-            {/* Status Filter */}
-            <TouchableOpacity
-              style={[
-                styles.filterButton, 
-                userRole === 'super_admin' ? { width: '100%', marginBottom: 4 } : { flex: 1 }
-              ]}
-              onPress={() => setShowStatusPicker(true)}
-            >
-              <Text style={styles.filterButtonLabel}>Status:</Text>
-              <Text style={styles.filterButtonValue}>
-                {selectedStatusFilter === 'all' 
-                  ? `All (${[...leads, ...metaLeads].filter(l => matchesLOFilter(l) && l.status !== 'unqualified').length})` 
-                  : `${formatStatus(selectedStatusFilter)} (${[...leads, ...metaLeads].filter(l => l.status === selectedStatusFilter && matchesLOFilter(l)).length})`
-                }
-              </Text>
-              <Text style={styles.filterButtonIcon}>▼</Text>
-            </TouchableOpacity>
-
-            {/* LO Filter (Super Admin Only) */}
-            {userRole === 'super_admin' && (
-              <>
-                <TouchableOpacity
-                  style={[styles.filterButton, styles.filterButtonHalf]}
-                  onPress={() => setShowLOPicker(true)}
-                >
-                  <Text style={styles.filterButtonLabel}>LO:</Text>
-                  <Text style={styles.filterButtonValue}>
-                    {selectedLOFilter === null 
-                      ? 'All LOs' 
-                      : selectedLOFilter === 'unassigned'
-                      ? 'Unassigned'
-                      : loanOfficers.find(lo => lo.id === selectedLOFilter)?.name || 'Unknown'
-                    }
-                  </Text>
-                  <Text style={styles.filterButtonIcon}>▼</Text>
-                </TouchableOpacity>
-
-                {/* Source Filter (Super Admin Only) */}
-                <TouchableOpacity
-                  style={[styles.filterButton, styles.filterButtonHalf]}
-                  onPress={() => setShowSourcePicker(true)}
-                >
-                  <Text style={styles.filterButtonLabel}>Source:</Text>
-                  <Text style={styles.filterButtonValue} numberOfLines={1}>
-                    {selectedSourceFilter === 'all' 
-                      ? 'All Sources' 
-                      : selectedSourceFilter.length > 15 
-                        ? selectedSourceFilter.substring(0, 12) + '...' 
-                        : selectedSourceFilter
-                    }
-                  </Text>
-                  <Text style={styles.filterButtonIcon}>▼</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
 
           {/* Status Picker Modal */}
           <Modal
@@ -3349,16 +3356,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       {activeTab === 'leads' && hasLeads && (
         <Animated.View style={animatedListStyle}>
           <Animated.FlatList
-            data={leads.filter(lead => {
-              const statusMatch = selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter;
-              const searchMatch = matchesSearch(lead);
-              const loMatch = matchesLOFilter(lead);
-              const attentionMatch = matchesAttentionFilter(lead);
-              const sourceMatch = matchesSourceFilter(lead);
-              const trackedMatch = matchesTrackedFilter(lead);
-              
-              return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch && trackedMatch;
-            })}
+            data={filteredWebsiteLeads}
             renderItem={renderLeadItem}
             keyExtractor={(item) => item.id}
             extraData={aiDataLoaded}
@@ -3379,17 +3377,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       {activeTab === 'meta' && hasMetaLeads && (
         <Animated.View style={animatedListStyle}>
           <Animated.FlatList
-            data={metaLeads.filter(lead => {
-              const statusMatch = selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter;
-              const searchMatch = matchesSearch(lead);
-              const loMatch = matchesLOFilter(lead);
-              const attentionMatch = matchesAttentionFilter(lead);
-              const sourceMatch = matchesSourceFilter(lead);
-              const unreadMatch = matchesUnreadFilter(lead);
-              const trackedMatch = matchesTrackedFilter(lead);
-              
-              return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch && unreadMatch && trackedMatch;
-            })}
+            data={filteredMetaListLeads}
             renderItem={renderMetaLeadItem}
             keyExtractor={(item) => item.id}
             extraData={aiDataLoaded}
@@ -3410,33 +3398,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       {activeTab === 'all' && (hasLeads || hasMetaLeads) && (
         <Animated.View style={animatedListStyle}>
           <Animated.FlatList
-            data={(() => {
-              const metaArr = metaLeads.filter(lead => {
-                const statusMatch = selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter;
-                const searchMatch = matchesSearch(lead);
-                const loMatch = matchesLOFilter(lead);
-                const attentionMatch = matchesAttentionFilter(lead);
-                const sourceMatch = matchesSourceFilter(lead);
-                const trackedMatch = matchesTrackedFilter(lead);
-                return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch && trackedMatch;
-              }).map(lead => ({ ...lead, _tableType: 'meta' as const }));
-              
-              const leadsArr = leads.filter(lead => {
-                const statusMatch = selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter;
-                const searchMatch = matchesSearch(lead);
-                const loMatch = matchesLOFilter(lead);
-                const attentionMatch = matchesAttentionFilter(lead);
-                const sourceMatch = matchesSourceFilter(lead);
-                const trackedMatch = matchesTrackedFilter(lead);
-                return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch && trackedMatch;
-              }).map(lead => ({ ...lead, _tableType: 'lead' as const }));
-              
-              const combined = [...metaArr, ...leadsArr].sort(
-                (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-              );
-              
-              return combined;
-            })()}
+            data={[
+              ...filteredMetaListLeads.map((lead) => ({ ...lead, _tableType: 'meta' as const })),
+              ...filteredWebsiteLeads.map((lead) => ({ ...lead, _tableType: 'lead' as const })),
+            ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())}
             renderItem={({ item }) => {
               if (item._tableType === 'meta') {
                 return renderMetaLeadItem({ item });
