@@ -101,7 +101,7 @@ export default function AuthenticatedRoot({
             session={session}
             notificationLead={effectiveNotificationLead}
             onNotificationHandled={effectiveHandler}
-            defaultToMyLeads={true}
+            defaultToMyLeads={false}
             skipDashboard={hasClickedLeadsTab}
             onNavigateToCapture={handleNavigateToCapture}
           />

@@ -3462,6 +3462,9 @@ export function LeadDetailView({
                     const emailBody = getEmailBodyContent(activity);
                     const hasHtmlBody = Boolean(activity.body && HTML_TAG_PATTERN.test(activity.body));
                     const hasTableHtml = Boolean(activity.body && HTML_TABLE_PATTERN.test(activity.body));
+                    const showScrollHint = Boolean(
+                      emailBody && (hasHtmlBody || emailBody.length > 220)
+                    );
                     const hasHeaders = Boolean(
                       activity.subject ||
                       activity.from_email ||
@@ -3500,45 +3503,55 @@ export function LeadDetailView({
 
                         {emailBody ? (
                           hasTableHtml ? (
-                            <View style={styles.emailWebViewContainer}>
-                              <WebView
-                                style={styles.emailWebView}
-                                originWhitelist={['*']}
-                                source={{ html: buildEmailHtmlDocument(activity.body || '') }}
-                                javaScriptEnabled={false}
-                                scrollEnabled={true}
-                                showsVerticalScrollIndicator={true}
-                                setSupportMultipleWindows={false}
-                                onShouldStartLoadWithRequest={(request) => {
-                                  if (request.url === 'about:blank') {
-                                    return true;
-                                  }
+                            <>
+                              <View style={styles.emailWebViewContainer}>
+                                <WebView
+                                  style={styles.emailWebView}
+                                  originWhitelist={['*']}
+                                  source={{ html: buildEmailHtmlDocument(activity.body || '') }}
+                                  javaScriptEnabled={false}
+                                  scrollEnabled={true}
+                                  showsVerticalScrollIndicator={true}
+                                  setSupportMultipleWindows={false}
+                                  onShouldStartLoadWithRequest={(request) => {
+                                    if (request.url === 'about:blank') {
+                                      return true;
+                                    }
 
-                                  Linking.openURL(request.url).catch((error) => {
-                                    console.error('Error opening email link:', error);
-                                  });
-                                  return false;
-                                }}
-                              />
-                            </View>
+                                    Linking.openURL(request.url).catch((error) => {
+                                      console.error('Error opening email link:', error);
+                                    });
+                                    return false;
+                                  }}
+                                />
+                              </View>
+                              {showScrollHint ? (
+                                <Text style={styles.emailScrollHint}>Scroll for more</Text>
+                              ) : null}
+                            </>
                           ) : (
-                            <ScrollView
-                              style={styles.emailBodyContainer}
-                              contentContainerStyle={styles.emailBodyContent}
-                              nestedScrollEnabled={true}
-                            >
-                              {hasHtmlBody ? (
-                              <RenderHTML
-                                contentWidth={emailContentWidth}
-                                source={{ html: sanitizeEmailHtml(activity.body || '') }}
-                                ignoredDomTags={EMAIL_HTML_IGNORED_TAGS}
-                                baseStyle={emailHtmlBaseStyle}
-                                tagsStyles={emailHtmlTagStyles}
-                              />
-                              ) : (
-                                <Text style={styles.emailBodyText}>{emailBody}</Text>
-                              )}
-                            </ScrollView>
+                            <>
+                              <ScrollView
+                                style={styles.emailBodyContainer}
+                                contentContainerStyle={styles.emailBodyContent}
+                                nestedScrollEnabled={true}
+                              >
+                                {hasHtmlBody ? (
+                                <RenderHTML
+                                  contentWidth={emailContentWidth}
+                                  source={{ html: sanitizeEmailHtml(activity.body || '') }}
+                                  ignoredDomTags={EMAIL_HTML_IGNORED_TAGS}
+                                  baseStyle={emailHtmlBaseStyle}
+                                  tagsStyles={emailHtmlTagStyles}
+                                />
+                                ) : (
+                                  <Text style={styles.emailBodyText}>{emailBody}</Text>
+                                )}
+                              </ScrollView>
+                              {showScrollHint ? (
+                                <Text style={styles.emailScrollHint}>Scroll for more</Text>
+                              ) : null}
+                            </>
                           )
                         ) : null}
                       </>

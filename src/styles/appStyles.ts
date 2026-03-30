@@ -1409,6 +1409,12 @@ export const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F3F4F6',
   },
+  emailScrollHint: {
+    marginTop: 6,
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+  },
   activityUserEmail: {
     fontSize: 12,
     color: '#888',
