@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.closewithmario.mobile",
-      "buildNumber": "110",
+      "buildNumber": "111",
       "usesAppleSignIn": true,
       "associatedDomains": [
         "applinks:hxpvcaspgdgsehrehbhl.supabase.co",

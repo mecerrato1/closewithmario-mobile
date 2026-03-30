@@ -19,10 +19,13 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
   StyleSheet,
+  useWindowDimensions,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Session } from '@supabase/supabase-js';
 import { Audio, InterruptionModeIOS } from 'expo-av';
+import RenderHTML from 'react-native-render-html';
+import { WebView } from 'react-native-webview';
 import type { Lead, MetaLead, SelectedLeadRef, Activity, LoanOfficer, Realtor, TrackingReason } from '../lib/types/leads';
 import type { UserRole } from '../lib/roles';
 import { supabase } from '../lib/supabase';
@@ -42,6 +45,97 @@ import { AiRewriteToolbar, AiRewriteToolbarRef } from '../components/AiRewriteTo
 import { ReferralAgreementsSection } from '../components/ReferralAgreementsSection';
 
 const PLUM = '#4C1D95';
+const HTML_TAG_PATTERN = /<[a-z][\s\S]*>/i;
+const HTML_TABLE_PATTERN = /<table[\s>]/i;
+
+const EMAIL_HTML_IGNORED_TAGS = ['head', 'script', 'iframe', 'object', 'embed', 'form'];
+
+const normalizeEmailRecipients = (value?: string[] | string | null) => {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.map((entry) => entry?.trim()).filter(Boolean) as string[];
+  }
+
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+};
+
+const formatEmailRecipientList = (value?: string[] | string | null) => {
+  const recipients = normalizeEmailRecipients(value);
+  return recipients.length > 0 ? recipients.join(', ') : null;
+};
+
+const pickEmailRecipients = (...candidates: Array<string[] | string | null | undefined>) => {
+  for (const candidate of candidates) {
+    const recipients = normalizeEmailRecipients(candidate);
+    if (recipients.length > 0) {
+      return recipients;
+    }
+  }
+
+  return [];
+};
+
+const getActivityRecipientList = (activity: Activity, recipientType: 'to' | 'cc') => {
+  if (recipientType === 'to') {
+    return pickEmailRecipients(activity.recipients?.to, activity.to_emails, activity.to_email);
+  }
+
+  return pickEmailRecipients(activity.recipients?.cc, activity.cc_emails, activity.cc_email);
+};
+
+const getEmailBodyContent = (activity: Activity) => {
+  const body = activity.body?.trim();
+  if (body) return body;
+
+  const notes = activity.notes?.trim();
+  return notes || null;
+};
+
+const sanitizeEmailHtml = (html: string) =>
+  html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+
+const buildEmailHtmlDocument = (html: string) => `<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: #F3F4F6;
+        color: #4B5563;
+        font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        word-break: break-word;
+      }
+      body {
+        padding: 12px;
+      }
+      table {
+        width: 100% !important;
+        max-width: 100% !important;
+        border-collapse: collapse;
+      }
+      th, td {
+        border: 1px solid #CBD5E1;
+        padding: 6px;
+        vertical-align: top;
+      }
+      img {
+        max-width: 100% !important;
+        height: auto !important;
+      }
+      a {
+        color: #2563EB;
+      }
+    </style>
+  </head>
+  <body>${sanitizeEmailHtml(html)}</body>
+</html>`;
 
 export type LeadDetailViewProps = {
   selected: SelectedLeadRef;
@@ -95,6 +189,7 @@ export function LeadDetailView({
   onNavigateToCapture,
 }: LeadDetailViewProps) {
   const { colors, isDark } = useThemeColors();
+  const { width: windowWidth } = useWindowDimensions();
   const [activeDetailTab, setActiveDetailTab] = useState<'details' | 'messages'>('details');
   const [taskNote, setTaskNote] = useState('');
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -164,6 +259,50 @@ export function LeadDetailView({
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
   // Micro animation for "Log Activity" button
   const logButtonScale = useRef(new Animated.Value(1)).current;
+  const emailContentWidth = Math.max(windowWidth - 72, 200);
+  const emailHtmlBaseStyle = StyleSheet.flatten(styles.emailBodyText) || {};
+  const emailHtmlTagStyles = {
+    body: emailHtmlBaseStyle,
+    p: {
+      marginTop: 0,
+      marginBottom: 12,
+      lineHeight: 18,
+    },
+    div: {
+      marginTop: 0,
+      marginBottom: 10,
+    },
+    span: {
+      lineHeight: 18,
+    },
+    a: {
+      color: '#2563EB',
+      textDecorationLine: 'underline' as const,
+    },
+    blockquote: {
+      borderLeftColor: '#CBD5E1',
+      borderLeftWidth: 3,
+      color: '#475569',
+      marginLeft: 0,
+      marginVertical: 8,
+      paddingLeft: 12,
+    },
+    li: {
+      marginBottom: 6,
+    },
+    table: {
+      borderColor: '#CBD5E1',
+    },
+    td: {
+      borderColor: '#CBD5E1',
+      padding: 6,
+    },
+    th: {
+      backgroundColor: '#E5E7EB',
+      borderColor: '#CBD5E1',
+      padding: 6,
+    },
+  };
 
   // Open to messages tab if coming from notification
   useEffect(() => {
@@ -3313,18 +3452,98 @@ export function LeadDetailView({
                     )}
                   </View>
                   
-                  {activity.notes ? (
+                  {activity.notes && activity.activity_type !== 'email' ? (
                     <Text style={styles.activityHistoryNote}>{activity.notes}</Text>
                   ) : null}
                   
-                  {/* Email body for inbound emails */}
-                  {activity.activity_type === 'email' && activity.body ? (
-                    <ScrollView style={styles.emailBodyContainer} nestedScrollEnabled={true}>
-                      <Text style={styles.emailBodyText}>
-                        {activity.body}
-                      </Text>
-                    </ScrollView>
-                  ) : null}
+                  {activity.activity_type === 'email' && (() => {
+                    const toRecipients = formatEmailRecipientList(getActivityRecipientList(activity, 'to'));
+                    const ccRecipients = formatEmailRecipientList(getActivityRecipientList(activity, 'cc'));
+                    const emailBody = getEmailBodyContent(activity);
+                    const hasHtmlBody = Boolean(activity.body && HTML_TAG_PATTERN.test(activity.body));
+                    const hasTableHtml = Boolean(activity.body && HTML_TABLE_PATTERN.test(activity.body));
+                    const hasHeaders = Boolean(
+                      activity.subject ||
+                      activity.from_email ||
+                      toRecipients ||
+                      ccRecipients
+                    );
+
+                    if (!hasHeaders && !emailBody) return null;
+
+                    return (
+                      <>
+                        {hasHeaders ? (
+                          <View style={styles.emailHeaderContainer}>
+                            {activity.subject ? (
+                              <Text style={styles.emailHeaderText}>
+                                <Text style={styles.emailHeaderLabel}>Subject:</Text> {activity.subject}
+                              </Text>
+                            ) : null}
+                            {activity.from_email ? (
+                              <Text style={styles.emailHeaderText}>
+                                <Text style={styles.emailHeaderLabel}>From:</Text> {activity.from_email}
+                              </Text>
+                            ) : null}
+                            {toRecipients ? (
+                              <Text style={styles.emailHeaderText}>
+                                <Text style={styles.emailHeaderLabel}>To:</Text> {toRecipients}
+                              </Text>
+                            ) : null}
+                            {ccRecipients ? (
+                              <Text style={styles.emailHeaderText}>
+                                <Text style={styles.emailHeaderLabel}>Cc:</Text> {ccRecipients}
+                              </Text>
+                            ) : null}
+                          </View>
+                        ) : null}
+
+                        {emailBody ? (
+                          hasTableHtml ? (
+                            <View style={styles.emailWebViewContainer}>
+                              <WebView
+                                style={styles.emailWebView}
+                                originWhitelist={['*']}
+                                source={{ html: buildEmailHtmlDocument(activity.body || '') }}
+                                javaScriptEnabled={false}
+                                scrollEnabled={true}
+                                showsVerticalScrollIndicator={true}
+                                setSupportMultipleWindows={false}
+                                onShouldStartLoadWithRequest={(request) => {
+                                  if (request.url === 'about:blank') {
+                                    return true;
+                                  }
+
+                                  Linking.openURL(request.url).catch((error) => {
+                                    console.error('Error opening email link:', error);
+                                  });
+                                  return false;
+                                }}
+                              />
+                            </View>
+                          ) : (
+                            <ScrollView
+                              style={styles.emailBodyContainer}
+                              contentContainerStyle={styles.emailBodyContent}
+                              nestedScrollEnabled={true}
+                            >
+                              {hasHtmlBody ? (
+                              <RenderHTML
+                                contentWidth={emailContentWidth}
+                                source={{ html: sanitizeEmailHtml(activity.body || '') }}
+                                ignoredDomTags={EMAIL_HTML_IGNORED_TAGS}
+                                baseStyle={emailHtmlBaseStyle}
+                                tagsStyles={emailHtmlTagStyles}
+                              />
+                              ) : (
+                                <Text style={styles.emailBodyText}>{emailBody}</Text>
+                              )}
+                            </ScrollView>
+                          )
+                        ) : null}
+                      </>
+                    );
+                  })()}
                   
                   {/* Voice note playback button */}
                   {activity.audio_url && (

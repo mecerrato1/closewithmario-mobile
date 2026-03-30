@@ -125,6 +125,15 @@ export type Activity = {
   body?: string | null; // Email body from inbound emails
   subject?: string | null;
   from_email?: string | null;
+  to_email?: string | null;
+  to_emails?: string[] | null;
+  cc_email?: string | null;
+  cc_emails?: string[] | string | null;
+  recipients?: {
+    to?: string[] | null;
+    cc?: string[] | null;
+    bcc?: string[] | null;
+  } | null;
   direction?: string | null;
 };
 

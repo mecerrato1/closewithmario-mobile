@@ -1364,6 +1364,24 @@ export const styles = StyleSheet.create({
     color: '#333',
     lineHeight: 20,
   },
+  emailHeaderContainer: {
+    marginTop: 8,
+    marginBottom: 8,
+    padding: 10,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  emailHeaderText: {
+    fontSize: 12,
+    color: '#4B5563',
+    lineHeight: 18,
+  },
+  emailHeaderLabel: {
+    fontWeight: '700',
+    color: '#374151',
+  },
   emailBodyContainer: {
     marginTop: 8,
     padding: 10,
@@ -1371,10 +1389,25 @@ export const styles = StyleSheet.create({
     borderRadius: 8,
     maxHeight: 250,
   },
+  emailBodyContent: {
+    flexGrow: 1,
+  },
   emailBodyText: {
     fontSize: 12,
     color: '#4B5563',
     lineHeight: 18,
+  },
+  emailWebViewContainer: {
+    marginTop: 8,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#F3F4F6',
+    minHeight: 220,
+    height: 320,
+  },
+  emailWebView: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
   },
   activityUserEmail: {
     fontSize: 12,
