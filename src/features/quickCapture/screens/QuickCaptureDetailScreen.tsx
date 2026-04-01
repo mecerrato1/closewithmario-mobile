@@ -421,6 +421,24 @@ export default function QuickCaptureDetailScreen({
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
+        {/* Back to linked lead */}
+        {onNavigateToLead && (capture.converted_lead_id || capture.converted_meta_ad_id) && (
+          <TouchableOpacity
+            style={styles.backToLeadBanner}
+            onPress={() => {
+              if (capture.converted_lead_id) {
+                onNavigateToLead(capture.converted_lead_id, 'lead');
+              } else if (capture.converted_meta_ad_id) {
+                onNavigateToLead(capture.converted_meta_ad_id, 'meta');
+              }
+            }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={16} color="#6D28D9" />
+            <Text style={styles.backToLeadText}>Back to Lead</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Status badge */}
         <View style={styles.statusRow}>
           <View
@@ -974,6 +992,23 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
+  },
+  backToLeadBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F3FF',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+    marginBottom: 12,
+    gap: 8,
+  },
+  backToLeadText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6D28D9',
   },
   loadingContainer: {
     flex: 1,

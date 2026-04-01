@@ -222,6 +222,7 @@ export function LeadDetailView({
   const [customMessageText, setCustomMessageText] = useState('');
   const [showAiRecommendation, setShowAiRecommendation] = useState(false);
   const [showImportDetails, setShowImportDetails] = useState(false);
+  const [linkedCaptureId, setLinkedCaptureId] = useState<string | null>(null);
   
   // Tracking state
   const [isTracked, setIsTracked] = useState(false);
@@ -476,6 +477,22 @@ export function LeadDetailView({
       setTrackingNote(record.tracking_note || '');
     }
   }, [record?.id, record?.is_tracked, record?.tracking_reason, record?.tracking_note]);
+
+  // Look up linked quick capture via converted_lead_id / converted_meta_ad_id
+  useEffect(() => {
+    const lookupLinkedCapture = async () => {
+      if (!record) { setLinkedCaptureId(null); return; }
+      const col = isMeta ? 'converted_meta_ad_id' : 'converted_lead_id';
+      const { data } = await supabase
+        .from('quick_captures')
+        .select('id')
+        .eq(col, record.id)
+        .limit(1)
+        .maybeSingle();
+      setLinkedCaptureId(data?.id ?? null);
+    };
+    lookupLinkedCapture();
+  }, [record?.id, isMeta]);
 
   // Handle tracking toggle
   const handleToggleTracking = async () => {
@@ -2837,7 +2854,7 @@ export function LeadDetailView({
                   )}
                 </View>
               )}
-              {(record as Lead).source_detail && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((record as Lead).source_detail!) && onNavigateToCapture && (
+              {linkedCaptureId && onNavigateToCapture && (
                 <TouchableOpacity
                   style={{
                     flexDirection: 'row',
@@ -2850,7 +2867,7 @@ export function LeadDetailView({
                     borderColor: '#DDD6FE',
                     marginBottom: 8,
                   }}
-                  onPress={() => onNavigateToCapture((record as Lead).source_detail!)}
+                  onPress={() => onNavigateToCapture(linkedCaptureId)}
                   activeOpacity={0.7}
                 >
                   <Ionicons name="camera-outline" size={18} color={PLUM} style={{ marginRight: 8 }} />
@@ -2860,7 +2877,7 @@ export function LeadDetailView({
                   <Ionicons name="chevron-forward" size={16} color={PLUM} />
                 </TouchableOpacity>
               )}
-              {(record as Lead).source_detail && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((record as Lead).source_detail!) && (
+              {(record as Lead).source_detail && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
                   <Ionicons name="megaphone-outline" size={16} color="#16A34A" style={{ marginRight: 8 }} />
                   <Text style={[styles.detailField, { color: '#16A34A', marginBottom: 0 }]} selectable={true}>
@@ -2961,7 +2978,7 @@ export function LeadDetailView({
 
           {isMeta && (
             <>
-              {(record as MetaLead).source_detail && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((record as MetaLead).source_detail!) && onNavigateToCapture && (
+              {linkedCaptureId && onNavigateToCapture && (
                 <TouchableOpacity
                   style={{
                     flexDirection: 'row',
@@ -2974,7 +2991,7 @@ export function LeadDetailView({
                     borderColor: '#DDD6FE',
                     marginBottom: 8,
                   }}
-                  onPress={() => onNavigateToCapture((record as MetaLead).source_detail!)}
+                  onPress={() => onNavigateToCapture(linkedCaptureId)}
                   activeOpacity={0.7}
                 >
                   <Ionicons name="camera-outline" size={18} color={PLUM} style={{ marginRight: 8 }} />
