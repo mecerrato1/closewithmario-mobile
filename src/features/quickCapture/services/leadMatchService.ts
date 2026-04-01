@@ -238,6 +238,38 @@ export async function searchLeads(
       }
     }
 
+    // Search leads by co-borrower name or phone (in metadata JSONB)
+    const { data: coBorrowerResults } = await supabase
+      .from('leads')
+      .select('id, first_name, last_name, email, phone, status, created_at, loan_purpose, message, realtor_id, source, price, down_payment, credit_score')
+      .filter('metadata->has_co_borrower', 'eq', true)
+      .ilike('metadata::text' as any, `%${q}%`)
+      .limit(10);
+
+    for (const row of coBorrowerResults || []) {
+      if (!seenIds.has(row.id)) {
+        seenIds.add(row.id);
+        results.push({
+          id: row.id,
+          source: 'lead',
+          first_name: row.first_name,
+          last_name: row.last_name,
+          email: row.email,
+          phone: row.phone,
+          status: row.status,
+          created_at: row.created_at,
+          matchReason: 'Co-Borrower Match',
+          loan_purpose: row.loan_purpose,
+          message: row.message,
+          realtor_id: row.realtor_id,
+          source_field: row.source,
+          price: row.price,
+          down_payment: row.down_payment,
+          credit_score: row.credit_score,
+        });
+      }
+    }
+
     // Search meta_ads
     const { data: metaResults } = await supabase
       .from('meta_ads')

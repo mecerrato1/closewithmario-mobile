@@ -1248,7 +1248,20 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const email = lead.email?.toLowerCase() || '';
     const phone = lead.phone?.toLowerCase() || '';
     
-    return fullName.includes(query) || email.includes(query) || phone.includes(query);
+    if (fullName.includes(query) || email.includes(query) || phone.includes(query)) return true;
+
+    // Also search co-borrower names and phones (regular leads only)
+    const coBorrowers = (lead as Lead).metadata?.co_borrowers;
+    if (coBorrowers && coBorrowers.length > 0) {
+      for (const cb of coBorrowers) {
+        const cbName = [cb.first_name, cb.last_name].filter(Boolean).join(' ').toLowerCase();
+        const cbPhone = cb.phone?.toLowerCase() || '';
+        const cbEmail = cb.email?.toLowerCase() || '';
+        if (cbName.includes(query) || cbPhone.includes(query) || cbEmail.includes(query)) return true;
+      }
+    }
+
+    return false;
   };
 
   // LO filter function (for super admins only)

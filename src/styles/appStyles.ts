@@ -828,6 +828,29 @@ export const styles = StyleSheet.create({
     fontWeight: '400' as const,
     flex: 1,
   },
+  importAccordion: {
+    marginTop: 6,
+    borderWidth: 1,
+    borderRadius: 10,
+    overflow: 'hidden' as const,
+  },
+  importAccordionHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  importAccordionTitle: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    flex: 1,
+  },
+  importAccordionBody: {
+    fontSize: 12,
+    lineHeight: 18,
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+  },
   actionBar: {
     flexDirection: 'row' as const,
     justifyContent: 'space-around' as const,

@@ -221,6 +221,7 @@ export function LeadDetailView({
   const [showCustomMessage, setShowCustomMessage] = useState(false);
   const [customMessageText, setCustomMessageText] = useState('');
   const [showAiRecommendation, setShowAiRecommendation] = useState(false);
+  const [showImportDetails, setShowImportDetails] = useState(false);
   
   // Tracking state
   const [isTracked, setIsTracked] = useState(false);
@@ -2867,31 +2868,46 @@ export function LeadDetailView({
                   </Text>
                 </View>
               )}
-              {(record as Lead).loan_purpose && (
-                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
-                  Loan Purpose: {(record as Lead).loan_purpose}
-                </Text>
-              )}
-              {(record as Lead).price != null && (
-                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
-                  Price: ${(record as Lead).price?.toLocaleString()}
-                </Text>
-              )}
               {(record as Lead).down_payment != null && (
                 <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Down Payment: ${(record as Lead).down_payment?.toLocaleString()}
                 </Text>
               )}
-              {(record as Lead).credit_score != null && (
-                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
-                  Credit Score: {(record as Lead).credit_score}
-                </Text>
-              )}
-              {(record as Lead).message && (
-                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
-                  Message: {(record as Lead).message}
-                </Text>
-              )}
+              {(record as Lead).message && (() => {
+                const msg = (record as Lead).message!;
+                const isXmlImport = msg.includes('IMPORTED FROM XML');
+                if (isXmlImport) {
+                  return (
+                    <View style={[styles.importAccordion, { borderColor: colors.border }]}>
+                      <TouchableOpacity
+                        style={styles.importAccordionHeader}
+                        onPress={() => setShowImportDetails(!showImportDetails)}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="document-text-outline" size={16} color="#64748B" style={{ marginRight: 8 }} />
+                        <Text style={[styles.importAccordionTitle, { color: colors.textSecondary }]}>
+                          Import Details
+                        </Text>
+                        <Ionicons
+                          name={showImportDetails ? 'chevron-up' : 'chevron-down'}
+                          size={16}
+                          color="#94A3B8"
+                        />
+                      </TouchableOpacity>
+                      {showImportDetails && (
+                        <Text style={[styles.importAccordionBody, { color: colors.textSecondary }]} selectable={true}>
+                          {msg.replace(/^📋\s*IMPORTED FROM XML:\n?/, '')}
+                        </Text>
+                      )}
+                    </View>
+                  );
+                }
+                return (
+                  <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
+                    Message: {msg}
+                  </Text>
+                );
+              })()}
 
               {/* Co-Borrowers Section */}
               {(() => {
@@ -3005,11 +3021,6 @@ export function LeadDetailView({
               {(record as MetaLead).subject_address && (
                 <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Address: {(record as MetaLead).subject_address}
-                </Text>
-              )}
-              {(record as MetaLead).loan_purpose && (
-                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
-                  Loan Purpose: {(record as MetaLead).loan_purpose}
                 </Text>
               )}
               {/* Form answers: use form_data when available, fall back to hardcoded columns for old leads */}
