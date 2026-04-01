@@ -851,6 +851,52 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingBottom: 12,
   },
+  pipelineStepper: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+  },
+  pipelineTrack: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+  },
+  pipelineStage: {
+    alignItems: 'center' as const,
+    width: 44,
+  },
+  pipelineDot: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  pipelineLine: {
+    height: 2,
+    flex: 1,
+    marginTop: 9,
+    borderRadius: 1,
+  },
+  pipelineLabel: {
+    fontSize: 9,
+    marginTop: 3,
+    textAlign: 'center' as const,
+  },
+  pipelineSideBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    alignSelf: 'center' as const,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  pipelineSideLabel: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+  },
   actionBar: {
     flexDirection: 'row' as const,
     justifyContent: 'space-around' as const,

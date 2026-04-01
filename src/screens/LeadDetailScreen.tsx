@@ -2170,6 +2170,84 @@ export function LeadDetailView({
         </Text>
       </View>
 
+      {/* Pipeline Stepper */}
+      {(() => {
+        const PIPELINE_STAGES = [
+          { key: 'new', label: 'New' },
+          { key: 'attempting_contact', label: 'Contact' },
+          { key: 'contacted', label: 'Talked' },
+          { key: 'gathering_docs', label: 'Docs' },
+          { key: 'qualified', label: 'Pre-Appr' },
+          { key: 'in_process', label: 'In Proc' },
+          { key: 'closed', label: 'Closed' },
+        ];
+        const SIDE_STATUSES: Record<string, { label: string; color: string; icon: string }> = {
+          working_on_credit: { label: 'Working on Credit', color: '#DC2626', icon: 'build-outline' },
+          nurturing: { label: 'Nurturing', color: '#F9A825', icon: 'leaf-outline' },
+          unqualified: { label: 'Unqualified', color: '#C62828', icon: 'remove-circle-outline' },
+          lost_deal: { label: 'Lost Deal', color: '#616161', icon: 'close-circle-outline' },
+        };
+        const currentStatus = record.status || 'new';
+        const currentIdx = PIPELINE_STAGES.findIndex(s => s.key === currentStatus);
+        const isOnPipeline = currentIdx >= 0;
+        const sideInfo = SIDE_STATUSES[currentStatus];
+
+        return (
+          <View style={[styles.pipelineStepper, { backgroundColor: colors.cardBackground, borderBottomColor: colors.border }]}>
+            <View style={styles.pipelineTrack}>
+              {PIPELINE_STAGES.map((stage, idx) => {
+                const isCompleted = isOnPipeline && idx < currentIdx;
+                const isCurrent = isOnPipeline && idx === currentIdx;
+                const isFuture = !isOnPipeline || idx > currentIdx;
+                const stageColors = STATUS_COLOR_MAP[stage.key] || STATUS_COLOR_MAP['new'];
+
+                return (
+                  <React.Fragment key={stage.key}>
+                    {idx > 0 && (
+                      <View style={[
+                        styles.pipelineLine,
+                        { backgroundColor: isCompleted ? (STATUS_COLOR_MAP[PIPELINE_STAGES[idx - 1].key]?.text || PLUM) : (isDark ? '#334155' : '#E2E8F0') },
+                      ]} />
+                    )}
+                    <TouchableOpacity
+                      style={styles.pipelineStage}
+                      onPress={() => onStatusChange(isMeta ? 'meta' : 'lead', record.id, stage.key)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={[
+                        styles.pipelineDot,
+                        isCurrent && { backgroundColor: stageColors.text, borderColor: stageColors.text },
+                        isCompleted && { backgroundColor: stageColors.text, borderColor: stageColors.text },
+                        isFuture && { backgroundColor: 'transparent', borderColor: isDark ? '#475569' : '#CBD5E1' },
+                      ]}>
+                        {isCompleted && (
+                          <Ionicons name="checkmark" size={10} color="#FFFFFF" />
+                        )}
+                        {isCurrent && (
+                          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#FFFFFF' }} />
+                        )}
+                      </View>
+                      <Text style={[
+                        styles.pipelineLabel,
+                        isCurrent && { color: stageColors.text, fontWeight: '700' },
+                        isCompleted && { color: stageColors.text },
+                        isFuture && { color: isDark ? '#64748B' : '#94A3B8' },
+                      ]} numberOfLines={1}>{stage.label}</Text>
+                    </TouchableOpacity>
+                  </React.Fragment>
+                );
+              })}
+            </View>
+            {!isOnPipeline && sideInfo && (
+              <View style={[styles.pipelineSideBadge, { backgroundColor: sideInfo.color + '18', borderColor: sideInfo.color + '40' }]}>
+                <Ionicons name={sideInfo.icon as any} size={14} color={sideInfo.color} style={{ marginRight: 6 }} />
+                <Text style={[styles.pipelineSideLabel, { color: sideInfo.color }]}>{sideInfo.label}</Text>
+              </View>
+            )}
+          </View>
+        );
+      })()}
+
       {/* Fixed Action Bar — always visible */}
       <View style={[styles.actionBar, { backgroundColor: colors.cardBackground, borderBottomWidth: 1, borderBottomColor: colors.border }]}>
         <TouchableOpacity
