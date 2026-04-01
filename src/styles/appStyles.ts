@@ -794,6 +794,40 @@ export const styles = StyleSheet.create({
     color: '#94A3B8',
     marginTop: 8,
   },
+  coBorrowerCard: {
+    marginTop: 14,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  coBorrowerHeader: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    letterSpacing: 0.5,
+    color: '#64748B',
+    marginBottom: 10,
+  },
+  coBorrowerItem: {
+  },
+  coBorrowerName: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    marginBottom: 6,
+  },
+  coBorrowerRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    marginTop: 4,
+  },
+  coBorrowerLink: {
+    fontSize: 13,
+    fontWeight: '500' as const,
+  },
+  coBorrowerDetail: {
+    fontSize: 13,
+    fontWeight: '400' as const,
+    flex: 1,
+  },
   actionBar: {
     flexDirection: 'row' as const,
     justifyContent: 'space-around' as const,

@@ -375,7 +375,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         let leadsQuery = supabase
           .from('leads')
           .select(
-            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id, source, source_detail, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary'
+            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id, source, source_detail, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary, metadata'
           )
           .order('created_at', { ascending: false });
 
@@ -681,7 +681,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       
       let leadsQuery = supabase
         .from('leads')
-        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id, source, source_detail, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary')
+        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id, source, source_detail, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary, metadata')
         .order('created_at', { ascending: false });
 
       let metaQuery = supabase

@@ -1,6 +1,26 @@
 // Lead type definitions extracted from App.tsx
 export type TrackingReason = 'manual' | 'auto_docs_requested' | 'auto_qualified' | null;
 
+export type CoBorrowerInfo = {
+  first_name: string;
+  last_name: string;
+  phone: string;
+  email: string;
+  employer_name: string;
+  job_title: string;
+  is_self_employed: boolean;
+  total_monthly_income: number | null;
+  marital_status: string;
+  is_military: boolean;
+  military_status: string;
+};
+
+export type LeadMetadata = {
+  has_co_borrower?: boolean;
+  co_borrowers?: CoBorrowerInfo[];
+  [key: string]: unknown;
+};
+
 export type Lead = {
   id: string;
   created_at: string;
@@ -31,6 +51,8 @@ export type Lead = {
   referral_source_email?: string | null;
   last_referral_update_at?: string | null;
   last_referral_update_summary?: string | null;
+  // Metadata (JSONB) — contains co-borrowers from XML imports
+  metadata?: LeadMetadata | null;
 };
 
 export type MetaLead = {

@@ -26,7 +26,7 @@ import { Session } from '@supabase/supabase-js';
 import { Audio, InterruptionModeIOS } from 'expo-av';
 import RenderHTML from 'react-native-render-html';
 import { WebView } from 'react-native-webview';
-import type { Lead, MetaLead, SelectedLeadRef, Activity, LoanOfficer, Realtor, TrackingReason } from '../lib/types/leads';
+import type { Lead, MetaLead, SelectedLeadRef, Activity, LoanOfficer, Realtor, TrackingReason, CoBorrowerInfo } from '../lib/types/leads';
 import type { UserRole } from '../lib/roles';
 import { supabase } from '../lib/supabase';
 import { getUserRole, getUserTeamMemberId, canSeeAllLeads } from '../lib/roles';
@@ -2892,6 +2892,54 @@ export function LeadDetailView({
                   Message: {(record as Lead).message}
                 </Text>
               )}
+
+              {/* Co-Borrowers Section */}
+              {(() => {
+                const coBorrowers = (record as Lead).metadata?.co_borrowers;
+                if (!coBorrowers || coBorrowers.length === 0) return null;
+                return (
+                  <View style={[styles.coBorrowerCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+                    <Text style={[styles.coBorrowerHeader, { color: colors.textPrimary }]}>
+                      CO-BORROWERS ({coBorrowers.length})
+                    </Text>
+                    {coBorrowers.map((cb: CoBorrowerInfo, idx: number) => (
+                      <View key={idx} style={[styles.coBorrowerItem, idx > 0 && { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10, marginTop: 10 }]}>
+                        <Text style={[styles.coBorrowerName, { color: colors.textPrimary }]}>
+                          {`${cb.first_name} ${cb.last_name}`.trim()}
+                        </Text>
+                        {cb.phone ? (
+                          <TouchableOpacity onPress={() => Linking.openURL(`tel:${cb.phone}`)} style={styles.coBorrowerRow}>
+                            <Ionicons name="call-outline" size={14} color={PLUM} style={{ marginRight: 6 }} />
+                            <Text style={[styles.coBorrowerLink, { color: PLUM }]}>{formatPhoneNumber(cb.phone)}</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                        {cb.email ? (
+                          <TouchableOpacity onPress={() => Linking.openURL(`mailto:${cb.email}`)} style={styles.coBorrowerRow}>
+                            <Ionicons name="mail-outline" size={14} color={PLUM} style={{ marginRight: 6 }} />
+                            <Text style={[styles.coBorrowerLink, { color: PLUM }]}>{cb.email}</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                        {cb.employer_name ? (
+                          <View style={styles.coBorrowerRow}>
+                            <Ionicons name="business-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
+                            <Text style={[styles.coBorrowerDetail, { color: colors.textSecondary }]}>
+                              {cb.employer_name}{cb.job_title ? ` — ${cb.job_title}` : ''}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {cb.total_monthly_income != null && cb.total_monthly_income > 0 ? (
+                          <View style={styles.coBorrowerRow}>
+                            <Ionicons name="cash-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
+                            <Text style={[styles.coBorrowerDetail, { color: colors.textSecondary }]}>
+                              ${cb.total_monthly_income.toLocaleString()}/mo
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                    ))}
+                  </View>
+                );
+              })()}
             </>
           )}
 
