@@ -746,6 +746,91 @@ export const styles = StyleSheet.create({
   navButtonTextDisabled: {
     color: 'rgba(255, 255, 255, 0.3)',
   },
+  detailHeaderCount: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.7)',
+    marginHorizontal: 6,
+    minWidth: 36,
+    textAlign: 'center' as const,
+  },
+  dealSnapshotBar: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  dealSnapshotRow: {
+    flexDirection: 'row' as const,
+    gap: 6,
+    alignItems: 'center' as const,
+  },
+  dealChip: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  dealChipText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+  },
+  dealChipLabel: {
+    fontSize: 9,
+    fontWeight: '700' as const,
+    color: '#94A3B8',
+    letterSpacing: 0.3,
+    marginRight: 3,
+  },
+  dealChipValue: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: '#334155',
+  },
+  dealSnapshotTimestamp: {
+    fontSize: 12,
+    fontWeight: '500' as const,
+    color: '#94A3B8',
+    marginTop: 8,
+  },
+  actionBar: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-around' as const,
+    alignItems: 'center' as const,
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    marginTop: 4,
+  },
+  actionBarItem: {
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    minWidth: 56,
+  },
+  actionBarItemDisabled: {
+    opacity: 0.4,
+  },
+  actionBarIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F3E8FF',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginBottom: 6,
+  },
+  actionBarIconDisabled: {
+    backgroundColor: '#F1F5F9',
+  },
+  actionBarLabel: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: '#4C1D95',
+    letterSpacing: 0.2,
+  },
+  actionBarLabelDisabled: {
+    color: '#94A3B8',
+  },
   stickyNameBar: {
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 20,
@@ -823,7 +908,7 @@ export const styles = StyleSheet.create({
   sectionDivider: {
     height: 1,
     backgroundColor: '#E2E8F0',
-    marginVertical: 8,
+    marginVertical: 16,
   },
   sectionHeaderRow: {
     flexDirection: 'row',

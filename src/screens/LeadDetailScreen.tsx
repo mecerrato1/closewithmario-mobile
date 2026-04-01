@@ -2068,16 +2068,18 @@ export function LeadDetailView({
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
-      {/* Modern Detail Header with Navigation */}
+      {/* Unified Header — Name + Status + Navigation */}
       <View style={styles.detailHeader}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
           <Text style={styles.backButtonText}>✕</Text>
         </TouchableOpacity>
         <View style={styles.detailHeaderCenter}>
-          <Text style={styles.detailHeaderTitle}>Lead Details</Text>
-          <Text style={styles.detailHeaderSubtitle}>
-            {currentIndex + 1} of {navigableList.length}
-          </Text>
+          <Text style={styles.detailHeaderTitle} numberOfLines={1}>{fullName}</Text>
+          {phone ? (
+            <Text style={styles.detailHeaderSubtitle}>
+              {formatPhoneNumber(phone)}
+            </Text>
+          ) : null}
         </View>
         <View style={styles.navButtons}>
           <TouchableOpacity 
@@ -2087,6 +2089,7 @@ export function LeadDetailView({
           >
             <Text style={[styles.navButtonText, !hasPrevious && styles.navButtonTextDisabled]}>‹</Text>
           </TouchableOpacity>
+          <Text style={styles.detailHeaderCount}>{currentIndex + 1}/{navigableList.length}</Text>
           <TouchableOpacity 
             onPress={handleNext} 
             style={[styles.navButton, !hasNext && styles.navButtonDisabled]}
@@ -2097,35 +2100,114 @@ export function LeadDetailView({
         </View>
       </View>
 
-      {/* Sticky Name Bar */}
-      <View style={[styles.stickyNameBar, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-        <View style={styles.stickyNameColumn}>
-          <View style={styles.stickyNameRow}>
-            <Text style={[styles.stickyName, { color: colors.textPrimary }]} numberOfLines={1}>{fullName}</Text>
+      {/* Status + Deal Snapshot Bar */}
+      <View style={[styles.dealSnapshotBar, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dealSnapshotRow}>
+          <TouchableOpacity onPress={() => setShowStatusPicker(true)} activeOpacity={0.7}>
             <View style={[
-              styles.stickyStatusBadge,
-              { backgroundColor: STATUS_COLOR_MAP[status || 'new']?.bg || '#F5F5F5' }
+              styles.dealChip,
+              { backgroundColor: STATUS_COLOR_MAP[status || 'new']?.bg || '#F5F5F5', borderColor: STATUS_COLOR_MAP[status || 'new']?.border || '#E2E8F0' }
             ]}>
-              <Text style={[
-                styles.stickyStatusText,
-                { color: STATUS_COLOR_MAP[status || 'new']?.text || '#666' }
-              ]}>
+              <Text style={[styles.dealChipText, { color: STATUS_COLOR_MAP[status || 'new']?.text || '#666' }]}>
                 {status ? formatStatus(status) : 'N/A'}
               </Text>
+              <Text style={{ fontSize: 10, color: STATUS_COLOR_MAP[status || 'new']?.text || '#666', marginLeft: 2 }}>▼</Text>
             </View>
+          </TouchableOpacity>
+          {(() => {
+            const chips: Array<{ label: string; value: string }> = [];
+            if (!isMeta) {
+              const lead = record as Lead;
+              if (lead.loan_purpose) chips.push({ label: '', value: lead.loan_purpose });
+              if (lead.price != null) chips.push({ label: '', value: `$${lead.price.toLocaleString()}` });
+              if (lead.credit_score != null) chips.push({ label: '', value: `Credit: ${lead.credit_score}` });
+            } else {
+              const meta = record as MetaLead;
+              const fd = meta.form_data || {};
+              if (meta.loan_purpose) chips.push({ label: '', value: meta.loan_purpose });
+              else if (fd.loan_purpose) chips.push({ label: '', value: fd.loan_purpose });
+              const priceRange = meta.price_range || fd.price_range || Object.entries(fd).find(([k]) => k.toLowerCase().includes('price'))?.[1];
+              const creditRange = meta.credit_range || fd.credit_range || Object.entries(fd).find(([k]) => k.toLowerCase().includes('credit'))?.[1];
+              if (priceRange) chips.push({ label: '', value: priceRange });
+              if (creditRange) chips.push({ label: '', value: `Credit: ${creditRange}` });
+            }
+            return chips.map((chip, i) => (
+              <View key={i} style={[styles.dealChip, { backgroundColor: '#F1F5F9', borderColor: '#E2E8F0' }]}>
+                {chip.label ? <Text style={styles.dealChipLabel}>{chip.label}</Text> : null}
+                <Text style={styles.dealChipValue} numberOfLines={1}>{chip.value}</Text>
+              </View>
+            ));
+          })()}
+        </ScrollView>
+        <Text style={styles.dealSnapshotTimestamp}>
+          {new Date(record.created_at).toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric',
+            year: 'numeric'
+          })} • {new Date(record.created_at).toLocaleTimeString('en-US', { 
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+          })}
+        </Text>
+      </View>
+
+      {/* Fixed Action Bar — always visible */}
+      <View style={[styles.actionBar, { backgroundColor: colors.cardBackground, borderBottomWidth: 1, borderBottomColor: colors.border }]}>
+        <TouchableOpacity
+          style={[styles.actionBarItem, !phone && styles.actionBarItemDisabled]}
+          onPress={handleCall}
+          disabled={!phone}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.actionBarIcon, !phone && styles.actionBarIconDisabled]}>
+            <Ionicons name="call-outline" size={20} color={phone ? PLUM : '#94A3B8'} />
           </View>
-          <Text style={styles.stickyTimestamp}>
-            📅 {new Date(record.created_at).toLocaleDateString('en-US', { 
-              month: 'short', 
-              day: 'numeric',
-              year: 'numeric'
-            })} • {new Date(record.created_at).toLocaleTimeString('en-US', { 
-              hour: 'numeric',
-              minute: '2-digit',
-              hour12: true
-            })}
-          </Text>
-        </View>
+          <Text style={[styles.actionBarLabel, !phone && styles.actionBarLabelDisabled]}>Call</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.actionBarItem, !phone && styles.actionBarItemDisabled]}
+          onPress={handleText}
+          disabled={!phone}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.actionBarIcon, !phone && styles.actionBarIconDisabled]}>
+            <Ionicons name="chatbubble-outline" size={20} color={phone ? PLUM : '#94A3B8'} />
+          </View>
+          <Text style={[styles.actionBarLabel, !phone && styles.actionBarLabelDisabled]}>Text</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.actionBarItem]}
+          onPress={() => setShowCallbackModal(true)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.actionBarIcon}>
+            <Ionicons name="calendar-outline" size={20} color={PLUM} />
+          </View>
+          <Text style={styles.actionBarLabel}>Schedule</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.actionBarItem, !email && styles.actionBarItemDisabled]}
+          onPress={handleEmail}
+          disabled={!email}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.actionBarIcon, !email && styles.actionBarIconDisabled]}>
+            <Ionicons name="mail-outline" size={20} color={email ? PLUM : '#94A3B8'} />
+          </View>
+          <Text style={[styles.actionBarLabel, !email && styles.actionBarLabelDisabled]}>Email</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.actionBarItem, (!phone && !email) && styles.actionBarItemDisabled]}
+          onPress={handleSaveContact}
+          disabled={!phone && !email}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.actionBarIcon, (!phone && !email) && styles.actionBarIconDisabled]}>
+            <Ionicons name="person-add-outline" size={20} color={(phone || email) ? PLUM : '#94A3B8'} />
+          </View>
+          <Text style={[styles.actionBarLabel, (!phone && !email) && styles.actionBarLabelDisabled]}>Save</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Tab Bar - Details / Messages */}
@@ -2201,9 +2283,6 @@ export function LeadDetailView({
         <ScrollView contentContainerStyle={{ paddingBottom: 32, backgroundColor: colors.background }} showsVerticalScrollIndicator={false}>
           <View style={[styles.detailCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
 
-            {/* Divider */}
-            <View style={styles.sectionDivider} />
-
             {/* AI Attention Card */}
             {attentionBadge && (() => {
               const priorityColors = aiPriorityColors || { dot: attentionBadge.color, bg: '#FEF2F2', border: attentionBadge.color };
@@ -2268,30 +2347,8 @@ export function LeadDetailView({
               );
             })()}
           
-          {/* Status and LO Assignment Row (for admins) or Full Width Status (for non-admins) */}
-          <View style={propUserRole === 'super_admin' ? styles.statusLORow : { marginTop: 0 }}>
-            <TouchableOpacity
-              style={[
-                styles.statusDropdownButton,
-                propUserRole === 'super_admin' && styles.statusDropdownButtonHalf,
-                propUserRole !== 'super_admin' && styles.statusDropdownButtonFull
-              ]}
-              onPress={() => setShowStatusPicker(true)}
-            >
-              <View style={[
-                styles.statusDropdownBadge,
-                { backgroundColor: STATUS_COLOR_MAP[status || 'new']?.bg || '#F5F5F5' }
-              ]}>
-                <Text style={[
-                  styles.statusDropdownBadgeText,
-                  { color: STATUS_COLOR_MAP[status || 'new']?.text || '#666' }
-                ]}>
-                  {status ? formatStatus(status) : 'N/A'}
-                </Text>
-              </View>
-              <Text style={styles.statusDropdownArrow}>▼</Text>
-            </TouchableOpacity>
-
+          {/* LO & Realtor Assignment */}
+          <View style={styles.statusLORow}>
             {/* LO Assignment (Super Admin & Realtor) */}
             {(propUserRole === 'super_admin' || propUserRole === 'realtor') && (
               <TouchableOpacity
@@ -2299,7 +2356,8 @@ export function LeadDetailView({
                 onPress={() => setShowLOPicker(true)}
                 disabled={updatingLO}
               >
-                <Text style={styles.loDropdownLabel}>👤 LO:</Text>
+                <Ionicons name="person-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
+                <Text style={styles.loDropdownLabel}>LO:</Text>
                 <Text style={styles.loDropdownValue} numberOfLines={1}>
                   {record.lo_id 
                     ? loanOfficers.find(lo => lo.id === record.lo_id)?.name || 'Unknown'
@@ -2320,7 +2378,8 @@ export function LeadDetailView({
                 }}
                 disabled={updatingRealtor}
               >
-                <Text style={styles.loDropdownLabel}>🏠 Realtor:</Text>
+                <Ionicons name="home-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
+                <Text style={styles.loDropdownLabel}>Realtor:</Text>
                 <Text style={styles.loDropdownValue} numberOfLines={1}>
                   {currentRealtorName || 'None'}
                 </Text>
@@ -2479,74 +2538,6 @@ export function LeadDetailView({
               </View>
             </TouchableOpacity>
           </Modal>
-
-          {/* Divider */}
-          <View style={styles.sectionDivider} />
-
-          {/* Contact buttons */}
-          <Text style={styles.sectionTitle}>📞 Contact</Text>
-          <View style={styles.contactRow}>
-            <TouchableOpacity
-              style={[
-                styles.contactButton,
-                !phone && styles.contactButtonDisabled,
-              ]}
-              onPress={handleCall}
-              disabled={!phone}
-            >
-              <Text style={styles.contactButtonIcon}>☎</Text>
-              <Text style={styles.contactButtonText}>Call</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.contactButton,
-                !phone && styles.contactButtonDisabled,
-              ]}
-              onPress={handleText}
-              disabled={!phone}
-            >
-              <Text style={styles.contactButtonIcon}>💬</Text>
-              <Text style={styles.contactButtonText}>Text</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.contactButton,
-                !email && styles.contactButtonDisabled,
-              ]}
-              onPress={handleEmail}
-              disabled={!email}
-            >
-              <Text style={styles.contactButtonIcon}>✉</Text>
-              <Text style={styles.contactButtonText}>Email</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.contactButton,
-                (!phone && !email) && styles.contactButtonDisabled,
-              ]}
-              onPress={handleSaveContact}
-              disabled={!phone && !email}
-            >
-              <Text style={styles.contactButtonIcon}>👤</Text>
-              <Text style={styles.contactButtonText}>Save</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Schedule Callback */}
-          <View style={{ marginTop: 12 }}>
-            <TouchableOpacity
-              style={styles.scheduleCallbackButton}
-              onPress={() => setShowCallbackModal(true)}
-            >
-              <Text style={styles.scheduleCallbackIcon}>⏰</Text>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.scheduleCallbackTitle}>Schedule Callback</Text>
-                <Text style={styles.scheduleCallbackSubtitle}>
-                  Set a reminder to call {fullName}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          </View>
 
           {/* Mark Docs Received Button - shown when status is gathering_docs and not already logged */}
           {status === 'gathering_docs' && !docsReceivedLogged && (
@@ -2968,6 +2959,11 @@ export function LeadDetailView({
                   Address: {(record as MetaLead).subject_address}
                 </Text>
               )}
+              {(record as MetaLead).loan_purpose && (
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
+                  Loan Purpose: {(record as MetaLead).loan_purpose}
+                </Text>
+              )}
               {/* Form answers: use form_data when available, fall back to hardcoded columns for old leads */}
               {(() => {
                 const meta = record as MetaLead;
@@ -2981,6 +2977,7 @@ export function LeadDetailView({
                     'campaign_name', 'ad_name', 'platform', 'ad_set',
                     'inbox_url', 'leadgen_id', 'created_time', 'id', 'form_id',
                     'meta_ad_notes', 'notes',
+                    ...(meta.loan_purpose ? ['loan_purpose'] : []),
                   ]);
                   // Normalize long question-style keys to clean short labels
                   const labelMap: Record<string, string> = {
