@@ -321,7 +321,7 @@ export function LeadDetailView({
     let isMounted = true;
 
     const loadTemplates = async () => {
-      const remoteTemplates = await fetchLeadTemplates();
+      const remoteTemplates = await fetchLeadTemplates(true);
       if (isMounted && remoteTemplates.length > 0) {
         setTemplates(remoteTemplates);
       }
@@ -332,7 +332,7 @@ export function LeadDetailView({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [selected.id]);
 
   const animateLogButton = () => {
     Animated.sequence([

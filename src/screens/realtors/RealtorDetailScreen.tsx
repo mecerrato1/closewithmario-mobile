@@ -166,7 +166,7 @@ export default function RealtorDetailScreen({
     let isMounted = true;
 
     const loadTemplates = async () => {
-      const remoteTemplates = await fetchRealtorTemplates();
+      const remoteTemplates = await fetchRealtorTemplates(true);
       if (isMounted && remoteTemplates.length > 0) {
         setRealtorTemplates(remoteTemplates);
       }
@@ -177,7 +177,7 @@ export default function RealtorDetailScreen({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [realtor.realtor_id]);
 
   const handleStageChange = async (newStage: RelationshipStage) => {
     setStage(newStage);
