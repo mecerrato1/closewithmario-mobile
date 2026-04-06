@@ -11,20 +11,73 @@ import {
   StyleSheet,
   Keyboard,
   TouchableWithoutFeedback,
+  Image,
+  Modal,
+  Alert,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Audio, InterruptionModeIOS } from 'expo-av';
 import { supabase } from '../lib/supabase';
+import {
+  getSmsMessageMedia,
+  getSmsMediaFallbackLabel,
+  type SmsMediaAttachment,
+  type SmsRawPayload,
+} from '../lib/smsMedia';
 
 interface SmsMessage {
   id: string;
   direction: 'inbound' | 'outbound';
   from_number: string;
   to_number: string;
-  message_text: string;
+  message_text: string | null;
   created_at: string;
   sent_at?: string;
   received_at?: string;
   status?: string;
+  raw_payload?: SmsRawPayload | string | null;
+}
+
+function getAttachmentTitle(attachment: SmsMediaAttachment) {
+  switch (attachment.kind) {
+    case 'audio':
+      return 'Voice message';
+    case 'image':
+      return 'Photo';
+    case 'video':
+      return 'Video';
+    default:
+      return 'Media attachment';
+  }
+}
+
+function getAttachmentIcon(attachment: SmsMediaAttachment) {
+  switch (attachment.kind) {
+    case 'audio':
+      return 'mic';
+    case 'image':
+      return 'image';
+    case 'video':
+      return 'videocam';
+    default:
+      return 'attach';
+  }
+}
+
+function formatAttachmentMeta(attachment: SmsMediaAttachment) {
+  const parts: string[] = [];
+
+  if (attachment.contentType) {
+    parts.push(attachment.contentType);
+  }
+
+  if (typeof attachment.size === 'number' && attachment.size > 0) {
+    const sizeInKb = attachment.size / 1024;
+    parts.push(sizeInKb >= 1024 ? `${(sizeInKb / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(sizeInKb))} KB`);
+  }
+
+  return parts.join(' • ');
 }
 
 interface SmsMessagingProps {
@@ -35,6 +88,7 @@ interface SmsMessagingProps {
   initialSmsOptIn?: boolean | null;
   initialSmsOptedOut?: boolean | null;
   onMessageSent?: () => void;
+  showHeader?: boolean;
 }
 
 // API base URL - uses the same backend as the website (www to avoid redirect)
@@ -48,6 +102,7 @@ export function SmsMessaging({
   initialSmsOptIn,
   initialSmsOptedOut,
   onMessageSent,
+  showHeader = true,
 }: SmsMessagingProps) {
   const [messages, setMessages] = useState<SmsMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -56,6 +111,9 @@ export function SmsMessaging({
   const [error, setError] = useState<string | null>(null);
   const [smsOptIn, setSmsOptIn] = useState<boolean | null | undefined>(initialSmsOptIn);
   const [smsOptedOut, setSmsOptedOut] = useState<boolean | null | undefined>(initialSmsOptedOut);
+  const [currentMediaSound, setCurrentMediaSound] = useState<Audio.Sound | null>(null);
+  const [playingMediaId, setPlayingMediaId] = useState<string | null>(null);
+  const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const isSmsOptedOut = !!smsOptedOut || smsOptIn === false;
 
@@ -120,6 +178,14 @@ export function SmsMessaging({
       setTimeout(scrollToBottom, 100);
     }
   }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      if (currentMediaSound) {
+        currentMediaSound.unloadAsync().catch(() => undefined);
+      }
+    };
+  }, [currentMediaSound]);
 
   async function fetchMessages() {
     try {
@@ -245,8 +311,165 @@ export function SmsMessaging({
     });
   };
 
+  const openAttachment = async (url: string) => {
+    try {
+      await Linking.openURL(url);
+    } catch (openError) {
+      console.error('Error opening media attachment:', openError);
+      Alert.alert('Unable to open attachment', 'This media attachment could not be opened right now.');
+    }
+  };
+
+  const stopMediaPlayback = async () => {
+    if (!currentMediaSound) return;
+
+    try {
+      await currentMediaSound.stopAsync();
+    } catch (stopError) {
+      console.error('Error stopping media attachment playback:', stopError);
+    }
+
+    try {
+      await currentMediaSound.unloadAsync();
+    } catch (unloadError) {
+      console.error('Error unloading media attachment playback:', unloadError);
+    }
+
+    setCurrentMediaSound(null);
+    setPlayingMediaId(null);
+  };
+
+  const toggleAudioAttachment = async (attachment: SmsMediaAttachment) => {
+    try {
+      if (playingMediaId === attachment.id && currentMediaSound) {
+        await stopMediaPlayback();
+        return;
+      }
+
+      if (currentMediaSound) {
+        await stopMediaPlayback();
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        shouldDuckAndroid: true,
+        staysActiveInBackground: false,
+      });
+
+      const { sound } = await Audio.Sound.createAsync({ uri: attachment.url });
+      setCurrentMediaSound(sound);
+      setPlayingMediaId(attachment.id);
+
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (!status.isLoaded) return;
+
+        if (status.didJustFinish) {
+          sound.unloadAsync().catch(() => undefined);
+          setCurrentMediaSound(null);
+          setPlayingMediaId(null);
+        }
+      });
+
+      await sound.playAsync();
+    } catch (playError) {
+      console.error('Error playing media attachment:', playError);
+      setCurrentMediaSound(null);
+      setPlayingMediaId(null);
+      Alert.alert(
+        'Unable to play audio',
+        'This voice message could not be played in the app. You can open the file instead.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Open',
+            onPress: () => {
+              openAttachment(attachment.url).catch(() => undefined);
+            },
+          },
+        ]
+      );
+    }
+  };
+
+  const renderAttachment = (attachment: SmsMediaAttachment, isOutbound: boolean) => {
+    const textColor = isOutbound ? '#FFFFFF' : '#0F172A';
+    const secondaryTextColor = isOutbound ? 'rgba(255, 255, 255, 0.75)' : '#64748B';
+    const cardStyle = isOutbound ? smsStyles.outboundAttachmentCard : smsStyles.inboundAttachmentCard;
+    const actionStyle = isOutbound ? smsStyles.outboundAttachmentAction : smsStyles.inboundAttachmentAction;
+    const actionTextStyle = isOutbound ? smsStyles.outboundAttachmentActionText : smsStyles.inboundAttachmentActionText;
+    const isPlaying = playingMediaId === attachment.id;
+
+    if (attachment.kind === 'image') {
+      return (
+        <TouchableOpacity
+          key={attachment.id}
+          activeOpacity={0.85}
+          style={smsStyles.imageAttachmentWrap}
+          onPress={() => setExpandedImageUrl(attachment.url)}
+        >
+          <Image source={{ uri: attachment.url }} style={smsStyles.imageAttachment} resizeMode="cover" />
+          <View style={smsStyles.imageAttachmentBadge}>
+            <Text style={smsStyles.imageAttachmentBadgeText}>Photo</Text>
+          </View>
+          <View style={[smsStyles.imageAttachmentOverlay, isOutbound && smsStyles.outboundImageAttachmentOverlay]}>
+            <Ionicons name="expand-outline" size={14} color="#FFFFFF" />
+            <Text style={smsStyles.imageAttachmentOverlayText}>Open photo</Text>
+          </View>
+        </TouchableOpacity>
+      );
+    }
+
+    return (
+      <View key={attachment.id} style={[smsStyles.attachmentCard, cardStyle]}>
+        <View style={smsStyles.attachmentHeader}>
+          <Ionicons name={getAttachmentIcon(attachment)} size={18} color={textColor} />
+          <View style={smsStyles.attachmentTextWrap}>
+            <Text style={[smsStyles.attachmentTitle, { color: textColor }]}>{getAttachmentTitle(attachment)}</Text>
+            {!!formatAttachmentMeta(attachment) && (
+              <Text style={[smsStyles.attachmentMeta, { color: secondaryTextColor }]}>
+                {formatAttachmentMeta(attachment)}
+              </Text>
+            )}
+          </View>
+        </View>
+
+        <View style={smsStyles.attachmentActions}>
+          {attachment.kind === 'audio' ? (
+            <TouchableOpacity
+              style={[smsStyles.attachmentAction, actionStyle]}
+              onPress={() => toggleAudioAttachment(attachment)}
+            >
+              <Text style={[smsStyles.attachmentActionText, actionTextStyle]}>
+                {isPlaying ? 'Stop' : 'Play'}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+
+          <TouchableOpacity
+            style={[smsStyles.attachmentAction, actionStyle]}
+            onPress={() => {
+              openAttachment(attachment.url).catch(() => undefined);
+            }}
+          >
+            <Text style={[smsStyles.attachmentActionText, actionTextStyle]}>
+              {attachment.kind === 'audio' ? 'Open' : attachment.kind === 'video' ? 'Open video' : 'Open'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
   const renderMessage = ({ item }: { item: SmsMessage }) => {
     const isOutbound = item.direction === 'outbound';
+    const mediaAttachments = getSmsMessageMedia(item);
+    const messageText = item.message_text?.trim() || '';
+    const shouldShowFallbackText = !messageText && mediaAttachments.length > 1;
+    const fallbackText = shouldShowFallbackText ? getSmsMediaFallbackLabel(mediaAttachments) : '';
+    const displayText = messageText || fallbackText;
+    const isFallbackText = !messageText && !!displayText;
 
     return (
       <View
@@ -261,14 +484,24 @@ export function SmsMessaging({
             isOutbound ? smsStyles.outboundBubble : smsStyles.inboundBubble,
           ]}
         >
-          <Text
-            style={[
-              smsStyles.messageText,
-              isOutbound ? smsStyles.outboundText : smsStyles.inboundText,
-            ]}
-          >
-            {item.message_text}
-          </Text>
+          {displayText ? (
+            <Text
+              style={[
+                smsStyles.messageText,
+                isOutbound ? smsStyles.outboundText : smsStyles.inboundText,
+                isFallbackText && smsStyles.messageFallbackText,
+              ]}
+            >
+              {displayText}
+            </Text>
+          ) : null}
+
+          {mediaAttachments.length > 0 ? (
+            <View style={[smsStyles.mediaAttachments, displayText ? smsStyles.mediaAttachmentsWithText : null]}>
+              {mediaAttachments.map((attachment) => renderAttachment(attachment, isOutbound))}
+            </View>
+          ) : null}
+
           <View style={smsStyles.messageFooter}>
             <Text
               style={[
@@ -307,15 +540,17 @@ export function SmsMessaging({
       keyboardVerticalOffset={Platform.OS === 'ios' ? 240 : 0}
     >
       {/* Header */}
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={smsStyles.header}>
-          <Ionicons name="chatbubbles" size={20} color="#7C3AED" />
-          <View style={smsStyles.headerInfo}>
-            <Text style={smsStyles.headerName}>{leadName}</Text>
-            <Text style={smsStyles.headerPhone}>{formatPhoneNumber(leadPhone)}</Text>
+      {showHeader ? (
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={smsStyles.header}>
+            <Ionicons name="chatbubbles" size={20} color="#7C3AED" />
+            <View style={smsStyles.headerInfo}>
+              <Text style={smsStyles.headerName}>{leadName}</Text>
+              <Text style={smsStyles.headerPhone}>{formatPhoneNumber(leadPhone)}</Text>
+            </View>
           </View>
-        </View>
-      </TouchableWithoutFeedback>
+        </TouchableWithoutFeedback>
+      ) : null}
 
       {/* Error Banner */}
       {error && (
@@ -344,6 +579,7 @@ export function SmsMessaging({
         keyExtractor={(item) => item.id}
         renderItem={renderMessage}
         contentContainerStyle={smsStyles.messagesList}
+        extraData={playingMediaId}
         keyboardShouldPersistTaps="handled"
         onScrollBeginDrag={Keyboard.dismiss}
         ListEmptyComponent={
@@ -383,6 +619,24 @@ export function SmsMessaging({
           )}
         </TouchableOpacity>
       </View>
+
+      <Modal visible={!!expandedImageUrl} transparent animationType="fade">
+        <View style={smsStyles.fullScreenOverlay}>
+          <TouchableOpacity
+            style={smsStyles.fullScreenClose}
+            onPress={() => setExpandedImageUrl(null)}
+          >
+            <Ionicons name="close" size={28} color="#FFFFFF" />
+          </TouchableOpacity>
+          {expandedImageUrl ? (
+            <Image
+              source={{ uri: expandedImageUrl }}
+              style={smsStyles.fullScreenImage}
+              resizeMode="contain"
+            />
+          ) : null}
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -461,11 +715,12 @@ const smsStyles = StyleSheet.create({
   messagesList: {
     paddingHorizontal: 12,
     paddingVertical: 16,
+    paddingBottom: 24,
     flexGrow: 1,
   },
   messageBubbleContainer: {
     marginBottom: 8,
-    maxWidth: '80%',
+    maxWidth: '84%',
   },
   outboundContainer: {
     alignSelf: 'flex-end',
@@ -492,11 +747,122 @@ const smsStyles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
   },
+  messageFallbackText: {
+    fontStyle: 'italic',
+  },
   outboundText: {
     color: '#FFFFFF',
   },
   inboundText: {
     color: '#1E293B',
+  },
+  mediaAttachments: {
+    gap: 8,
+  },
+  mediaAttachmentsWithText: {
+    marginTop: 8,
+  },
+  imageAttachmentWrap: {
+    width: 180,
+    height: 140,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#E2E8F0',
+  },
+  imageAttachment: {
+    width: '100%',
+    height: '100%',
+  },
+  imageAttachmentBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(15, 23, 42, 0.72)',
+  },
+  imageAttachmentBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  imageAttachmentOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+  },
+  outboundImageAttachmentOverlay: {
+    backgroundColor: 'rgba(76, 29, 149, 0.55)',
+  },
+  imageAttachmentOverlayText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  attachmentCard: {
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 10,
+    minWidth: 220,
+  },
+  inboundAttachmentCard: {
+    backgroundColor: '#F8FAFC',
+  },
+  outboundAttachmentCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  attachmentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  attachmentTextWrap: {
+    flex: 1,
+  },
+  attachmentTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  attachmentMeta: {
+    marginTop: 2,
+    fontSize: 12,
+  },
+  attachmentActions: {
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    gap: 8,
+  },
+  attachmentAction: {
+    minWidth: 84,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  inboundAttachmentAction: {
+    backgroundColor: '#E2E8F0',
+  },
+  outboundAttachmentAction: {
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  attachmentActionText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  inboundAttachmentActionText: {
+    color: '#1E293B',
+  },
+  outboundAttachmentActionText: {
+    color: '#FFFFFF',
   },
   messageFooter: {
     flexDirection: 'row',
@@ -565,6 +931,23 @@ const smsStyles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: '#CBD5E1',
+  },
+  fullScreenOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.96)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullScreenClose: {
+    position: 'absolute',
+    top: 48,
+    right: 16,
+    zIndex: 10,
+    padding: 8,
+  },
+  fullScreenImage: {
+    width: '100%',
+    height: '100%',
   },
 });
 

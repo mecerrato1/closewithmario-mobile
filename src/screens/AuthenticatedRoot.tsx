@@ -7,6 +7,7 @@ import QuickCaptureTab from '../features/quickCapture/QuickCaptureTab';
 import RealtorsTabScreen from './tabs/RealtorsTabScreen';
 import LoanOfficersTabScreen from './tabs/LoanOfficersTabScreen';
 import CalculatorTabScreen from './tabs/CalculatorTabScreen';
+import MessagesTabScreen from './tabs/MessagesTabScreen';
 import { getUserRole, type UserRole } from '../lib/roles';
 
 interface AuthenticatedRootProps {
@@ -134,6 +135,13 @@ export default function AuthenticatedRoot({
         );
       case 'calculator':
         return <CalculatorTabScreen onNavigateToLeads={handleNavigateToDashboard} />;
+      case 'messages':
+        return (
+          <MessagesTabScreen
+            session={session}
+            onNavigateToLead={handleNavigateToLead}
+          />
+        );
       default:
         return null;
     }

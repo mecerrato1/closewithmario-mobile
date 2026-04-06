@@ -5,7 +5,7 @@ import { useThemeColors } from '../../styles/theme';
 
 import type { UserRole } from '../../lib/roles';
 
-export type TabKey = 'leads' | 'captures' | 'realtors' | 'loan_officers' | 'calculator';
+export type TabKey = 'leads' | 'captures' | 'realtors' | 'loan_officers' | 'messages' | 'calculator';
 
 interface Tab {
   key: TabKey;
@@ -18,6 +18,7 @@ const DEFAULT_TABS: Tab[] = [
   { key: 'leads', label: 'Leads', icon: '📋' },
   { key: 'captures', label: 'Quick Leads', icon: '⚡' },
   { key: 'realtors', label: 'Realtors', icon: '🧑‍💼' },
+  { key: 'messages', label: 'Messages', icon: '💬' },
   { key: 'calculator', label: 'Calculator', iconImage: require('../../../assets/MortgageCalc.png') },
 ];
 
@@ -25,6 +26,7 @@ const REALTOR_TABS: Tab[] = [
   { key: 'leads', label: 'Leads', icon: '📋' },
   { key: 'captures', label: 'Quick Leads', icon: '⚡' },
   { key: 'loan_officers', label: 'Loan Officers', icon: '👔' },
+  { key: 'messages', label: 'Messages', icon: '💬' },
   { key: 'calculator', label: 'Calculator', iconImage: require('../../../assets/MortgageCalc.png') },
 ];
 
@@ -55,6 +57,9 @@ export default function BottomTabs({ activeTab, onTabChange, userRole }: BottomT
               <Text style={styles.icon}>{tab.icon}</Text>
             )}
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
               style={[
                 styles.label,
                 { color: isActive ? '#7C3AED' : colors.textSecondary },
@@ -97,6 +102,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 11,
     fontWeight: '500',
+    textAlign: 'center',
   },
   labelActive: {
     fontWeight: '700',
