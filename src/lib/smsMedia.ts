@@ -18,10 +18,28 @@ export interface SmsMediaAttachment {
   kind: 'audio' | 'image' | 'video' | 'other';
 }
 
+export interface SmsVoiceSummary {
+  one_sentence_summary?: string | null;
+  caller_intent?: string | null;
+  urgency?: string | null;
+  requested_callback_time?: string | null;
+  mentions_docs?: boolean | null;
+  mentions_property?: boolean | null;
+  confidence?: number | null;
+  media_content_type?: string | null;
+  transcription_model?: string | null;
+  extraction_model?: string | null;
+}
+
 interface SmsMessageLike {
   id?: string;
   message_text?: string | null;
   raw_payload?: SmsRawPayload | string | null;
+  voice_transcription_status?: string | null;
+  voice_transcript?: string | null;
+  voice_summary?: SmsVoiceSummary | string | null;
+  voice_transcribed_at?: string | null;
+  voice_transcription_error?: string | null;
 }
 
 const IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'heic', 'heif']);
@@ -102,9 +120,59 @@ export function getSmsMediaFallbackLabel(attachments: SmsMediaAttachment[]) {
   }
 }
 
+export function parseSmsVoiceSummary(
+  voiceSummary: SmsMessageLike['voice_summary']
+): SmsVoiceSummary | null {
+  if (!voiceSummary) return null;
+
+  if (typeof voiceSummary === 'string') {
+    try {
+      const parsed = JSON.parse(voiceSummary);
+      return parsed && typeof parsed === 'object' ? (parsed as SmsVoiceSummary) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return typeof voiceSummary === 'object' ? voiceSummary : null;
+}
+
+export function getSmsVoiceTranscriptionStatus(message: SmsMessageLike) {
+  return message.voice_transcription_status?.trim().toLowerCase() || null;
+}
+
+export function getSmsVoiceTranscript(message: SmsMessageLike) {
+  return message.voice_transcript?.trim() || '';
+}
+
+export function hasSmsAudioAttachment(message: SmsMessageLike) {
+  return getSmsMessageMedia(message).some((attachment) => attachment.kind === 'audio');
+}
+
 export function getSmsMessagePreviewText(message: SmsMessageLike) {
   const messageText = message.message_text?.trim() || '';
   if (messageText) return messageText;
+
+  const hasAudio = hasSmsAudioAttachment(message);
+  const voiceStatus = getSmsVoiceTranscriptionStatus(message);
+  const voiceSummary = parseSmsVoiceSummary(message.voice_summary);
+  const voiceTranscript = getSmsVoiceTranscript(message);
+
+  if (hasAudio) {
+    if ((voiceStatus === 'pending' || voiceStatus === 'processing')) {
+      return 'Transcribing voice message...';
+    }
+
+    if (voiceStatus === 'completed') {
+      if (voiceSummary?.one_sentence_summary?.trim()) {
+        return voiceSummary.one_sentence_summary.trim();
+      }
+
+      if (voiceTranscript) {
+        return voiceTranscript;
+      }
+    }
+  }
 
   const attachments = getSmsMessageMedia(message);
   return attachments.length > 0 ? getSmsMediaFallbackLabel(attachments) : '';

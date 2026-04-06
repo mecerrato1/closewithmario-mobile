@@ -16,7 +16,12 @@ import { supabase } from '../../lib/supabase';
 import { canSeeAllLeads, getUserRole, getUserTeamMemberId } from '../../lib/roles';
 import { useThemeColors } from '../../styles/theme';
 import { SmsMessaging } from '../../components/SmsMessaging';
-import { getSmsMessageMedia, getSmsMessagePreviewText, type SmsRawPayload } from '../../lib/smsMedia';
+import {
+  getSmsMessageMedia,
+  getSmsMessagePreviewText,
+  type SmsRawPayload,
+  type SmsVoiceSummary,
+} from '../../lib/smsMedia';
 
 type ThreadSource = 'lead' | 'meta';
 type FilterMode = 'all' | 'unread';
@@ -51,6 +56,11 @@ interface SmsMessageRow {
   created_at: string;
   read_at?: string | null;
   raw_payload?: SmsRawPayload | string | null;
+  voice_transcription_status?: string | null;
+  voice_transcript?: string | null;
+  voice_summary?: SmsVoiceSummary | string | null;
+  voice_transcribed_at?: string | null;
+  voice_transcription_error?: string | null;
 }
 
 interface ConversationSummary {
@@ -199,7 +209,7 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
 
         const { data: messageRows, error: messageError } = await supabase
           .from('sms_messages')
-          .select('id, lead_id, direction, message_text, created_at, read_at, raw_payload')
+          .select('id, lead_id, direction, message_text, created_at, read_at, raw_payload, voice_transcription_status, voice_transcript, voice_summary, voice_transcribed_at, voice_transcription_error')
           .in('lead_id', accessibleLeadIds)
           .order('created_at', { ascending: false });
 

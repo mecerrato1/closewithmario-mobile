@@ -18,12 +18,19 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio, InterruptionModeIOS } from 'expo-av';
+import { File as FSFile, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { supabase } from '../lib/supabase';
 import {
+  getSmsVoiceTranscript,
+  getSmsVoiceTranscriptionStatus,
+  hasSmsAudioAttachment,
   getSmsMessageMedia,
   getSmsMediaFallbackLabel,
+  parseSmsVoiceSummary,
   type SmsMediaAttachment,
   type SmsRawPayload,
+  type SmsVoiceSummary,
 } from '../lib/smsMedia';
 
 interface SmsMessage {
@@ -37,6 +44,19 @@ interface SmsMessage {
   received_at?: string;
   status?: string;
   raw_payload?: SmsRawPayload | string | null;
+  voice_transcription_status?: string | null;
+  voice_transcript?: string | null;
+  voice_summary?: SmsVoiceSummary | string | null;
+  voice_transcribed_at?: string | null;
+  voice_transcription_error?: string | null;
+}
+
+function formatVoiceMetaValue(value: string) {
+  return value
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 function getAttachmentTitle(attachment: SmsMediaAttachment) {
@@ -114,6 +134,7 @@ export function SmsMessaging({
   const [currentMediaSound, setCurrentMediaSound] = useState<Audio.Sound | null>(null);
   const [playingMediaId, setPlayingMediaId] = useState<string | null>(null);
   const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
+  const [sharingImage, setSharingImage] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const isSmsOptedOut = !!smsOptedOut || smsOptIn === false;
 
@@ -192,7 +213,7 @@ export function SmsMessaging({
       setError(null);
       const { data, error: fetchError } = await supabase
         .from('sms_messages')
-        .select('*')
+        .select('id, direction, from_number, to_number, message_text, created_at, sent_at, received_at, status, raw_payload, voice_transcription_status, voice_transcript, voice_summary, voice_transcribed_at, voice_transcription_error')
         .eq('lead_id', leadId)
         .order('created_at', { ascending: true });
 
@@ -317,6 +338,33 @@ export function SmsMessaging({
     } catch (openError) {
       console.error('Error opening media attachment:', openError);
       Alert.alert('Unable to open attachment', 'This media attachment could not be opened right now.');
+    }
+  };
+
+  const shareExpandedImage = async () => {
+    if (!expandedImageUrl || sharingImage) return;
+
+    try {
+      setSharingImage(true);
+
+      const sharingAvailable = await Sharing.isAvailableAsync();
+      if (!sharingAvailable) {
+        Alert.alert('Sharing unavailable', 'This device cannot open the share sheet right now.');
+        return;
+      }
+
+      const downloadedFile = await FSFile.downloadFileAsync(expandedImageUrl, Paths.cache, {
+        idempotent: true,
+      });
+
+      await Sharing.shareAsync(downloadedFile.uri, {
+        UTI: 'public.image',
+      });
+    } catch (shareError) {
+      console.error('Error sharing image attachment:', shareError);
+      Alert.alert('Unable to share image', 'This photo could not be prepared for sharing right now.');
+    } finally {
+      setSharingImage(false);
     }
   };
 
@@ -462,6 +510,110 @@ export function SmsMessaging({
     );
   };
 
+  const renderVoiceAnalysis = (item: SmsMessage, isOutbound: boolean) => {
+    if (!hasSmsAudioAttachment(item)) return null;
+
+    const voiceStatus = getSmsVoiceTranscriptionStatus(item);
+    const voiceSummary = parseSmsVoiceSummary(item.voice_summary);
+    const voiceTranscript = getSmsVoiceTranscript(item);
+    const summaryText = voiceSummary?.one_sentence_summary?.trim() || '';
+    const urgency = voiceSummary?.urgency?.trim() || '';
+    const requestedCallbackTime = voiceSummary?.requested_callback_time?.trim() || '';
+    const mentionsDocs = voiceSummary?.mentions_docs === true;
+    const mentionsProperty = voiceSummary?.mentions_property === true;
+    const transcriptionError = item.voice_transcription_error?.trim() || '';
+
+    const analysisCardStyle = isOutbound ? smsStyles.outboundVoiceInsightCard : smsStyles.inboundVoiceInsightCard;
+    const titleColor = isOutbound ? '#FFFFFF' : '#0F172A';
+    const bodyColor = isOutbound ? 'rgba(255, 255, 255, 0.92)' : '#334155';
+    const secondaryColor = isOutbound ? 'rgba(255, 255, 255, 0.76)' : '#64748B';
+    const chipStyle = isOutbound ? smsStyles.outboundVoiceChip : smsStyles.inboundVoiceChip;
+    const chipTextStyle = isOutbound ? smsStyles.outboundVoiceChipText : smsStyles.inboundVoiceChipText;
+
+    if (voiceStatus === 'pending' || voiceStatus === 'processing') {
+      return (
+        <View style={[smsStyles.voiceInsightCard, analysisCardStyle]}>
+          <View style={smsStyles.voiceInsightHeaderRow}>
+            <ActivityIndicator size="small" color={isOutbound ? '#FFFFFF' : '#7C3AED'} />
+            <Text style={[smsStyles.voiceInsightTitle, { color: titleColor }]}>
+              Transcribing this voice message...
+            </Text>
+          </View>
+          <Text style={[smsStyles.voiceInsightBody, { color: secondaryColor }]}>
+            We&apos;ll show the transcript here once processing finishes.
+          </Text>
+        </View>
+      );
+    }
+
+    if (voiceStatus === 'failed') {
+      return (
+        <View style={[smsStyles.voiceInsightCard, analysisCardStyle]}>
+          <View style={smsStyles.voiceInsightHeaderRow}>
+            <Ionicons name="alert-circle-outline" size={16} color={isOutbound ? '#FFFFFF' : '#DC2626'} />
+            <Text style={[smsStyles.voiceInsightTitle, { color: titleColor }]}>
+              Voice transcript unavailable
+            </Text>
+          </View>
+          <Text style={[smsStyles.voiceInsightBody, { color: bodyColor }]}>
+            We couldn&apos;t transcribe this voice message yet.
+          </Text>
+          {transcriptionError ? (
+            <Text style={[smsStyles.voiceInsightFootnote, { color: secondaryColor }]} numberOfLines={2}>
+              {transcriptionError}
+            </Text>
+          ) : null}
+        </View>
+      );
+    }
+
+    if (voiceStatus !== 'completed' || (!summaryText && !voiceTranscript)) {
+      return null;
+    }
+
+    const chips: string[] = [];
+    if (urgency) chips.push(`Urgency: ${formatVoiceMetaValue(urgency)}`);
+    if (requestedCallbackTime) chips.push(requestedCallbackTime);
+    if (mentionsDocs) chips.push('Docs mentioned');
+    if (mentionsProperty) chips.push('Property mentioned');
+
+    return (
+      <View style={[smsStyles.voiceInsightCard, analysisCardStyle]}>
+        <View style={smsStyles.voiceInsightHeaderRow}>
+          <Ionicons name="sparkles-outline" size={16} color={isOutbound ? '#FFFFFF' : '#7C3AED'} />
+          <Text style={[smsStyles.voiceInsightTitle, { color: titleColor }]}>
+            Voice note
+          </Text>
+        </View>
+
+        {summaryText ? (
+          <Text style={[smsStyles.voiceInsightSummary, { color: titleColor }]}>
+            {summaryText}
+          </Text>
+        ) : null}
+
+        {chips.length > 0 ? (
+          <View style={smsStyles.voiceChipRow}>
+            {chips.map((chip) => (
+              <View key={chip} style={[smsStyles.voiceChip, chipStyle]}>
+                <Text style={[smsStyles.voiceChipText, chipTextStyle]}>{chip}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
+        {voiceTranscript ? (
+          <View style={smsStyles.voiceTranscriptWrap}>
+            <Text style={[smsStyles.voiceTranscriptLabel, { color: secondaryColor }]}>Transcript</Text>
+            <Text style={[smsStyles.voiceInsightBody, { color: bodyColor }]}>
+              {voiceTranscript}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    );
+  };
+
   const renderMessage = ({ item }: { item: SmsMessage }) => {
     const isOutbound = item.direction === 'outbound';
     const mediaAttachments = getSmsMessageMedia(item);
@@ -501,6 +653,8 @@ export function SmsMessaging({
               {mediaAttachments.map((attachment) => renderAttachment(attachment, isOutbound))}
             </View>
           ) : null}
+
+          {renderVoiceAnalysis(item, isOutbound)}
 
           <View style={smsStyles.messageFooter}>
             <Text
@@ -623,7 +777,20 @@ export function SmsMessaging({
       <Modal visible={!!expandedImageUrl} transparent animationType="fade">
         <View style={smsStyles.fullScreenOverlay}>
           <TouchableOpacity
-            style={smsStyles.fullScreenClose}
+            style={[smsStyles.fullScreenActionButton, smsStyles.fullScreenShareButton]}
+            onPress={() => {
+              shareExpandedImage().catch(() => undefined);
+            }}
+            disabled={sharingImage}
+          >
+            {sharingImage ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Ionicons name="share-outline" size={24} color="#FFFFFF" />
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[smsStyles.fullScreenActionButton, smsStyles.fullScreenClose]}
             onPress={() => setExpandedImageUrl(null)}
           >
             <Ionicons name="close" size={28} color="#FFFFFF" />
@@ -864,6 +1031,78 @@ const smsStyles = StyleSheet.create({
   outboundAttachmentActionText: {
     color: '#FFFFFF',
   },
+  voiceInsightCard: {
+    marginTop: 8,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+  },
+  inboundVoiceInsightCard: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  outboundVoiceInsightCard: {
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  voiceInsightHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  voiceInsightTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  voiceInsightSummary: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+  },
+  voiceInsightBody: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  voiceInsightFootnote: {
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  voiceChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  voiceChip: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  inboundVoiceChip: {
+    backgroundColor: '#EDE9FE',
+  },
+  outboundVoiceChip: {
+    backgroundColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  voiceChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  inboundVoiceChipText: {
+    color: '#6D28D9',
+  },
+  outboundVoiceChipText: {
+    color: '#FFFFFF',
+  },
+  voiceTranscriptWrap: {
+    gap: 4,
+  },
+  voiceTranscriptLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    textTransform: 'uppercase',
+  },
   messageFooter: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -944,6 +1183,20 @@ const smsStyles = StyleSheet.create({
     right: 16,
     zIndex: 10,
     padding: 8,
+  },
+  fullScreenActionButton: {
+    position: 'absolute',
+    top: 48,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(15, 23, 42, 0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fullScreenShareButton: {
+    left: 16,
   },
   fullScreenImage: {
     width: '100%',
