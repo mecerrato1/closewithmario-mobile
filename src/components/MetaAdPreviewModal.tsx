@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Audio, InterruptionModeIOS, ResizeMode, Video, type AVPlaybackStatus } from 'expo-av';
 import { WebView } from 'react-native-webview';
+import { supabase } from '../lib/supabase';
 import { useThemeColors } from '../styles/theme';
 
 const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || 'https://www.closewithmario.com').replace(/\/$/, '');
@@ -215,12 +216,6 @@ export function MetaAdPreviewModal({
       setLoading(false);
       return;
     }
-    if (!accessToken) {
-      setData(null);
-      setError('Your session expired. Please sign in again.');
-      setLoading(false);
-      return;
-    }
 
     let cancelled = false;
 
@@ -233,11 +228,44 @@ export function MetaAdPreviewModal({
         const query = new URLSearchParams({ adId });
         if (platform) query.set('platform', platform);
 
-        const response = await fetch(`${API_BASE_URL}/api/meta-ad-preview?${query.toString()}`, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
+        const getAccessToken = async () => {
+          if (accessToken) return accessToken;
+
+          let {
+            data: { session },
+          } = await supabase.auth.getSession();
+
+          if (!session?.access_token) {
+            const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+            if (refreshError || !refreshed.session?.access_token) {
+              throw new Error('Your session expired. Please sign in again.');
+            }
+            session = refreshed.session;
+          }
+
+          return session.access_token;
+        };
+
+        const makeRequest = async (token: string) =>
+          fetch(`${API_BASE_URL}/api/meta-ad-preview?${query.toString()}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+
+        let token = await getAccessToken();
+        let response = await makeRequest(token);
+
+        if (response.status === 401) {
+          const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+          if (refreshError || !refreshed.session?.access_token) {
+            throw new Error('Your session expired. Please sign in again.');
+          }
+
+          token = refreshed.session.access_token;
+          response = await makeRequest(token);
+        }
+
         const payload = await response.json().catch(() => null);
 
         if (!response.ok) {
