@@ -66,6 +66,7 @@ export type MetaLead = {
   last_contact_date?: string | null;
   lo_id?: string | null;
   realtor_id?: string | null;
+  ad_id?: string | null;
   platform: string | null;
   campaign_name: string | null;
   ad_name?: string | null;

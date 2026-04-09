@@ -43,6 +43,7 @@ import { SmsMessaging } from '../components/SmsMessaging';
 import { toggleLeadTracking, updateTrackingNote, getTrackingReasonLabel } from '../lib/supabase/leadTracking';
 import { AiRewriteToolbar, AiRewriteToolbarRef } from '../components/AiRewriteToolbar';
 import { ReferralAgreementsSection } from '../components/ReferralAgreementsSection';
+import { MetaAdPreviewModal } from '../components/MetaAdPreviewModal';
 
 const PLUM = '#4C1D95';
 const HTML_TAG_PATTERN = /<[a-z][\s\S]*>/i;
@@ -3103,7 +3104,7 @@ export function LeadDetailView({
                   <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                     Ad Name: {(record as MetaLead).ad_name}
                   </Text>
-                  {adImage && (
+                  {((record as MetaLead).ad_id || adImage) && (
                     <TouchableOpacity 
                       style={styles.viewAdButton}
                       onPress={() => setShowAdImage(true)}
@@ -3762,34 +3763,16 @@ export function LeadDetailView({
       </ScrollView>
       )}
 
-      {/* Ad Image Modal */}
-      {adImage && (
-        <Modal
-          visible={showAdImage}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowAdImage(false)}
-        >
-          <View style={styles.adImageModalOverlay}>
-            <TouchableOpacity 
-              style={styles.adImageModalClose}
-              onPress={() => setShowAdImage(false)}
-              activeOpacity={0.9}
-            >
-              <View style={styles.adImageModalCloseButton}>
-                <Text style={styles.adImageModalCloseText}>✕</Text>
-              </View>
-            </TouchableOpacity>
-            <View style={styles.adImageModalContent}>
-              <Image 
-                source={adImage}
-                style={styles.adImageFull}
-                resizeMode="contain"
-              />
-            </View>
-          </View>
-        </Modal>
-      )}
+      <MetaAdPreviewModal
+        visible={showAdImage}
+        onClose={() => setShowAdImage(false)}
+        accessToken={session?.access_token}
+        adId={isMeta ? (record as MetaLead | undefined)?.ad_id ?? null : null}
+        platform={isMeta ? (record as MetaLead | undefined)?.platform ?? null : null}
+        adName={isMeta ? (record as MetaLead | undefined)?.ad_name ?? null : null}
+        campaignName={isMeta ? (record as MetaLead | undefined)?.campaign_name ?? null : null}
+        fallbackImage={adImage}
+      />
 
       {/* Text Template Modal */}
       <Modal
