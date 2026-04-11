@@ -88,6 +88,9 @@ type LeadsScreenProps = {
   onNavigateToCapture?: (captureId: string) => void;
 };
 
+const LEAD_SELECT_FIELDS =
+  'id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, loan_amount, down_payment, credit_score, ltv, interest_rate, message, lo_id, realtor_id, source, source_detail, subject_address, subject_city, subject_state, subject_county, subject_zipcode, xml_property_type, occupancy_type, mortgage_type, amortization_type, loan_term_months, lender_loan_number, estimated_closing_costs, employer_name, employment_title, employment_start_date, employment_monthly_income, self_employed, marital_status, dependent_count, citizenship_status, current_housing_type, current_housing_payment, originator_name, originator_company, originator_license, originator_email, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary, metadata';
+
 function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandled, defaultToMyLeads, skipDashboard, onNavigateToCapture }: LeadsScreenProps) {
   const { colors, isDark } = useThemeColors();
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -374,15 +377,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         // Build queries
         let leadsQuery = supabase
           .from('leads')
-          .select(
-            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id, source, source_detail, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary, metadata'
-          )
+          .select(LEAD_SELECT_FIELDS)
           .order('created_at', { ascending: false });
 
         let metaQuery = supabase
           .from('meta_ads')
           .select(
-            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, ad_id, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, source_detail, loan_purpose, county_interest, monthly_income, meta_ad_notes, form_data, lo_id, realtor_id, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary'
+            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, ad_id, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, source_detail, loan_purpose, county_interest, monthly_income, meta_ad_notes, form_data, metadata, lo_id, realtor_id, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary'
           )
           .order('created_at', { ascending: false });
 
@@ -681,12 +682,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       
       let leadsQuery = supabase
         .from('leads')
-        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, down_payment, credit_score, message, lo_id, realtor_id, source, source_detail, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary, metadata')
+        .select(LEAD_SELECT_FIELDS)
         .order('created_at', { ascending: false });
 
       let metaQuery = supabase
         .from('meta_ads')
-        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, ad_id, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, source_detail, loan_purpose, county_interest, monthly_income, meta_ad_notes, form_data, lo_id, realtor_id, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary')
+        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, ad_id, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, source_detail, loan_purpose, county_interest, monthly_income, meta_ad_notes, form_data, metadata, lo_id, realtor_id, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary')
         .order('created_at', { ascending: false});
 
       if (!canSeeAllLeads(userRole)) {

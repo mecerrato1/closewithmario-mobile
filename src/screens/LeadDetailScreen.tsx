@@ -26,7 +26,7 @@ import { Session } from '@supabase/supabase-js';
 import { Audio, InterruptionModeIOS } from 'expo-av';
 import RenderHTML from 'react-native-render-html';
 import { WebView } from 'react-native-webview';
-import type { Lead, MetaLead, SelectedLeadRef, Activity, LoanOfficer, Realtor, TrackingReason, CoBorrowerInfo } from '../lib/types/leads';
+import type { Lead, MetaLead, SelectedLeadRef, Activity, LoanOfficer, Realtor, TrackingReason, CoBorrowerInfo, LoanOriginatorInfo } from '../lib/types/leads';
 import type { UserRole } from '../lib/roles';
 import { supabase } from '../lib/supabase';
 import { getUserRole, getUserTeamMemberId, canSeeAllLeads } from '../lib/roles';
@@ -48,6 +48,7 @@ import { MetaAdPreviewModal } from '../components/MetaAdPreviewModal';
 const PLUM = '#4C1D95';
 const HTML_TAG_PATTERN = /<[a-z][\s\S]*>/i;
 const HTML_TABLE_PATTERN = /<table[\s>]/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const EMAIL_HTML_IGNORED_TAGS = ['head', 'script', 'iframe', 'object', 'embed', 'form'];
 
@@ -137,6 +138,553 @@ const buildEmailHtmlDocument = (html: string) => `<!DOCTYPE html>
   </head>
   <body>${sanitizeEmailHtml(html)}</body>
 </html>`;
+
+type DetailSummaryRow = {
+  label: string;
+  value?: string | null;
+  valueColor?: string;
+};
+
+type DetailThemeColors = {
+  cardBackground: string;
+  border: string;
+  textPrimary: string;
+  textSecondary: string;
+};
+
+type MetadataItemCard = {
+  title: string;
+  subtitle?: string | null;
+  amount?: string | null;
+  rows?: DetailSummaryRow[];
+};
+
+type MetadataSection =
+  | {
+      key: string;
+      title: string;
+      kind: 'rows';
+      rows: DetailSummaryRow[];
+    }
+  | {
+      key: string;
+      title: string;
+      kind: 'items';
+      items: MetadataItemCard[];
+    }
+  | {
+      key: string;
+      title: string;
+      kind: 'text';
+      value: string;
+    };
+
+const EXCLUDED_LEAD_METADATA_KEYS = new Set([
+  'co_borrowers',
+  'loan_originator',
+  'has_co_borrower',
+  'import_date',
+  'import_source',
+  'mismo_version',
+  'xml_created_date',
+]);
+
+const HIDDEN_METADATA_FIELD_KEYS = new Set([
+  'accountIdentifier',
+  'qualificationField',
+]);
+
+const METADATA_SECTION_ORDER = [
+  'income_breakdown',
+  'housing_expense_summary',
+  'liability_summary',
+  'liabilities',
+  'discount_points_pct',
+  'discount_points_amount',
+];
+
+const METADATA_LABEL_MAP: Record<string, string> = {
+  holderName: 'Creditor',
+  liabilityTypeDescription: 'Type',
+  liabilityType: 'Type',
+  unpaidBalance: 'Balance',
+  monthlyPayment: 'Monthly Payment',
+  remainingTermMonths: 'Remaining Term',
+  includeInQualification: 'Counts Toward Qualifying',
+  exclusionReason: 'Exclusion Reason',
+  monthlyHoa: 'HOA',
+  monthlyInsurance: 'Insurance',
+  monthlyRealEstateTax: 'Real Estate Tax',
+  totalMonthlyDebt: 'Total Monthly Debt',
+  creditCardPayment: 'Credit Card Payments',
+  carPayment: 'Auto Payments',
+  installmentLoanPayment: 'Installment Payments',
+  otherDebtPayment: 'Other Debt',
+  studentLoanPayment: 'Student Loans',
+  otherMiscDebtPayment: 'Other Misc Debt',
+  mortgageRelatedPayment: 'Mortgage-Related Debt',
+  includedLiabilityCount: 'Included Liabilities',
+  excludedLiabilityCount: 'Excluded Liabilities',
+  payoffLiabilityCount: 'Payoff Liabilities',
+  amount: 'Amount',
+  description: 'Description',
+};
+
+const LIABILITY_SUMMARY_ORDER = [
+  'carPayment',
+  'creditCardPayment',
+  'installmentLoanPayment',
+  'otherDebtPayment',
+  'studentLoanPayment',
+  'otherMiscDebtPayment',
+  'totalMonthlyDebt',
+  'mortgageRelatedPayment',
+];
+
+const LIABILITY_SUMMARY_LABELS: Record<string, string> = {
+  carPayment: 'Auto / Lease',
+  creditCardPayment: 'Credit Cards',
+  installmentLoanPayment: 'Installment Loans',
+  otherDebtPayment: 'Other Debt',
+  studentLoanPayment: 'Student Loans',
+  otherMiscDebtPayment: 'Other Misc Debt',
+  totalMonthlyDebt: 'Counted Monthly Debt',
+  mortgageRelatedPayment: 'Mortgage-Related Liabilities',
+};
+
+const humanizeMetadataString = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return trimmed;
+  if (trimmed.includes('@') || /^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) return trimmed;
+  if (trimmed.includes('_') || trimmed.includes('/')) {
+    return trimmed
+      .split(/[_/]+/)
+      .map((part) => {
+        if (!part) return part;
+        if (/^[A-Z0-9-]+$/.test(part)) return part;
+        return part.charAt(0).toUpperCase() + part.slice(1).toLowerCase();
+      })
+      .join(' ');
+  }
+  if (/^[a-z][a-z\s-]*$/.test(trimmed)) {
+    return trimmed.replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+  return trimmed;
+};
+
+const hasDisplayValue = (value?: string | null) => typeof value === 'string' && value.trim().length > 0;
+
+const hasRenderableMetadataValue = (value: unknown): boolean => {
+  if (value == null) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length > 0;
+  return true;
+};
+
+const formatMetadataKeyLabel = (key: string) =>
+  (METADATA_LABEL_MAP[key] || key)
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const formatCurrencyValue = (value?: number | null, options?: { minimumFractionDigits?: number; maximumFractionDigits?: number }) => {
+  if (value == null || Number.isNaN(Number(value))) return null;
+  const numberValue = Number(value);
+  const hasCents = Math.abs(numberValue % 1) > 0.0001;
+  const minimumFractionDigits = options?.minimumFractionDigits ?? (hasCents ? 2 : 0);
+  const maximumFractionDigits = options?.maximumFractionDigits ?? (hasCents ? 2 : 0);
+  return `$${numberValue.toLocaleString(undefined, { minimumFractionDigits, maximumFractionDigits })}`;
+};
+
+const formatPercentValue = (value?: number | null) => {
+  if (value == null || Number.isNaN(Number(value))) return null;
+  return `${Number(value).toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}%`;
+};
+
+const formatCountValue = (value?: number | null) => {
+  if (value == null || Number.isNaN(Number(value))) return null;
+  return Number(value).toLocaleString();
+};
+
+const formatMetadataDisplayValue = (key: string, value: unknown): string | null => {
+  if (!hasRenderableMetadataValue(value)) return null;
+
+  if (typeof value === 'boolean') {
+    return value ? 'Yes' : 'No';
+  }
+
+  if (typeof value === 'number') {
+    const normalizedKey = key.toLowerCase();
+    if (/(amount|payment|balance|cost|income|tax|insurance|hoa|debt)/.test(normalizedKey)) {
+      return formatCurrencyValue(value, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    }
+    if (/(pct|percent|rate)/.test(normalizedKey)) {
+      return `${value.toLocaleString(undefined, { maximumFractionDigits: 3 })}%`;
+    }
+    return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+
+  if (typeof value === 'string') {
+    return humanizeMetadataString(value);
+  }
+
+  return JSON.stringify(value, null, 2);
+};
+
+const buildMetadataRowsFromObject = (
+  objectValue: Record<string, unknown>,
+  options?: { omitKeys?: string[] }
+): DetailSummaryRow[] => {
+  const omitKeys = new Set(options?.omitKeys || []);
+  const rows: DetailSummaryRow[] = [];
+
+  for (const [key, value] of Object.entries(objectValue)) {
+    if (omitKeys.has(key) || HIDDEN_METADATA_FIELD_KEYS.has(key)) continue;
+    if (key === 'liabilityType' && hasRenderableMetadataValue(objectValue.liabilityTypeDescription)) continue;
+    if ((key === 'excluded' || key === 'payoff') && value === false) continue;
+    if (key === 'exclusionReason' && (!value || value === 'excluded')) continue;
+    if (!hasRenderableMetadataValue(value)) continue;
+
+    const displayValue =
+      key === 'remainingTermMonths' && typeof value === 'number'
+        ? `${value} months`
+        : formatMetadataDisplayValue(key, value);
+
+    if (!displayValue) continue;
+
+    rows.push({
+      label: formatMetadataKeyLabel(key),
+      value: displayValue,
+    });
+  }
+
+  return rows;
+};
+
+const buildLiabilitySummaryRows = (summaryValue: Record<string, unknown>): DetailSummaryRow[] => {
+  const rows: DetailSummaryRow[] = [];
+
+  for (const key of LIABILITY_SUMMARY_ORDER) {
+    const rawValue = summaryValue[key];
+    if (typeof rawValue !== 'number' || rawValue <= 0) continue;
+    const formattedValue = formatCurrencyValue(rawValue);
+    if (!formattedValue) continue;
+    rows.push({
+      label: LIABILITY_SUMMARY_LABELS[key] || formatMetadataKeyLabel(key),
+      value: `${formattedValue}/mo`,
+    });
+  }
+
+  return rows;
+};
+
+const buildImportedAccountItems = (liabilities: Array<Record<string, unknown>>): MetadataItemCard[] => {
+  const items: MetadataItemCard[] = [];
+
+  for (const item of liabilities) {
+    const title =
+      typeof item.holderName === 'string' && item.holderName.trim().length > 0
+        ? item.holderName.trim()
+        : null;
+    const paymentValue =
+      typeof item.monthlyPayment === 'number' && item.monthlyPayment > 0
+        ? formatCurrencyValue(item.monthlyPayment)
+        : null;
+    const subtitleParts = [
+      typeof item.liabilityType === 'string' ? humanizeMetadataString(item.liabilityType) : null,
+      typeof item.liabilityTypeDescription === 'string' ? humanizeMetadataString(item.liabilityTypeDescription) : null,
+    ].filter((part, index, self): part is string => Boolean(part) && self.indexOf(part) === index);
+
+    if (!title || !paymentValue) continue;
+
+    items.push({
+      title,
+      subtitle: subtitleParts.length > 0 ? subtitleParts.join(' · ') : null,
+      amount: `${paymentValue}/mo`,
+    });
+  }
+
+  return items;
+};
+
+const buildMetadataSections = (metadata?: Record<string, unknown> | null): MetadataSection[] => {
+  if (!metadata) return [];
+
+  const entries = Object.entries(metadata)
+    .filter(([key, value]) => !EXCLUDED_LEAD_METADATA_KEYS.has(key) && hasRenderableMetadataValue(value))
+    .sort(([a], [b]) => {
+      const aIndex = METADATA_SECTION_ORDER.indexOf(a);
+      const bIndex = METADATA_SECTION_ORDER.indexOf(b);
+      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+      if (aIndex !== -1) return -1;
+      if (bIndex !== -1) return 1;
+      return a.localeCompare(b);
+    });
+
+  return entries
+    .map(([key, value]) => {
+      const title = formatMetadataKeyLabel(key);
+
+      if (key === 'liability_summary' && value && typeof value === 'object' && !Array.isArray(value)) {
+        const rows = buildLiabilitySummaryRows(value as Record<string, unknown>);
+        return rows.length > 0 ? { key, title: 'Liabilities', kind: 'rows', rows } as MetadataSection : null;
+      }
+
+      if (key === 'liabilities' && Array.isArray(value)) {
+        return null;
+      }
+
+      if (Array.isArray(value)) {
+        if (value.every((entry) => entry && typeof entry === 'object' && !Array.isArray(entry))) {
+          const items: MetadataItemCard[] = [];
+
+          value.forEach((entry, index) => {
+            const item = entry as Record<string, unknown>;
+            const titleSource =
+              (typeof item.holderName === 'string' && item.holderName) ||
+              (typeof item.name === 'string' && item.name) ||
+              (typeof item.type === 'string' && humanizeMetadataString(item.type)) ||
+              `${title.slice(0, -1) || title} ${index + 1}`;
+            const omitKeys = ['holderName', 'name'];
+            if (typeof item.type === 'string') omitKeys.push('type');
+            const rows = buildMetadataRowsFromObject(item, { omitKeys });
+            if (rows.length > 0) {
+              items.push({ title: String(titleSource), rows });
+            }
+          });
+
+          if (items.length > 0) {
+            return { key, title, kind: 'items', items } as MetadataSection;
+          }
+        }
+
+        const serialized = formatMetadataDisplayValue(key, value);
+        return serialized ? { key, title, kind: 'text', value: serialized } as MetadataSection : null;
+      }
+
+      if (value && typeof value === 'object') {
+        const rows = buildMetadataRowsFromObject(value as Record<string, unknown>);
+        return rows.length > 0 ? { key, title, kind: 'rows', rows } as MetadataSection : null;
+      }
+
+      const serialized = formatMetadataDisplayValue(key, value);
+      return serialized ? { key, title, kind: 'text', value: serialized } as MetadataSection : null;
+    })
+    .filter((section): section is MetadataSection => section !== null);
+};
+
+const getLoanOriginatorInfo = (lead: Lead): LoanOriginatorInfo | null => {
+  const metadataOriginator = lead.metadata?.loan_originator;
+
+  const originator: LoanOriginatorInfo = {
+    name: lead.originator_name || metadataOriginator?.name || null,
+    email: lead.originator_email || metadataOriginator?.email || null,
+    phone: metadataOriginator?.phone || null,
+    company: lead.originator_company || metadataOriginator?.company || null,
+    license: lead.originator_license || metadataOriginator?.license || null,
+  };
+
+  return Object.values(originator).some((value) => value != null && String(value).trim().length > 0)
+    ? originator
+    : null;
+};
+
+const LeadSummaryCard = ({
+  title,
+  rows,
+  colors,
+}: {
+  title: string;
+  rows: DetailSummaryRow[];
+  colors: DetailThemeColors;
+}) => {
+  const visibleRows = rows.filter((row) => hasDisplayValue(row.value));
+  if (visibleRows.length === 0) return null;
+
+  return (
+    <View style={[styles.leadSummaryCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+      <Text style={[styles.leadSummaryHeader, { color: colors.textSecondary }]}>
+        {title}
+      </Text>
+      {visibleRows.map((row, index) => (
+        <View
+          key={`${title}-${row.label}`}
+          style={[
+            styles.leadSummaryRow,
+            index < visibleRows.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
+          ]}
+        >
+          <Text style={[styles.leadSummaryLabel, { color: colors.textSecondary }]}>
+            {row.label}
+          </Text>
+          <Text
+            style={[
+              styles.leadSummaryValue,
+              { color: row.valueColor || colors.textPrimary },
+            ]}
+            selectable={true}
+          >
+            {row.value}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+};
+
+const LeadMetadataCard = ({
+  sections,
+  colors,
+}: {
+  sections: MetadataSection[];
+  colors: DetailThemeColors;
+}) => {
+  if (sections.length === 0) return null;
+
+  return (
+    <View style={[styles.leadSummaryCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+      <Text style={[styles.leadSummaryHeader, { color: colors.textSecondary }]}>
+        ADDITIONAL FORM DATA
+      </Text>
+      {sections.map((section) => {
+        if (section.kind === 'rows') {
+          return (
+            <View
+              key={section.key}
+              style={[
+                styles.leadMetadataBlock,
+                {
+                  backgroundColor: colors.cardBackground === '#FFFFFF' ? '#F8FAFC' : 'rgba(255,255,255,0.05)',
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <Text style={[styles.leadMetadataLabel, { color: colors.textSecondary }]}>
+                {section.title}
+              </Text>
+              {section.rows.map((row, index) => (
+                <View
+                  key={`${section.key}-${row.label}`}
+                  style={[
+                    styles.leadSummaryRow,
+                    index < section.rows.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
+                  ]}
+                >
+                  <Text style={[styles.leadSummaryLabel, { color: colors.textSecondary }]}>
+                    {row.label}
+                  </Text>
+                  <Text style={[styles.leadSummaryValue, { color: row.valueColor || colors.textPrimary }]} selectable={true}>
+                    {row.value}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          );
+        }
+
+        if (section.kind === 'items') {
+          return (
+            <View
+              key={section.key}
+              style={[
+                styles.leadMetadataBlock,
+                {
+                  backgroundColor: colors.cardBackground === '#FFFFFF' ? '#F8FAFC' : 'rgba(255,255,255,0.05)',
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <Text style={[styles.leadMetadataLabel, { color: colors.textSecondary }]}>
+                {section.title}
+              </Text>
+              {section.items.map((item, itemIndex) => (
+                <View
+                  key={`${section.key}-${itemIndex}`}
+                  style={[
+                    styles.leadMetadataItemCard,
+                    {
+                      borderColor: colors.border,
+                      backgroundColor: colors.cardBackground,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.leadMetadataItemTitle, { color: colors.textPrimary }]}>
+                    {item.title}
+                  </Text>
+                  {(item.subtitle || item.amount) && (
+                    <View style={styles.leadMetadataAccountHeader}>
+                      {item.subtitle ? (
+                        <Text style={[styles.leadMetadataAccountSubtitle, { color: colors.textSecondary }]}>
+                          {item.subtitle}
+                        </Text>
+                      ) : (
+                        <View />
+                      )}
+                      {item.amount ? (
+                        <Text style={[styles.leadMetadataAccountAmount, { color: colors.textPrimary }]}>
+                          {item.amount}
+                        </Text>
+                      ) : null}
+                    </View>
+                  )}
+                  {(item.rows || []).map((row, rowIndex) => (
+                    <View
+                      key={`${section.key}-${itemIndex}-${row.label}`}
+                      style={[
+                        styles.leadSummaryRow,
+                        rowIndex < (item.rows || []).length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.border },
+                      ]}
+                    >
+                      <Text style={[styles.leadSummaryLabel, { color: colors.textSecondary }]}>
+                        {row.label}
+                      </Text>
+                      <Text style={[styles.leadSummaryValue, { color: row.valueColor || colors.textPrimary }]} selectable={true}>
+                        {row.value}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </View>
+          );
+        }
+
+        const isJsonLike = section.value.includes('\n') || section.value.startsWith('{') || section.value.startsWith('[');
+        return (
+          <View
+            key={section.key}
+            style={[
+              styles.leadMetadataBlock,
+              {
+                backgroundColor: colors.cardBackground === '#FFFFFF' ? '#F8FAFC' : 'rgba(255,255,255,0.05)',
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <Text style={[styles.leadMetadataLabel, { color: colors.textSecondary }]}>
+              {section.title}
+            </Text>
+            <Text
+              style={[
+                styles.leadMetadataValue,
+                isJsonLike && styles.leadMetadataValueMonospace,
+                { color: colors.textPrimary },
+              ]}
+              selectable={true}
+            >
+              {section.value}
+            </Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+};
 
 export type LeadDetailViewProps = {
   selected: SelectedLeadRef;
@@ -633,6 +1181,79 @@ export function LeadDetailView({
   const status = record?.status || 'No status';
   const email = record?.email || '';
   const phone = record?.phone || '';
+  const sourceDetail = !isMeta ? (record as Lead | undefined)?.source_detail || null : (record as MetaLead | undefined)?.source_detail || null;
+  const displayReferralSource =
+    record?.referral_source_name ||
+    (
+      sourceDetail &&
+      sourceDetail !== linkedCaptureId &&
+      !UUID_PATTERN.test(sourceDetail)
+        ? sourceDetail
+        : null
+    );
+  const leadRecord = !isMeta ? (record as Lead | undefined) : undefined;
+  const loanOriginator = leadRecord ? getLoanOriginatorInfo(leadRecord) : null;
+  const leadSummaryColors: DetailThemeColors = {
+    cardBackground: colors.cardBackground,
+    border: colors.border,
+    textPrimary: colors.textPrimary,
+    textSecondary: colors.textSecondary,
+  };
+  const leadLoanDetailsRows: DetailSummaryRow[] = leadRecord ? [
+    { label: 'Sales Price', value: formatCurrencyValue(leadRecord.price) },
+    { label: 'Loan Amount', value: formatCurrencyValue(leadRecord.loan_amount) },
+    { label: 'Purpose', value: leadRecord.loan_purpose || null },
+    { label: 'Credit', value: leadRecord.credit_score != null ? String(leadRecord.credit_score) : null },
+    { label: 'LTV', value: formatPercentValue(leadRecord.ltv) },
+    { label: 'Interest Rate', value: formatPercentValue(leadRecord.interest_rate) },
+  ] : [];
+  const leadPropertyDetailsRows: DetailSummaryRow[] = leadRecord ? [
+    {
+      label: 'City / State',
+      value: [leadRecord.subject_city, leadRecord.subject_state].filter(Boolean).join(', ') || null,
+    },
+    { label: 'County', value: leadRecord.subject_county || null },
+    { label: 'ZIP Code', value: leadRecord.subject_zipcode || null },
+    { label: 'Property Type', value: leadRecord.xml_property_type || null },
+    { label: 'Occupancy', value: leadRecord.occupancy_type || null },
+  ] : [];
+  const leadLoanSpecificRows: DetailSummaryRow[] = leadRecord ? [
+    { label: 'Mortgage Type', value: leadRecord.mortgage_type || null },
+    { label: 'Amortization', value: leadRecord.amortization_type || null },
+    {
+      label: 'Loan Term',
+      value: leadRecord.loan_term_months != null ? `${leadRecord.loan_term_months} months` : null,
+    },
+    { label: 'Loan #', value: leadRecord.lender_loan_number || null },
+    { label: 'Est. Closing Costs', value: formatCurrencyValue(leadRecord.estimated_closing_costs) },
+  ] : [];
+  const leadEmploymentRows: DetailSummaryRow[] = leadRecord ? [
+    { label: 'Employer', value: leadRecord.employer_name || null },
+    { label: 'Title', value: leadRecord.employment_title || null },
+    { label: 'Start Date', value: leadRecord.employment_start_date || null },
+    { label: 'Monthly Income', value: formatCurrencyValue(leadRecord.employment_monthly_income) },
+    {
+      label: 'Self-Employed',
+      value: leadRecord.self_employed == null ? null : leadRecord.self_employed ? 'Yes' : 'No',
+      valueColor: leadRecord.self_employed ? '#16A34A' : undefined,
+    },
+  ] : [];
+  const leadDemographicRows: DetailSummaryRow[] = leadRecord ? [
+    { label: 'Marital Status', value: leadRecord.marital_status || null },
+    { label: 'Dependents', value: formatCountValue(leadRecord.dependent_count) },
+    { label: 'Citizenship', value: leadRecord.citizenship_status || null },
+    { label: 'Housing', value: leadRecord.current_housing_type || null },
+    { label: 'Housing Payment', value: formatCurrencyValue(leadRecord.current_housing_payment) },
+  ] : [];
+  const leadOriginatorRows: DetailSummaryRow[] = loanOriginator ? [
+    { label: 'Name', value: loanOriginator.name || null },
+    { label: 'Company', value: loanOriginator.company || null },
+    { label: 'License', value: loanOriginator.license || null },
+    { label: 'Email', value: loanOriginator.email || null },
+    { label: 'Phone', value: loanOriginator.phone ? formatPhoneNumber(loanOriginator.phone) : null },
+  ] : [];
+  const recordMetadata = record?.metadata || null;
+  const metadataSections = buildMetadataSections(recordMetadata as Record<string, unknown> | null);
   
   // Use AI attention badge if available, otherwise fall back to rule-based
   // Show AI badge if we have AI data (even if needsAttention is false - shows "No Action Needed")
@@ -2956,11 +3577,11 @@ export function LeadDetailView({
                   <Ionicons name="chevron-forward" size={16} color={PLUM} />
                 </TouchableOpacity>
               )}
-              {(record as Lead).source_detail && (
+              {displayReferralSource && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
                   <Ionicons name="megaphone-outline" size={16} color="#16A34A" style={{ marginRight: 8 }} />
                   <Text style={[styles.detailField, { color: '#16A34A', marginBottom: 0 }]} selectable={true}>
-                    Referral: {(record as Lead).source_detail}
+                    Referral: {displayReferralSource}
                   </Text>
                 </View>
               )}
@@ -2969,6 +3590,31 @@ export function LeadDetailView({
                   Down Payment: ${(record as Lead).down_payment?.toLocaleString()}
                 </Text>
               )}
+              <LeadSummaryCard
+                title="LOAN DETAILS"
+                rows={leadLoanDetailsRows}
+                colors={leadSummaryColors}
+              />
+              <LeadSummaryCard
+                title="PROPERTY DETAILS"
+                rows={leadPropertyDetailsRows}
+                colors={leadSummaryColors}
+              />
+              <LeadSummaryCard
+                title="LOAN SPECIFICS"
+                rows={leadLoanSpecificRows}
+                colors={leadSummaryColors}
+              />
+              <LeadSummaryCard
+                title="EMPLOYMENT & INCOME"
+                rows={leadEmploymentRows}
+                colors={leadSummaryColors}
+              />
+              <LeadSummaryCard
+                title="DEMOGRAPHICS"
+                rows={leadDemographicRows}
+                colors={leadSummaryColors}
+              />
               {(record as Lead).message && (() => {
                 const msg = (record as Lead).message!;
                 const isXmlImport = msg.includes('IMPORTED FROM XML');
@@ -3052,6 +3698,15 @@ export function LeadDetailView({
                   </View>
                 );
               })()}
+              <LeadSummaryCard
+                title="LOAN ORIGINATOR"
+                rows={leadOriginatorRows}
+                colors={leadSummaryColors}
+              />
+              <LeadMetadataCard
+                sections={metadataSections}
+                colors={leadSummaryColors}
+              />
             </>
           )}
 
@@ -3298,6 +3953,10 @@ export function LeadDetailView({
                   </>
                 );
               })()}
+              <LeadMetadataCard
+                sections={metadataSections}
+                colors={leadSummaryColors}
+              />
             </>
           )}
 

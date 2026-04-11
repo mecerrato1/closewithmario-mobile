@@ -15,9 +15,18 @@ export type CoBorrowerInfo = {
   military_status: string;
 };
 
+export type LoanOriginatorInfo = {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  company?: string | null;
+  license?: string | null;
+};
+
 export type LeadMetadata = {
   has_co_borrower?: boolean;
   co_borrowers?: CoBorrowerInfo[];
+  loan_originator?: LoanOriginatorInfo;
   [key: string]: unknown;
 };
 
@@ -34,11 +43,40 @@ export type Lead = {
   realtor_id?: string | null;
   loan_purpose?: string | null;
   price?: number | null;
+  loan_amount?: number | null;
   down_payment?: number | null;
   credit_score?: number | null;
+  ltv?: number | null;
+  interest_rate?: number | null;
   message?: string | null;
   source?: string | null; // e.g., 'My Lead', 'CTA Form', etc.
   source_detail?: string | null; // Referral source for self-created leads
+  subject_address?: string | null;
+  subject_city?: string | null;
+  subject_state?: string | null;
+  subject_county?: string | null;
+  subject_zipcode?: string | null;
+  xml_property_type?: string | null;
+  occupancy_type?: string | null;
+  mortgage_type?: string | null;
+  amortization_type?: string | null;
+  loan_term_months?: number | null;
+  lender_loan_number?: string | null;
+  estimated_closing_costs?: number | null;
+  employer_name?: string | null;
+  employment_title?: string | null;
+  employment_start_date?: string | null;
+  employment_monthly_income?: number | null;
+  self_employed?: boolean | null;
+  marital_status?: string | null;
+  dependent_count?: number | null;
+  citizenship_status?: string | null;
+  current_housing_type?: string | null;
+  current_housing_payment?: number | null;
+  originator_name?: string | null;
+  originator_company?: string | null;
+  originator_license?: string | null;
+  originator_email?: string | null;
   sms_opt_in?: boolean | null;
   sms_opted_out?: boolean | null;
   // Tracking fields
@@ -85,6 +123,7 @@ export type MetaLead = {
   monthly_income?: string | null;
   meta_ad_notes?: string | null;
   form_data?: Record<string, string> | null;
+  metadata?: LeadMetadata | null;
   sms_opt_in?: boolean | null;
   sms_opted_out?: boolean | null;
   // Tracking fields
