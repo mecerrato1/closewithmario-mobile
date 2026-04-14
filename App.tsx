@@ -27,7 +27,7 @@ import { supabase } from './src/lib/supabase';
 import { getUserRole, getUserTeamMemberId, canSeeAllLeads, type UserRole } from './src/lib/roles';
 import { TEXT_TEMPLATES, fillTemplate, getTemplateText, getTemplateName, type TemplateVariables } from './src/lib/textTemplates';
 import type { Lead, MetaLead, SelectedLeadRef, LoanOfficer, Realtor, Activity, AttentionBadge } from './src/lib/types/leads';
-import { STATUSES, STATUS_DISPLAY_MAP, STATUS_COLOR_MAP, getLeadAlert, formatStatus, getTimeAgo } from './src/lib/leadsHelpers';
+import { STATUSES, STATUS_DISPLAY_MAP, STATUS_COLOR_MAP, getLeadAlert, formatStatus, getLeadLastTouchedValue, getTimeAgo, sortLeadsByLastTouchedDesc } from './src/lib/leadsHelpers';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -89,7 +89,7 @@ type LeadsScreenProps = {
 };
 
 const LEAD_SELECT_FIELDS =
-  'id, created_at, first_name, last_name, email, phone, status, last_contact_date, loan_purpose, price, loan_amount, down_payment, credit_score, ltv, interest_rate, message, lo_id, realtor_id, source, source_detail, subject_address, subject_city, subject_state, subject_county, subject_zipcode, xml_property_type, occupancy_type, mortgage_type, amortization_type, loan_term_months, lender_loan_number, estimated_closing_costs, employer_name, employment_title, employment_start_date, employment_monthly_income, self_employed, marital_status, dependent_count, citizenship_status, current_housing_type, current_housing_payment, originator_name, originator_company, originator_license, originator_email, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary, metadata';
+  'id, created_at, first_name, last_name, email, phone, status, last_contact_date, last_touched_at, loan_purpose, price, loan_amount, down_payment, credit_score, ltv, interest_rate, message, lo_id, realtor_id, source, source_detail, subject_address, subject_city, subject_state, subject_county, subject_zipcode, xml_property_type, occupancy_type, mortgage_type, amortization_type, loan_term_months, lender_loan_number, estimated_closing_costs, employer_name, employment_title, employment_start_date, employment_monthly_income, self_employed, marital_status, dependent_count, citizenship_status, current_housing_type, current_housing_payment, originator_name, originator_company, originator_license, originator_email, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary, metadata';
 
 function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandled, defaultToMyLeads, skipDashboard, onNavigateToCapture }: LeadsScreenProps) {
   const { colors, isDark } = useThemeColors();
@@ -383,7 +383,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         let metaQuery = supabase
           .from('meta_ads')
           .select(
-            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, ad_id, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, source_detail, loan_purpose, county_interest, monthly_income, meta_ad_notes, form_data, metadata, lo_id, realtor_id, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary'
+            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, last_touched_at, ad_id, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, source_detail, loan_purpose, county_interest, monthly_income, meta_ad_notes, form_data, metadata, lo_id, realtor_id, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary'
           )
           .order('created_at', { ascending: false });
 
@@ -687,7 +687,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
       let metaQuery = supabase
         .from('meta_ads')
-        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, ad_id, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, source_detail, loan_purpose, county_interest, monthly_income, meta_ad_notes, form_data, metadata, lo_id, realtor_id, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary')
+        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, last_touched_at, ad_id, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, source_detail, loan_purpose, county_interest, monthly_income, meta_ad_notes, form_data, metadata, lo_id, realtor_id, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary')
         .order('created_at', { ascending: false});
 
       if (!canSeeAllLeads(userRole)) {
@@ -768,7 +768,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const handleStatusChange = async (
     source: 'lead' | 'meta',
     id: string,
-    newStatus: string
+    newStatus: string,
+    options?: { preserveSelectedLead?: boolean }
   ) => {
     try {
       setStatusUpdating(true);
@@ -785,7 +786,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           // Case 3: Changing to a status that doesn't match the current filter (when not 'all')
           (selectedStatusFilter !== 'all' && selectedStatusFilter !== 'unqualified' && newStatus !== selectedStatusFilter);
         
-        if (wouldBeFilteredOut) {
+        if (wouldBeFilteredOut && !options?.preserveSelectedLead) {
           setSelectedLead(null);
           // Wait for React to process the unmount before updating leads state
           await new Promise(resolve => setTimeout(resolve, 0));
@@ -1333,6 +1334,20 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     return matchesLeadListBase(lead) && matchesUnreadFilter(lead);
   };
 
+  const formatLeadListTimestamp = (lead: Lead | MetaLead) => {
+    const date = new Date(getLeadLastTouchedValue(lead));
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
   const renderLeadItem = ({ item }: { item: Lead }) => {
     const fullName =
       [item.first_name, item.last_name].filter(Boolean).join(' ') ||
@@ -1467,7 +1482,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             </View>
             <View style={{ alignItems: 'flex-end', flexShrink: 0 }}>
               <Text style={[styles.leadTimestamp, { marginBottom: 4 }]}>
-                {new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                {formatLeadListTimestamp(item)}
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 {dotColor && (
@@ -1636,7 +1651,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             </View>
             <View style={{ alignItems: 'flex-end', flexShrink: 0 }}>
               <Text style={[styles.leadTimestamp, { color: colors.textSecondary, marginBottom: 4 }]}>
-                {new Date(item.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                {formatLeadListTimestamp(item)}
               </Text>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 {dotColor && (
@@ -2645,8 +2660,16 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   const hasLeads = leads.length > 0;
   const hasMetaLeads = metaLeads.length > 0;
-  const filteredWebsiteLeads = leads.filter(matchesLeadListBase);
-  const filteredMetaListLeads = metaLeads.filter(matchesMetaLeadList);
+  const filteredWebsiteLeads = sortLeadsByLastTouchedDesc(
+    leads.filter(matchesLeadListBase)
+  );
+  const filteredMetaListLeads = sortLeadsByLastTouchedDesc(
+    metaLeads.filter(matchesMetaLeadList)
+  );
+  const allVisibleLeads = sortLeadsByLastTouchedDesc([
+    ...filteredMetaListLeads.map((lead) => ({ ...lead, _tableType: 'meta' as const })),
+    ...filteredWebsiteLeads.map((lead) => ({ ...lead, _tableType: 'lead' as const })),
+  ]);
   const totalVisibleLeadCount = filteredWebsiteLeads.length + filteredMetaListLeads.length;
 
   return (
@@ -3412,10 +3435,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       {activeTab === 'all' && (hasLeads || hasMetaLeads) && (
         <Animated.View style={animatedListStyle}>
           <Animated.FlatList
-            data={[
-              ...filteredMetaListLeads.map((lead) => ({ ...lead, _tableType: 'meta' as const })),
-              ...filteredWebsiteLeads.map((lead) => ({ ...lead, _tableType: 'lead' as const })),
-            ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())}
+            data={allVisibleLeads}
             renderItem={({ item }) => {
               if (item._tableType === 'meta') {
                 return renderMetaLeadItem({ item });

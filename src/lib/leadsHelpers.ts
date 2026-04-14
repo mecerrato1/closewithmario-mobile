@@ -1,6 +1,12 @@
 // Lead helper functions and constants extracted from App.tsx
 import type { AttentionBadge } from './types/leads';
 
+type LeadSortRecord = {
+  created_at: string;
+  last_contact_date?: string | null;
+  last_touched_at?: string | null;
+};
+
 // Status values must match database check constraint exactly
 export const STATUSES = [
   'new',
@@ -83,6 +89,32 @@ export function getLeadAlert(lead: { status: string | null; created_at: string; 
 // Helper to format status for display using the map
 export const formatStatus = (status: string): string => {
   return STATUS_DISPLAY_MAP[status] || status;
+};
+
+export const getLeadLastTouchedValue = (lead: LeadSortRecord): string => {
+  return lead.last_touched_at || lead.last_contact_date || lead.created_at;
+};
+
+export const getLeadLastTouchedTimestamp = (lead: LeadSortRecord): number => {
+  const touchedAt = Date.parse(getLeadLastTouchedValue(lead));
+  if (Number.isFinite(touchedAt)) {
+    return touchedAt;
+  }
+
+  const createdAt = Date.parse(lead.created_at);
+  return Number.isFinite(createdAt) ? createdAt : 0;
+};
+
+export const sortLeadsByLastTouchedDesc = <T extends LeadSortRecord>(leads: readonly T[]): T[] => {
+  return [...leads].sort((left, right) => {
+    const touchedDiff = getLeadLastTouchedTimestamp(right) - getLeadLastTouchedTimestamp(left);
+    if (touchedDiff !== 0) {
+      return touchedDiff;
+    }
+
+    const createdDiff = Date.parse(right.created_at) - Date.parse(left.created_at);
+    return Number.isFinite(createdDiff) ? createdDiff : 0;
+  });
 };
 
 // Helper to get time ago

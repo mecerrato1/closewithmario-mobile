@@ -39,6 +39,7 @@ export type Lead = {
   phone: string | null;
   status: string | null;
   last_contact_date?: string | null;
+  last_touched_at?: string | null;
   lo_id?: string | null;
   realtor_id?: string | null;
   loan_purpose?: string | null;
@@ -102,6 +103,7 @@ export type MetaLead = {
   phone: string | null;
   status: string | null;
   last_contact_date?: string | null;
+  last_touched_at?: string | null;
   lo_id?: string | null;
   realtor_id?: string | null;
   ad_id?: string | null;

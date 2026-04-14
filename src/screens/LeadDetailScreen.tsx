@@ -31,7 +31,7 @@ import type { UserRole } from '../lib/roles';
 import { supabase } from '../lib/supabase';
 import { getUserRole, getUserTeamMemberId, canSeeAllLeads } from '../lib/roles';
 import { TEXT_TEMPLATES, fetchLeadTemplates, fillTemplate, getTemplateText, getTemplateName, getTemplateSubject, formatPhoneNumber, type TemplateVariables, type TextTemplate } from '../lib/textTemplates';
-import { STATUSES, STATUS_DISPLAY_MAP, STATUS_COLOR_MAP, getLeadAlert, formatStatus, getTimeAgo } from '../lib/leadsHelpers';
+import { STATUSES, STATUS_DISPLAY_MAP, STATUS_COLOR_MAP, getLeadAlert, formatStatus, getTimeAgo, sortLeadsByLastTouchedDesc } from '../lib/leadsHelpers';
 import { scheduleLeadCallback } from '../lib/callbacks';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { styles } from '../styles/appStyles';
@@ -695,7 +695,8 @@ export type LeadDetailViewProps = {
   onStatusChange: (
     source: 'lead' | 'meta',
     id: string,
-    newStatus: string
+    newStatus: string,
+    options?: { preserveSelectedLead?: boolean }
   ) => Promise<void>;
   session: Session | null;
   loanOfficers: Array<{ id: string; name: string }>;
@@ -939,6 +940,9 @@ export function LeadDetailView({
     return lead.lo_id === selectedLOFilter;
   };
   
+  const currentList = isMeta ? metaLeads : leads;
+  const record = currentList.find((item) => item.id === selected.id);
+
   // Build the navigable list based on active tab
   let navigableList: Array<(Lead | MetaLead) & { source: 'lead' | 'meta' }>;
   
@@ -962,35 +966,38 @@ export function LeadDetailView({
       })
       .map(lead => ({ ...lead, source: 'lead' as const }));
     
-    // Combine and sort by created_at (newest first)
-    navigableList = [...filteredMeta, ...filteredLeads].sort(
-      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
+    navigableList = sortLeadsByLastTouchedDesc([...filteredMeta, ...filteredLeads]);
   } else if (activeTab === 'meta') {
     // Only meta leads
-    navigableList = metaLeads
-      .filter(lead => {
-        const matchesStatus = selectedStatusFilter === 'all' 
-          ? lead.status !== 'unqualified' 
-          : lead.status === selectedStatusFilter;
-        return matchesStatus && matchesSearch(lead) && matchesLOFilter(lead);
-      })
-      .map(lead => ({ ...lead, source: 'meta' as const }));
+    navigableList = sortLeadsByLastTouchedDesc(
+      metaLeads
+        .filter(lead => {
+          const matchesStatus = selectedStatusFilter === 'all' 
+            ? lead.status !== 'unqualified' 
+            : lead.status === selectedStatusFilter;
+          return matchesStatus && matchesSearch(lead) && matchesLOFilter(lead);
+        })
+        .map(lead => ({ ...lead, source: 'meta' as const }))
+    );
   } else {
     // Only regular leads
-    navigableList = leads
-      .filter(lead => {
-        const matchesStatus = selectedStatusFilter === 'all' 
-          ? lead.status !== 'unqualified' 
-          : lead.status === selectedStatusFilter;
-        return matchesStatus && matchesSearch(lead) && matchesLOFilter(lead);
-      })
-      .map(lead => ({ ...lead, source: 'lead' as const }));
+    navigableList = sortLeadsByLastTouchedDesc(
+      leads
+        .filter(lead => {
+          const matchesStatus = selectedStatusFilter === 'all' 
+            ? lead.status !== 'unqualified' 
+            : lead.status === selectedStatusFilter;
+          return matchesStatus && matchesSearch(lead) && matchesLOFilter(lead);
+        })
+        .map(lead => ({ ...lead, source: 'lead' as const }))
+    );
+  }
+
+  if (record && !navigableList.some((item) => item.id === selected.id && item.source === selected.source)) {
+    navigableList = [{ ...record, source: selected.source }, ...navigableList];
   }
   
   const currentIndex = navigableList.findIndex((item) => item.id === selected.id && item.source === selected.source);
-  const currentList = isMeta ? metaLeads : leads;
-  const record = currentList.find((item) => item.id === selected.id);
   
   // Function to get ad image based on ad name or campaign name
   const getAdImage = () => {
@@ -1276,11 +1283,19 @@ export function LeadDetailView({
     aiAttention: aiAttention ? { badge: aiAttention.badge, priority: aiAttention.priority } : 'none'
   });
 
+  const handleDetailStatusChange = async (newStatus: string) => {
+    if (!record) return;
+
+    await onStatusChange(selected.source, record.id, newStatus, {
+      preserveSelectedLead: true,
+    });
+  };
+
   // Auto-update status from 'new' to 'attempting_contact' when user initiates contact
   // Returns true if status was advanced (so callers can include it in subsequent updates)
   const autoAdvanceStatus = async (): Promise<boolean> => {
     if (record?.status === 'new') {
-      await onStatusChange(selected.source, record.id, 'attempting_contact');
+      await handleDetailStatusChange('attempting_contact');
       return true;
     }
     return false;
@@ -2833,7 +2848,9 @@ export function LeadDetailView({
                     )}
                     <TouchableOpacity
                       style={styles.pipelineStage}
-                      onPress={() => onStatusChange(isMeta ? 'meta' : 'lead', record.id, stage.key)}
+                      onPress={() => {
+                        void handleDetailStatusChange(stage.key);
+                      }}
                       activeOpacity={0.7}
                     >
                       <View style={[
@@ -3240,7 +3257,7 @@ export function LeadDetailView({
                         ]}
                         onPress={async () => {
                           setShowStatusPicker(false);
-                          await onStatusChange(selected.source, record.id, s);
+                          await handleDetailStatusChange(s);
                         }}
                       >
                         <View style={[styles.statusPickerBadge, { backgroundColor: colors.bg }]}>
