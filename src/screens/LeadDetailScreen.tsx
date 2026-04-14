@@ -40,6 +40,7 @@ import { useThemeColors } from '../styles/theme';
 import { parseRecordingUrl } from '../utils/parseRecordingUrl';
 import { saveContact } from '../utils/vcard';
 import { SmsMessaging } from '../components/SmsMessaging';
+import { MetaDmMessaging } from '../components/MetaDmMessaging';
 import { toggleLeadTracking, updateTrackingNote, getTrackingReasonLabel } from '../lib/supabase/leadTracking';
 import { AiRewriteToolbar, AiRewriteToolbarRef } from '../components/AiRewriteToolbar';
 import { ReferralAgreementsSection } from '../components/ReferralAgreementsSection';
@@ -51,6 +52,14 @@ const HTML_TABLE_PATTERN = /<table[\s>]/i;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const EMAIL_HTML_IGNORED_TAGS = ['head', 'script', 'iframe', 'object', 'embed', 'form'];
+
+function getMetaDmTabIcon(platform?: string | null): keyof typeof Ionicons.glyphMap {
+  const normalized = platform?.trim().toLowerCase() || '';
+  if (normalized.includes('ig') || normalized.includes('instagram')) {
+    return 'logo-instagram';
+  }
+  return 'logo-facebook';
+}
 
 const normalizeEmailRecipients = (value?: string[] | string | null) => {
   if (!value) return [];
@@ -740,7 +749,7 @@ export function LeadDetailView({
 }: LeadDetailViewProps) {
   const { colors, isDark } = useThemeColors();
   const { width: windowWidth } = useWindowDimensions();
-  const [activeDetailTab, setActiveDetailTab] = useState<'details' | 'messages'>('details');
+  const [activeDetailTab, setActiveDetailTab] = useState<'details' | 'messages' | 'dm'>('details');
   const [taskNote, setTaskNote] = useState('');
   const [activities, setActivities] = useState<Activity[]>([]);
   const [selectedActivityType, setSelectedActivityType] = useState<'call' | 'text' | 'email' | 'note'>('call');
@@ -1188,6 +1197,11 @@ export function LeadDetailView({
   const status = record?.status || 'No status';
   const email = record?.email || '';
   const phone = record?.phone || '';
+  const metaPlatform = isMeta ? (record as MetaLead | undefined)?.platform ?? null : null;
+  const metaDmTabIcon = getMetaDmTabIcon(metaPlatform);
+  const showMessagesTab = !!phone;
+  const showDmTab = isMeta;
+  const hasDetailTabs = showMessagesTab || showDmTab;
   const sourceDetail = !isMeta ? (record as Lead | undefined)?.source_detail || null : (record as MetaLead | undefined)?.source_detail || null;
   const displayReferralSource =
     record?.referral_source_name ||
@@ -2945,8 +2959,8 @@ export function LeadDetailView({
         </TouchableOpacity>
       </View>
 
-      {/* Tab Bar - Details / Messages */}
-      {phone && (
+      {/* Tab Bar - Details / Messages / DM */}
+      {hasDetailTabs && (
         <View style={detailTabStyles.tabBar}>
           <TouchableOpacity
             style={[
@@ -2969,34 +2983,61 @@ export function LeadDetailView({
               Details
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              detailTabStyles.tab,
-              activeDetailTab === 'messages' && detailTabStyles.tabActive,
-            ]}
-            onPress={() => {
-              setActiveDetailTab('messages');
-              onMarkMessagesRead?.(selected.id);
-            }}
-          >
-            <Ionicons
-              name="chatbubbles-outline"
-              size={18}
-              color={activeDetailTab === 'messages' ? PLUM : '#64748B'}
-            />
-            <Text
+
+          {showMessagesTab && (
+            <TouchableOpacity
               style={[
-                detailTabStyles.tabText,
-                activeDetailTab === 'messages' && detailTabStyles.tabTextActive,
+                detailTabStyles.tab,
+                activeDetailTab === 'messages' && detailTabStyles.tabActive,
               ]}
+              onPress={() => {
+                setActiveDetailTab('messages');
+                onMarkMessagesRead?.(selected.id);
+              }}
             >
-              Messages
-            </Text>
-          </TouchableOpacity>
+              <Ionicons
+                name="chatbubbles-outline"
+                size={18}
+                color={activeDetailTab === 'messages' ? PLUM : '#64748B'}
+              />
+              <Text
+                style={[
+                  detailTabStyles.tabText,
+                  activeDetailTab === 'messages' && detailTabStyles.tabTextActive,
+                ]}
+              >
+                Messages
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {showDmTab && (
+            <TouchableOpacity
+              style={[
+                detailTabStyles.tab,
+                activeDetailTab === 'dm' && detailTabStyles.tabActive,
+              ]}
+              onPress={() => setActiveDetailTab('dm')}
+            >
+              <Ionicons
+                name={metaDmTabIcon}
+                size={18}
+                color={activeDetailTab === 'dm' ? PLUM : '#64748B'}
+              />
+              <Text
+                style={[
+                  detailTabStyles.tabText,
+                  activeDetailTab === 'dm' && detailTabStyles.tabTextActive,
+                ]}
+              >
+                DM
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
-      {/* Messages Tab Content */}
+      {/* Messages / DM Tab Content */}
       {activeDetailTab === 'messages' && phone ? (
         <View style={{ flex: 1 }}>
           <SmsMessaging
@@ -3006,6 +3047,21 @@ export function LeadDetailView({
             leadSource={isMeta ? 'meta_ads' : 'leads'}
             initialSmsOptIn={record.sms_opt_in}
             initialSmsOptedOut={record.sms_opted_out}
+            onMessageSent={() => {
+              if (onInvalidateAttention && record) {
+                onInvalidateAttention(record.id);
+              }
+            }}
+          />
+        </View>
+      ) : activeDetailTab === 'dm' && isMeta ? (
+        <View style={{ flex: 1 }}>
+          <MetaDmMessaging
+            leadId={record.id}
+            leadSource="meta"
+            leadName={fullName}
+            leadPhone={phone || null}
+            leadEmail={email || null}
             onMessageSent={() => {
               if (onInvalidateAttention && record) {
                 onInvalidateAttention(record.id);
