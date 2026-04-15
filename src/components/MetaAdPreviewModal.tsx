@@ -19,6 +19,42 @@ import { useThemeColors } from '../styles/theme';
 
 const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || 'https://www.closewithmario.com').replace(/\/$/, '');
 
+type MetaAdPreviewFormOption = {
+  key: string | null;
+  value: string | null;
+};
+
+type MetaAdPreviewFormQuestion = {
+  id: string | null;
+  key: string | null;
+  label: string | null;
+  type: string | null;
+  options: MetaAdPreviewFormOption[];
+};
+
+type MetaAdPreviewForm = {
+  id: string;
+  name: string | null;
+  locale: string | null;
+  status: string | null;
+  privacy_policy_url: string | null;
+  follow_up_action_url: string | null;
+  questions: MetaAdPreviewFormQuestion[];
+  thank_you_page: {
+    title: string | null;
+    body: string | null;
+    button_text: string | null;
+    button_type: string | null;
+    website_url: string | null;
+    enable_messenger: boolean | null;
+  } | null;
+  context_card: {
+    title: string | null;
+    content: string[];
+    style: string | null;
+  } | null;
+};
+
 type MetaAdPreviewResponse = {
   ad: {
     id: string | null;
@@ -51,6 +87,8 @@ type MetaAdPreviewResponse = {
     video_permalink_url?: string | null;
     video_embeddable?: boolean | null;
   };
+  form: MetaAdPreviewForm | null;
+  form_error: string | null;
   preview: {
     format: string;
     iframe_src: string;
@@ -60,7 +98,7 @@ type MetaAdPreviewResponse = {
   preview_error: string | null;
 };
 
-type ViewMode = 'video' | 'preview' | 'details' | 'fallback';
+type ViewMode = 'video' | 'preview' | 'details' | 'fallback' | 'form';
 
 type Props = {
   visible: boolean;
@@ -123,18 +161,21 @@ export function MetaAdPreviewModal({
   const playableVideoAvailable = Boolean(data?.creative.video_source);
   const previewAvailable = Boolean(data?.preview?.iframe_src);
   const detailsAvailable = Boolean(data);
+  const leadForm = data?.form || null;
+  const formAvailable = Boolean(leadForm);
   const fallbackAvailable = Boolean(fallbackImage);
   const metaVideoUrl = normalizeMetaUrl(data?.creative.video_permalink_url);
 
   const tabs = useMemo(
     () =>
       [
-        playableVideoAvailable ? { key: 'video' as const, label: 'Playable Video' } : null,
-        previewAvailable ? { key: 'preview' as const, label: 'Live Preview' } : null,
+        playableVideoAvailable ? { key: 'video' as const, label: 'Video' } : null,
+        previewAvailable ? { key: 'preview' as const, label: 'Preview' } : null,
         detailsAvailable ? { key: 'details' as const, label: 'Creative' } : null,
-        fallbackAvailable ? { key: 'fallback' as const, label: 'Saved Image' } : null,
+        fallbackAvailable ? { key: 'fallback' as const, label: 'Image' } : null,
+        formAvailable ? { key: 'form' as const, label: 'Form' } : null,
       ].filter((item): item is { key: ViewMode; label: string } => Boolean(item)),
-    [detailsAvailable, fallbackAvailable, playableVideoAvailable, previewAvailable]
+    [detailsAvailable, fallbackAvailable, formAvailable, playableVideoAvailable, previewAvailable]
   );
 
   useEffect(() => {
@@ -197,8 +238,8 @@ export function MetaAdPreviewModal({
       ? 'video'
       : previewAvailable
         ? 'preview'
-        : detailsAvailable
-          ? 'details'
+        : formAvailable
+          ? 'form'
           : fallbackAvailable
             ? 'fallback'
             : 'details';
@@ -206,7 +247,7 @@ export function MetaAdPreviewModal({
     if (!tabs.some((tab) => tab.key === viewMode)) {
       setViewMode(defaultView);
     }
-  }, [detailsAvailable, fallbackAvailable, playableVideoAvailable, previewAvailable, tabs, viewMode, visible]);
+  }, [detailsAvailable, fallbackAvailable, formAvailable, playableVideoAvailable, previewAvailable, tabs, viewMode, visible]);
 
   useEffect(() => {
     if (!visible) return;
@@ -280,6 +321,8 @@ export function MetaAdPreviewModal({
           setViewMode('video');
         } else if (previewData.preview?.iframe_src) {
           setViewMode('preview');
+        } else if (previewData.form) {
+          setViewMode('form');
         } else if (fallbackAvailable) {
           setViewMode('fallback');
         } else {
@@ -310,6 +353,10 @@ export function MetaAdPreviewModal({
       : error && fallbackAvailable
         ? `Live Meta preview is unavailable right now. Showing the saved screenshot instead. ${error}`
         : error || data?.preview_error || null;
+  const formWarning =
+    data?.creative.lead_gen_form_id && data?.form_error
+      ? `Meta returned the ad, but the instant form could not be loaded right now. ${data.form_error}`
+      : null;
   const creativeImageHeight = Math.min(520, Math.max(220, (windowWidth - 60) / Math.max(creativeAspectRatio, 0.1)));
 
   const handlePlayVideo = async () => {
@@ -401,6 +448,12 @@ export function MetaAdPreviewModal({
               </View>
             ) : null}
 
+            {formWarning && (viewMode === 'form' || !formAvailable) ? (
+              <View style={modalStyles.warningBox}>
+                <Text style={modalStyles.warningText}>{formWarning}</Text>
+              </View>
+            ) : null}
+
             {loading ? (
               <View style={modalStyles.loadingWrap}>
                 <ActivityIndicator size="large" color={PLUM} />
@@ -471,6 +524,229 @@ export function MetaAdPreviewModal({
                   />
                 </View>
               </View>
+            ) : viewMode === 'form' ? (
+              leadForm ? (
+                <View style={modalStyles.section}>
+                  <View style={[modalStyles.detailCard, { backgroundColor: isDark ? '#111827' : '#F8FAFC' }]}>
+                    <Text style={[modalStyles.detailLabel, { color: colors.textSecondary }]}>Form Details</Text>
+                    <Text style={[modalStyles.detailValue, { color: colors.textPrimary }]}>
+                      Form Name: {leadForm.name || 'Unknown'}
+                    </Text>
+                    <Text style={[modalStyles.detailValue, { color: colors.textPrimary }]}>
+                      Status: {leadForm.status || 'Unknown'}
+                    </Text>
+                    <Text style={[modalStyles.detailValue, { color: colors.textPrimary }]}>
+                      Locale: {leadForm.locale || 'Unknown'}
+                    </Text>
+                    <Text style={[modalStyles.detailValue, { color: colors.textPrimary }]}>Form ID: {leadForm.id}</Text>
+                  </View>
+
+                  {leadForm.context_card ? (
+                    <View
+                      style={[
+                        modalStyles.formCard,
+                        {
+                          backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[modalStyles.detailLabel, { color: colors.textSecondary }]}>Context Card</Text>
+                      {leadForm.context_card.title ? (
+                        <Text style={[modalStyles.formCardTitle, { color: colors.textPrimary }]}>
+                          {leadForm.context_card.title}
+                        </Text>
+                      ) : null}
+                      {leadForm.context_card.content.map((paragraph, index) => (
+                        <Text
+                          key={`${leadForm.id}-context-${index}`}
+                          style={[modalStyles.formCardBody, { color: colors.textPrimary }]}
+                        >
+                          {paragraph}
+                        </Text>
+                      ))}
+                    </View>
+                  ) : null}
+
+                  <View
+                    style={[
+                      modalStyles.formCard,
+                      {
+                        backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <View style={modalStyles.formCardHeader}>
+                      <Text style={[modalStyles.detailLabel, { color: colors.textSecondary }]}>Questions</Text>
+                      <Text style={[modalStyles.formCardCount, { color: colors.textSecondary }]}>
+                        {leadForm.questions.length} fields
+                      </Text>
+                    </View>
+
+                    {leadForm.questions.length > 0 ? (
+                      <View style={modalStyles.questionList}>
+                        {leadForm.questions.map((question, index) => (
+                          <View
+                            key={question.id || `${question.key || 'question'}-${index}`}
+                            style={[
+                              modalStyles.questionCard,
+                              {
+                                backgroundColor: isDark ? '#111827' : '#F8FAFC',
+                                borderColor: colors.border,
+                              },
+                            ]}
+                          >
+                            <Text style={[modalStyles.questionLabel, { color: colors.textPrimary }]}>
+                              {index + 1}. {question.label || question.key || 'Untitled question'}
+                            </Text>
+                            {question.type ? (
+                              <Text style={[modalStyles.questionType, { color: colors.textSecondary }]}>
+                                {formatCtaLabel(question.type)}
+                              </Text>
+                            ) : null}
+                            {question.options.length > 0 ? (
+                              <View style={modalStyles.optionList}>
+                                {question.options.map((option, optionIndex) => (
+                                  <View
+                                    key={option.key || `${question.id || index}-option-${optionIndex}`}
+                                    style={[
+                                      modalStyles.optionChip,
+                                      {
+                                        backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
+                                        borderColor: colors.border,
+                                      },
+                                    ]}
+                                  >
+                                    <Text style={[modalStyles.optionChipText, { color: colors.textPrimary }]}>
+                                      {option.value || option.key || 'Option'}
+                                    </Text>
+                                  </View>
+                                ))}
+                              </View>
+                            ) : null}
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={[modalStyles.formCardBody, { color: colors.textSecondary }]}>
+                        Meta did not return any form questions.
+                      </Text>
+                    )}
+                  </View>
+
+                  {leadForm.thank_you_page ? (
+                    <View
+                      style={[
+                        modalStyles.formCard,
+                        {
+                          backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[modalStyles.detailLabel, { color: colors.textSecondary }]}>Thank You Page</Text>
+                      {leadForm.thank_you_page.title ? (
+                        <Text style={[modalStyles.formCardTitle, { color: colors.textPrimary }]}>
+                          {leadForm.thank_you_page.title}
+                        </Text>
+                      ) : null}
+                      {leadForm.thank_you_page.body ? (
+                        <Text style={[modalStyles.formCardBody, { color: colors.textPrimary }]}>
+                          {leadForm.thank_you_page.body}
+                        </Text>
+                      ) : null}
+                      <View style={modalStyles.optionList}>
+                        {leadForm.thank_you_page.button_text ? (
+                          <View
+                            style={[
+                              modalStyles.optionChip,
+                              {
+                                backgroundColor: isDark ? '#111827' : '#F8FAFC',
+                                borderColor: colors.border,
+                              },
+                            ]}
+                          >
+                            <Text style={[modalStyles.optionChipText, { color: colors.textPrimary }]}>
+                              CTA: {leadForm.thank_you_page.button_text}
+                            </Text>
+                          </View>
+                        ) : null}
+                        {leadForm.thank_you_page.button_type ? (
+                          <View
+                            style={[
+                              modalStyles.optionChip,
+                              {
+                                backgroundColor: isDark ? '#111827' : '#F8FAFC',
+                                borderColor: colors.border,
+                              },
+                            ]}
+                          >
+                            <Text style={[modalStyles.optionChipText, { color: colors.textPrimary }]}>
+                              Type: {formatCtaLabel(leadForm.thank_you_page.button_type)}
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      {leadForm.thank_you_page.website_url ? (
+                        <TouchableOpacity
+                          onPress={() =>
+                            leadForm.thank_you_page?.website_url &&
+                            Linking.openURL(leadForm.thank_you_page.website_url)
+                          }
+                          style={modalStyles.linkButton}
+                        >
+                          <Text style={modalStyles.linkButtonText}>{leadForm.thank_you_page.website_url}</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  ) : null}
+
+                  {(leadForm.privacy_policy_url || leadForm.follow_up_action_url) ? (
+                    <View
+                      style={[
+                        modalStyles.formCard,
+                        {
+                          backgroundColor: isDark ? '#0F172A' : '#FFFFFF',
+                          borderColor: colors.border,
+                        },
+                      ]}
+                    >
+                      <Text style={[modalStyles.detailLabel, { color: colors.textSecondary }]}>Links</Text>
+
+                      {leadForm.privacy_policy_url ? (
+                        <View style={modalStyles.linkGroup}>
+                          <Text style={[modalStyles.linkLabel, { color: colors.textSecondary }]}>Privacy Policy</Text>
+                          <TouchableOpacity
+                            onPress={() => Linking.openURL(leadForm.privacy_policy_url!)}
+                            style={modalStyles.linkButton}
+                          >
+                            <Text style={modalStyles.linkButtonText}>{leadForm.privacy_policy_url}</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+
+                      {leadForm.follow_up_action_url ? (
+                        <View style={modalStyles.linkGroup}>
+                          <Text style={[modalStyles.linkLabel, { color: colors.textSecondary }]}>Follow-Up URL</Text>
+                          <TouchableOpacity
+                            onPress={() => Linking.openURL(leadForm.follow_up_action_url!)}
+                            style={modalStyles.linkButton}
+                          >
+                            <Text style={modalStyles.linkButtonText}>{leadForm.follow_up_action_url}</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </View>
+              ) : (
+                <View style={modalStyles.emptyState}>
+                  <Text style={[modalStyles.emptyText, { color: colors.textSecondary }]}>
+                    Meta returned a lead form ID, but the instant form details are unavailable right now.
+                  </Text>
+                </View>
+              )
             ) : viewMode === 'fallback' && fallbackImage ? (
               <View style={modalStyles.section}>
                 <Image source={fallbackImage} style={modalStyles.fallbackImage} resizeMode="contain" />
@@ -744,6 +1020,75 @@ const modalStyles = StyleSheet.create({
   detailValue: {
     fontSize: 14,
     lineHeight: 20,
+  },
+  formCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 16,
+    gap: 12,
+  },
+  formCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  formCardTitle: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '700',
+  },
+  formCardBody: {
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  formCardCount: {
+    fontSize: 12,
+  },
+  questionList: {
+    gap: 12,
+  },
+  questionCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    gap: 8,
+  },
+  questionLabel: {
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '700',
+  },
+  questionType: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  optionList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  optionChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  optionChipText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+  },
+  linkGroup: {
+    gap: 8,
+  },
+  linkLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
   textBlock: {
     gap: 6,

@@ -81,12 +81,46 @@ Notifications.setNotificationHandler({
 type LeadsScreenProps = {
   onSignOut: () => void;
   session: Session | null;
-  notificationLead?: { id: string; source: 'lead' | 'meta'; openToMessages?: boolean } | null;
+  notificationLead?: { id: string; source: 'lead' | 'meta'; openTab?: 'messages' | 'dm' } | null;
   onNotificationHandled?: () => void;
   defaultToMyLeads?: boolean;
   skipDashboard?: boolean;
   onNavigateToCapture?: (captureId: string) => void;
 };
+
+function normalizeNotificationLeadSource(source: unknown): 'lead' | 'meta' | null {
+  if (source === 'meta') return 'meta';
+  if (source === 'lead' || source === 'organic') return 'lead';
+  return null;
+}
+
+function resolveNotificationOpenTab(
+  data: Record<string, unknown> | undefined,
+  title: string | null | undefined
+) {
+  const openTab = typeof data?.openTab === 'string' ? data.openTab.toLowerCase() : '';
+  if (openTab === 'messages' || openTab === 'sms') return 'messages' as const;
+  if (openTab === 'dm') return 'dm' as const;
+
+  const channel = typeof data?.channel === 'string' ? data.channel.toLowerCase() : '';
+  if (channel === 'messenger' || channel === 'instagram') return 'dm' as const;
+  if (channel === 'sms') return 'messages' as const;
+
+  if (data?.openToMessages === true || data?.open_to_messages === true) {
+    return 'messages' as const;
+  }
+
+  const type = typeof data?.type === 'string' ? data.type.toLowerCase() : '';
+  if (type === 'sms' || type === 'sms_message' || type === 'inbound_sms') {
+    return 'messages' as const;
+  }
+
+  const titleText = title?.toLowerCase() || '';
+  if (titleText.includes('new messenger message')) return 'dm' as const;
+  if (titleText.includes('new message from')) return 'messages' as const;
+
+  return undefined;
+}
 
 const LEAD_SELECT_FIELDS =
   'id, created_at, first_name, last_name, email, phone, status, last_contact_date, last_touched_at, loan_purpose, price, loan_amount, down_payment, credit_score, ltv, interest_rate, message, lo_id, realtor_id, source, source_detail, subject_address, subject_city, subject_state, subject_county, subject_zipcode, xml_property_type, occupancy_type, mortgage_type, amortization_type, loan_term_months, lender_loan_number, estimated_closing_costs, employer_name, employment_title, employment_start_date, employment_monthly_income, self_employed, marital_status, dependent_count, citizenship_status, current_housing_type, current_housing_payment, originator_name, originator_company, originator_license, originator_email, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary, metadata';
@@ -579,8 +613,27 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     };
   }, [session?.user?.id, teamMemberId, userRole, leadEligible]);
 
-  // State for opening directly to messages tab (from notification)
-  const [openToMessages, setOpenToMessages] = useState(false);
+  // State for opening directly to a specific lead tab from notifications
+  const [notificationTargetTab, setNotificationTargetTab] = useState<'messages' | 'dm' | null>(null);
+  const [notificationTargetLead, setNotificationTargetLead] = useState<SelectedLeadRef | null>(null);
+
+  const openLeadFromSelection = (leadRef: SelectedLeadRef, options?: { hideDashboard?: boolean }) => {
+    if (options?.hideDashboard) {
+      setShowDashboard(false);
+    }
+
+    const shouldPreserveNotificationTarget =
+      notificationTargetTab &&
+      notificationTargetLead?.id === leadRef.id &&
+      notificationTargetLead?.source === leadRef.source;
+
+    if (!shouldPreserveNotificationTarget) {
+      setNotificationTargetTab(null);
+      setNotificationTargetLead(null);
+    }
+
+    setSelectedLead(leadRef);
+  };
 
   // Subscribe to new SMS messages to refresh attention, while only inbound
   // unread messages update the unread counters.
@@ -621,11 +674,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       // Navigate directly to the lead using the source from notification
       setSelectedLead({ source: notificationLead.source, id: notificationLead.id });
       setShowDashboard(false);
-      // If notification has openToMessages flag, set it
-      if (notificationLead.openToMessages) {
-        console.log('📱 Setting openToMessages to true');
-        setOpenToMessages(true);
-      }
+      setNotificationTargetTab(notificationLead.openTab || null);
+      setNotificationTargetLead({ source: notificationLead.source, id: notificationLead.id });
       onNotificationHandled?.();
     }
   }, [notificationLead, loading, onNotificationHandled]);
@@ -1425,8 +1475,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             },
           ]}
           onPress={() => {
-            setOpenToMessages(false);
-            setSelectedLead({ source: 'lead', id: item.id });
+            openLeadFromSelection({ source: 'lead', id: item.id });
           }}
           activeOpacity={0.7}
         >
@@ -1606,8 +1655,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             },
           ]}
           onPress={() => {
-            setOpenToMessages(false); // Ensure we don't auto-switch to messages
-            setSelectedLead({ source: 'meta', id: item.id });
+            openLeadFromSelection({ source: 'meta', id: item.id });
           }}
           activeOpacity={0.7}
         >
@@ -1777,7 +1825,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         metaLeads={filteredMetaLeads}
         onBack={async () => {
           setSelectedLead(null);
-          setOpenToMessages(false); // Reset notification flag
+          setNotificationTargetTab(null); // Reset notification target
+          setNotificationTargetLead(null);
           refreshTodayCallbacks(); // Refresh callbacks when returning to dashboard
           // Refresh unread counts
           if (metaLeads.length > 0) {
@@ -1797,7 +1846,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             }
           }
         }}
-        onNavigate={(leadRef) => setSelectedLead(leadRef)}
+        onNavigate={(leadRef) => openLeadFromSelection(leadRef)}
         onStatusChange={handleStatusChange}
         session={session}
         loanOfficers={loanOfficers}
@@ -1806,8 +1855,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         searchQuery={searchQuery}
         selectedLOFilter={selectedLOFilter}
         activeTab={activeTab}
-        openToMessages={openToMessages}
-        onMessagesOpened={() => setOpenToMessages(false)}
+        initialDetailTab={notificationTargetTab}
+        onInitialDetailTabHandled={() => {
+          setNotificationTargetTab(null);
+          setNotificationTargetLead(null);
+        }}
         onMarkMessagesRead={markMessagesAsRead}
         onInvalidateAttention={invalidateAttention}
         aiAttention={attentionMap.get(selectedLead.id) || null}
@@ -2311,11 +2363,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                       style={[styles.newLeadCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
                       onPress={() => {
                         if (cb.lead_id || cb.meta_ad_id) {
-                          setShowDashboard(false);
-                          setSelectedLead({
-                            source: cb.meta_ad_id ? 'meta' : 'lead',
-                            id: cb.meta_ad_id || cb.lead_id,
-                          });
+                          openLeadFromSelection(
+                            {
+                              source: cb.meta_ad_id ? 'meta' : 'lead',
+                              id: cb.meta_ad_id || cb.lead_id,
+                            },
+                            { hideDashboard: true }
+                          );
                         }
                       }}
                     >
@@ -2442,11 +2496,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                       style={styles.newLeadCard}
                       onPress={() => {
                         if (cb.lead_id || cb.meta_ad_id) {
-                          setShowDashboard(false);
-                          setSelectedLead({
-                            source: cb.meta_ad_id ? 'meta' : 'lead',
-                            id: cb.meta_ad_id || cb.lead_id,
-                          });
+                          openLeadFromSelection(
+                            {
+                              source: cb.meta_ad_id ? 'meta' : 'lead',
+                              id: cb.meta_ad_id || cb.lead_id,
+                            },
+                            { hideDashboard: true }
+                          );
                         }
                       }}
                     >
@@ -2617,9 +2673,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                       isQualified && styles.newLeadCardQualified
                     ]}
                     onPress={() => {
-                      setShowDashboard(false);
-                      setOpenToMessages(false);
-                      setSelectedLead({ source: lead._tableType, id: lead.id });
+                      openLeadFromSelection(
+                        { source: lead._tableType, id: lead.id },
+                        { hideDashboard: true }
+                      );
                     }}
                   >
                     <View style={styles.newLeadHeader}>
@@ -3876,8 +3933,9 @@ const aiRecommendationStyles = StyleSheet.create({
 function RootApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
-  const [notificationLead, setNotificationLead] = useState<{ id: string; source: 'lead' | 'meta'; openToMessages?: boolean } | null>(null);
+  const [notificationLead, setNotificationLead] = useState<{ id: string; source: 'lead' | 'meta'; openTab?: 'messages' | 'dm' } | null>(null);
   const { isLocked } = useAppLock();
+  const lastHandledNotificationIdRef = useRef<string | null>(null);
 
   // Check for existing Supabase session on mount
   useEffect(() => {
@@ -3915,23 +3973,47 @@ function RootApp() {
     initAuth();
   }, []);
 
-  // Listen for notification taps
+  // Listen for notification taps, including the initial launch from a push.
   useEffect(() => {
+    const handleNotificationResponse = (response: Notifications.NotificationResponse | null) => {
+      if (!response) return;
+
+      const requestId = response.notification.request.identifier;
+      if (requestId && lastHandledNotificationIdRef.current === requestId) {
+        return;
+      }
+
+      const data = (response.notification.request.content.data ?? {}) as Record<string, unknown>;
+      const leadId = data.lead_id;
+      const leadSource = normalizeNotificationLeadSource(data.lead_source);
+      const openTab = resolveNotificationOpenTab(data, response.notification.request.content.title);
+
+      if (
+        leadId &&
+        typeof leadId === 'string' &&
+        leadSource
+      ) {
+        if (requestId) {
+          lastHandledNotificationIdRef.current = requestId;
+        }
+
+        setNotificationLead({
+          id: leadId,
+          source: leadSource,
+          ...(openTab ? { openTab } : {}),
+        });
+      }
+    };
+
+    Notifications.getLastNotificationResponseAsync()
+      .then(handleNotificationResponse)
+      .catch((error) => {
+        console.error('📱 Failed to read last notification response:', error);
+      });
+
     const subscription =
       Notifications.addNotificationResponseReceivedListener((response) => {
-        const leadId = response.notification.request.content.data?.lead_id;
-        const leadSource =
-          response.notification.request.content.data?.lead_source;
-
-        if (
-          leadId &&
-          typeof leadId === 'string' &&
-          leadSource &&
-          (leadSource === 'lead' || leadSource === 'meta')
-        ) {
-          // Open to messages tab for SMS notifications
-          setNotificationLead({ id: leadId, source: leadSource, openToMessages: true });
-        }
+        handleNotificationResponse(response);
       });
 
     return () => subscription.remove();

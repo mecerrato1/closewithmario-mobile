@@ -48,6 +48,7 @@ interface MetaDmMessagingProps {
   leadPhone?: string | null;
   leadEmail?: string | null;
   onMessageSent?: () => void;
+  onConversationRead?: () => void;
 }
 
 const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || 'https://www.closewithmario.com').replace(/\/$/, '');
@@ -125,6 +126,7 @@ export function MetaDmMessaging({
   leadPhone,
   leadEmail,
   onMessageSent,
+  onConversationRead,
 }: MetaDmMessagingProps) {
   const { colors } = useThemeColors();
   const [conversation, setConversation] = useState<MetaDmConversation | null>(null);
@@ -347,6 +349,8 @@ export function MetaDmMessaging({
 
       if (cancelled) return;
 
+      onConversationRead?.();
+
       const readAt = new Date().toISOString();
       setMessages((currentMessages) =>
         currentMessages.map((message) =>
@@ -362,7 +366,7 @@ export function MetaDmMessaging({
     return () => {
       cancelled = true;
     };
-  }, [conversation?.id, messages]);
+  }, [conversation?.id, messages, onConversationRead]);
 
   useEffect(() => {
     if (!conversation?.id) return;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -716,8 +716,8 @@ export type LeadDetailViewProps = {
   searchQuery: string;
   selectedLOFilter: string | null;
   activeTab: 'leads' | 'meta' | 'all';
-  openToMessages?: boolean;
-  onMessagesOpened?: () => void;
+  initialDetailTab?: 'messages' | 'dm' | null;
+  onInitialDetailTabHandled?: () => void;
   onMarkMessagesRead?: (leadId: string) => void;
   onInvalidateAttention?: (leadId: string) => Promise<void>;
   aiAttention?: { needsAttention: boolean; priority: number; badge: string; reason?: string; suggestedAction?: string } | null;
@@ -740,8 +740,8 @@ export function LeadDetailView({
   searchQuery,
   selectedLOFilter,
   activeTab,
-  openToMessages,
-  onMessagesOpened,
+  initialDetailTab,
+  onInitialDetailTabHandled,
   onMarkMessagesRead,
   onInvalidateAttention,
   aiAttention,
@@ -750,6 +750,8 @@ export function LeadDetailView({
   const { colors, isDark } = useThemeColors();
   const { width: windowWidth } = useWindowDimensions();
   const [activeDetailTab, setActiveDetailTab] = useState<'details' | 'messages' | 'dm'>('details');
+  const [messageUnreadCount, setMessageUnreadCount] = useState(0);
+  const [dmUnreadCount, setDmUnreadCount] = useState(0);
   const [taskNote, setTaskNote] = useState('');
   const [activities, setActivities] = useState<Activity[]>([]);
   const [selectedActivityType, setSelectedActivityType] = useState<'call' | 'text' | 'email' | 'note'>('call');
@@ -864,17 +866,6 @@ export function LeadDetailView({
       padding: 6,
     },
   };
-
-  // Open to messages tab if coming from notification
-  useEffect(() => {
-    console.log('📱 LeadDetailView openToMessages effect:', { openToMessages, source: selected.source, id: selected.id });
-    if (openToMessages && phone) {
-      console.log('📱 Switching to messages tab');
-      setActiveDetailTab('messages');
-      onMarkMessagesRead?.(selected.id);
-      onMessagesOpened?.();
-    }
-  }, [openToMessages, selected.id]);
 
   useEffect(() => {
     let isMounted = true;
@@ -1203,6 +1194,93 @@ export function LeadDetailView({
   const showDmTab = isMeta;
   const hasDetailTabs = showMessagesTab || showDmTab;
   const sourceDetail = !isMeta ? (record as Lead | undefined)?.source_detail || null : (record as MetaLead | undefined)?.source_detail || null;
+  const formatTabBadgeCount = (count: number) => (count > 99 ? '99+' : String(count));
+
+  const loadDetailMessageIndicators = useCallback(async () => {
+    let nextMessageUnreadCount = 0;
+    let nextDmUnreadCount = 0;
+
+    if (showMessagesTab) {
+      const { count, error } = await supabase
+        .from('sms_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('lead_id', selected.id)
+        .eq('direction', 'inbound')
+        .is('read_at', null);
+
+      if (error) {
+        console.error('[LeadDetailView] Failed to load unread SMS count', error);
+      } else {
+        nextMessageUnreadCount = count ?? 0;
+      }
+    }
+
+    if (showDmTab) {
+      const { count, error } = await supabase
+        .from('meta_dm_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('lead_id', selected.id)
+        .eq('lead_source', 'meta')
+        .eq('direction', 'inbound')
+        .is('read_at', null);
+
+      if (error) {
+        console.error('[LeadDetailView] Failed to load unread DM count', error);
+      } else {
+        nextDmUnreadCount = count ?? 0;
+      }
+    }
+
+    return {
+      messageUnreadCount: nextMessageUnreadCount,
+      dmUnreadCount: nextDmUnreadCount,
+    };
+  }, [selected.id, showDmTab, showMessagesTab]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadIndicators = async () => {
+      const counts = await loadDetailMessageIndicators();
+      if (cancelled) return;
+
+      setMessageUnreadCount(counts.messageUnreadCount);
+      setDmUnreadCount(counts.dmUnreadCount);
+    };
+
+    void loadIndicators();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadDetailMessageIndicators]);
+
+  // Open to the notification tab when a lead is opened from a message push.
+  useEffect(() => {
+    console.log('📱 LeadDetailView initialDetailTab effect:', {
+      initialDetailTab,
+      source: selected.source,
+      id: selected.id,
+      isMeta,
+    });
+
+    if (initialDetailTab === 'messages') {
+      if (phone) {
+        setActiveDetailTab('messages');
+        setMessageUnreadCount(0);
+        onMarkMessagesRead?.(selected.id);
+      }
+      onInitialDetailTabHandled?.();
+      return;
+    }
+
+    if (initialDetailTab === 'dm') {
+      if (isMeta) {
+        setActiveDetailTab('dm');
+      }
+      onInitialDetailTabHandled?.();
+    }
+  }, [initialDetailTab, isMeta, onInitialDetailTabHandled, onMarkMessagesRead, phone, selected.id, selected.source]);
   const displayReferralSource =
     record?.referral_source_name ||
     (
@@ -1936,12 +2014,12 @@ export function LeadDetailView({
     }
   }, [record?.id, fullName]);
 
-  // Reset to Details tab when navigating to a different lead (unless coming from notification)
+  // Reset to Details tab when navigating to a different lead unless a notification targets a tab.
   useEffect(() => {
-    if (!openToMessages) {
+    if (!initialDetailTab) {
       setActiveDetailTab('details');
     }
-  }, [record?.id]);
+  }, [initialDetailTab, record?.id]);
 
   // Set language preference based on lead's preferred_language
   useEffect(() => {
@@ -2992,6 +3070,7 @@ export function LeadDetailView({
               ]}
               onPress={() => {
                 setActiveDetailTab('messages');
+                setMessageUnreadCount(0);
                 onMarkMessagesRead?.(selected.id);
               }}
             >
@@ -3008,6 +3087,23 @@ export function LeadDetailView({
               >
                 Messages
               </Text>
+              {messageUnreadCount > 0 && (
+                <View
+                  style={[
+                    detailTabStyles.tabBadge,
+                    activeDetailTab === 'messages' && detailTabStyles.tabBadgeActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      detailTabStyles.tabBadgeText,
+                      activeDetailTab === 'messages' && detailTabStyles.tabBadgeTextActive,
+                    ]}
+                  >
+                    {formatTabBadgeCount(messageUnreadCount)}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
           )}
 
@@ -3032,6 +3128,23 @@ export function LeadDetailView({
               >
                 DM
               </Text>
+              {dmUnreadCount > 0 && (
+                <View
+                  style={[
+                    detailTabStyles.tabBadge,
+                    activeDetailTab === 'dm' && detailTabStyles.tabBadgeActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      detailTabStyles.tabBadgeText,
+                      activeDetailTab === 'dm' && detailTabStyles.tabBadgeTextActive,
+                    ]}
+                  >
+                    {formatTabBadgeCount(dmUnreadCount)}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
           )}
         </View>
@@ -3062,6 +3175,12 @@ export function LeadDetailView({
             leadName={fullName}
             leadPhone={phone || null}
             leadEmail={email || null}
+            onConversationRead={() => {
+              void loadDetailMessageIndicators().then((counts) => {
+                setMessageUnreadCount(counts.messageUnreadCount);
+                setDmUnreadCount(counts.dmUnreadCount);
+              });
+            }}
             onMessageSent={() => {
               if (onInvalidateAttention && record) {
                 onInvalidateAttention(record.id);
@@ -5437,5 +5556,25 @@ const detailTabStyles = StyleSheet.create({
   tabTextActive: {
     color: PLUM,
     fontWeight: '600',
+  },
+  tabBadge: {
+    minWidth: 18,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 999,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabBadgeActive: {
+    backgroundColor: '#DC2626',
+  },
+  tabBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  tabBadgeTextActive: {
+    color: '#FFFFFF',
   },
 });

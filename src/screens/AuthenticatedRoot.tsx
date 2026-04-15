@@ -13,12 +13,12 @@ import { getUserRole, type UserRole } from '../lib/roles';
 interface AuthenticatedRootProps {
   session: Session;
   onSignOut: () => void;
-  notificationLead?: { id: string; source: 'lead' | 'meta'; openToMessages?: boolean } | null;
+  notificationLead?: { id: string; source: 'lead' | 'meta'; openTab?: 'messages' | 'dm' } | null;
   onNotificationHandled?: () => void;
   LeadsScreenComponent: React.ComponentType<{
     onSignOut: () => void;
     session: Session | null;
-    notificationLead?: { id: string; source: 'lead' | 'meta'; openToMessages?: boolean } | null;
+    notificationLead?: { id: string; source: 'lead' | 'meta'; openTab?: 'messages' | 'dm' } | null;
     onNotificationHandled?: () => void;
     defaultToMyLeads?: boolean;
     skipDashboard?: boolean;
@@ -53,6 +53,12 @@ export default function AuthenticatedRoot({
     };
     fetchRole();
   }, [session?.user?.id, session?.user?.email]);
+
+  useEffect(() => {
+    if (notificationLead) {
+      setActiveTab('leads');
+    }
+  }, [notificationLead]);
 
   const handleTabChange = (tab: TabKey) => {
     if (tab === 'leads') {
