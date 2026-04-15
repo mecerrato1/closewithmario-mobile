@@ -18,9 +18,11 @@ import { supabase } from '../lib/supabase';
 import { useThemeColors } from '../styles/theme';
 
 type LeadSource = 'organic' | 'meta';
+type MetaDmPlatform = 'messenger' | 'instagram';
 
 type MetaDmConversation = {
   id: string;
+  platform: MetaDmPlatform;
   participant_name: string | null;
   can_reply: boolean;
   conversation_link: string | null;
@@ -44,6 +46,7 @@ type MetaDmMessage = {
 interface MetaDmMessagingProps {
   leadId: string;
   leadSource: LeadSource;
+  conversationId?: string | null;
   leadName: string;
   leadPhone?: string | null;
   leadEmail?: string | null;
@@ -122,6 +125,7 @@ function getOutboundStatusText(message: MetaDmMessage) {
 export function MetaDmMessaging({
   leadId,
   leadSource,
+  conversationId,
   leadName,
   leadPhone,
   leadEmail,
@@ -195,15 +199,21 @@ export function MetaDmMessaging({
   );
 
   const fetchStoredConversation = useCallback(async () => {
-    const { data: conversationData, error: conversationError } = await supabase
+    let conversationQuery = supabase
       .from('meta_dm_conversations')
-      .select('id, participant_name, can_reply, conversation_link, last_message_at, message_count, matched_via')
-      .eq('lead_id', leadId)
-      .eq('lead_source', leadSource)
-      .eq('platform', 'messenger')
-      .order('last_message_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .select('id, platform, participant_name, can_reply, conversation_link, last_message_at, message_count, matched_via');
+
+    if (conversationId) {
+      conversationQuery = conversationQuery.eq('id', conversationId).limit(1);
+    } else {
+      conversationQuery = conversationQuery
+        .eq('lead_id', leadId)
+        .eq('lead_source', leadSource)
+        .order('last_message_at', { ascending: false })
+        .limit(1);
+    }
+
+    const { data: conversationData, error: conversationError } = await conversationQuery.maybeSingle();
 
     if (conversationError) {
       throw conversationError;
@@ -229,7 +239,7 @@ export function MetaDmMessaging({
 
     setMessages((messageData || []) as MetaDmMessage[]);
     return nextConversation;
-  }, [leadId, leadSource]);
+  }, [conversationId, leadId, leadSource]);
 
   const performSync = useCallback(
     async (force = false) => {
@@ -241,6 +251,7 @@ export function MetaDmMessaging({
         body: JSON.stringify({
           leadId,
           leadSource,
+          conversationId,
           force,
         }),
       });
@@ -253,7 +264,7 @@ export function MetaDmMessaging({
       setEmptyReason(result.matched ? null : result.reason || 'No Messenger conversation matched this lead yet.');
       return fetchStoredConversation();
     },
-    [fetchStoredConversation, fetchWithAuthRetry, leadId, leadSource]
+    [conversationId, fetchStoredConversation, fetchWithAuthRetry, leadId, leadSource]
   );
 
   const handleRefresh = useCallback(async () => {

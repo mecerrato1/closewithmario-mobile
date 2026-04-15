@@ -16,6 +16,7 @@ import { supabase } from '../../lib/supabase';
 import { canSeeAllLeads, getUserRole, getUserTeamMemberId } from '../../lib/roles';
 import { useThemeColors } from '../../styles/theme';
 import { SmsMessaging } from '../../components/SmsMessaging';
+import { MetaDmMessaging } from '../../components/MetaDmMessaging';
 import {
   getSmsMessageMedia,
   getSmsMessagePreviewText,
@@ -39,7 +40,9 @@ interface LeadRecord {
   id: string;
   first_name: string | null;
   last_name: string | null;
+  email: string | null;
   phone: string | null;
+  platform?: string | null;
   sms_opt_in?: boolean | null;
   sms_opted_out?: boolean | null;
 }
@@ -64,19 +67,55 @@ interface SmsMessageRow {
 }
 
 interface ConversationSummary {
+  key: string;
+  channel: 'sms' | 'dm';
+  conversationId: string | null;
   leadId: string;
   source: ThreadSource;
   leadName: string;
+  leadEmail?: string | null;
+  platform?: string | null;
   phone: string;
   preview: string;
   latestMessageAt: string;
-  latestDirection: 'inbound' | 'outbound';
+  latestDirection: 'inbound' | 'outbound' | null;
   unreadCount: number;
+  isAutomated?: boolean;
   smsOptIn?: boolean | null;
   smsOptedOut?: boolean | null;
 }
 
+interface MetaDmConversationRow {
+  id: string;
+  lead_id: string | null;
+  lead_source: 'organic' | 'meta' | null;
+  platform: 'messenger' | 'instagram' | null;
+  participant_name: string | null;
+  last_message_at: string | null;
+}
+
+interface MetaDmMessageRow {
+  id: string;
+  conversation_id: string;
+  direction: 'inbound' | 'outbound';
+  message_text: string | null;
+  created_at: string;
+  attachments?: unknown;
+  read_at?: string | null;
+}
+
 const ACCENT = '#7C3AED';
+
+function getMetaDmInboxIcon(platform?: string | null): keyof typeof Ionicons.glyphMap {
+  const normalized = platform?.trim().toLowerCase() || '';
+  if (normalized.includes('ig') || normalized.includes('instagram')) {
+    return 'logo-instagram';
+  }
+  if (normalized.includes('messenger')) {
+    return 'logo-facebook';
+  }
+  return 'chatbubble-ellipses-outline';
+}
 
 function getLeadDisplayName(lead: Pick<LeadRecord, 'first_name' | 'last_name'>) {
   return [lead.first_name, lead.last_name].filter(Boolean).join(' ').trim() || 'Unknown lead';
@@ -121,6 +160,40 @@ function sortConversations(conversations: ConversationSummary[]) {
   });
 }
 
+function getMetaDmAttachmentPreview(attachments: unknown) {
+  const attachmentItems = Array.isArray((attachments as { data?: unknown } | null)?.data)
+    ? ((attachments as { data?: unknown[] }).data || [])
+    : [];
+
+  for (const item of attachmentItems) {
+    if (!item || typeof item !== 'object') continue;
+
+    const record = item as Record<string, unknown>;
+    const genericTemplate =
+      record.generic_template && typeof record.generic_template === 'object'
+        ? (record.generic_template as Record<string, unknown>)
+        : null;
+
+    if (typeof genericTemplate?.title === 'string' && genericTemplate.title.trim()) {
+      return genericTemplate.title.trim();
+    }
+
+    if (typeof record.name === 'string' && record.name.trim()) {
+      return record.name.trim();
+    }
+
+    if (typeof record.url === 'string' && record.url.trim()) {
+      return 'Attachment';
+    }
+  }
+
+  return null;
+}
+
+function getChannelLabel(channel: ConversationSummary['channel']) {
+  return channel === 'dm' ? 'DM' : 'SMS';
+}
+
 export default function MessagesTabScreen({ session, onNavigateToLead }: MessagesTabScreenProps) {
   const { colors } = useThemeColors();
   const [screenState, setScreenState] = useState<ScreenState>({ screen: 'list' });
@@ -151,10 +224,10 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
 
         let leadsQuery = supabase
           .from('leads')
-          .select('id, first_name, last_name, phone, sms_opt_in, sms_opted_out');
+          .select('id, first_name, last_name, email, phone, sms_opt_in, sms_opted_out');
         let metaQuery = supabase
           .from('meta_ads')
-          .select('id, first_name, last_name, phone, sms_opt_in, sms_opted_out');
+          .select('id, first_name, last_name, email, phone, platform, sms_opt_in, sms_opted_out');
 
         if (!canSeeAllLeads(role)) {
           if (role === 'loan_officer') {
@@ -202,18 +275,32 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
         });
 
         const accessibleLeadIds = Array.from(leadMap.keys());
+        const accessibleMetaLeadIds = ((metaData || []) as LeadRecord[]).map((lead) => lead.id);
         if (accessibleLeadIds.length === 0) {
           setConversations([]);
           return;
         }
 
-        const { data: messageRows, error: messageError } = await supabase
-          .from('sms_messages')
-          .select('id, lead_id, direction, message_text, created_at, read_at, raw_payload, voice_transcription_status, voice_transcript, voice_summary, voice_transcribed_at, voice_transcription_error')
-          .in('lead_id', accessibleLeadIds)
-          .order('created_at', { ascending: false });
+        const [
+          { data: messageRows, error: messageError },
+          { data: dmConversationRows, error: dmConversationError },
+        ] = await Promise.all([
+          supabase
+            .from('sms_messages')
+            .select('id, lead_id, direction, message_text, created_at, read_at, raw_payload, voice_transcription_status, voice_transcript, voice_summary, voice_transcribed_at, voice_transcription_error')
+            .in('lead_id', accessibleLeadIds)
+            .order('created_at', { ascending: false }),
+          accessibleMetaLeadIds.length > 0
+            ? supabase
+                .from('meta_dm_conversations')
+                .select('id, lead_id, lead_source, platform, participant_name, last_message_at')
+                .in('lead_id', accessibleMetaLeadIds)
+                .order('last_message_at', { ascending: false })
+            : Promise.resolve({ data: [] as MetaDmConversationRow[], error: null }),
+        ]);
 
         if (messageError) throw messageError;
+        if (dmConversationError) throw dmConversationError;
 
         const conversationMap = new Map<string, ConversationSummary>();
 
@@ -223,22 +310,28 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
           const lead = leadMap.get(message.lead_id);
           if (!lead) return;
 
-          const existingConversation = conversationMap.get(message.lead_id);
+          const existingConversation = conversationMap.get(`sms:${message.lead_id}`);
 
           if (!existingConversation) {
             const preview =
               getSmsMessagePreviewText(message) ||
               (getSmsMessageMedia(message).length > 0 ? 'Media attachment' : message.direction === 'outbound' ? 'Sent a message' : 'New message');
 
-            conversationMap.set(message.lead_id, {
+            conversationMap.set(`sms:${message.lead_id}`, {
+              key: `sms:${lead.source}:${message.lead_id}`,
+              channel: 'sms',
+              conversationId: null,
               leadId: message.lead_id,
               source: lead.source,
               leadName: getLeadDisplayName(lead),
+              leadEmail: lead.email,
+              platform: lead.platform,
               phone: lead.phone || '',
               preview,
               latestMessageAt: message.created_at,
               latestDirection: message.direction,
               unreadCount: message.direction === 'inbound' && !message.read_at ? 1 : 0,
+              isAutomated: false,
               smsOptIn: lead.sms_opt_in,
               smsOptedOut: lead.sms_opted_out,
             });
@@ -248,6 +341,63 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
           if (message.direction === 'inbound' && !message.read_at) {
             existingConversation.unreadCount += 1;
           }
+        });
+
+        const dmConversationIds = ((dmConversationRows || []) as MetaDmConversationRow[]).map((conversation) => conversation.id);
+        let latestDmMessageByConversation = new Map<string, MetaDmMessageRow>();
+        let unreadDmCountByConversation = new Map<string, number>();
+
+        if (dmConversationIds.length > 0) {
+          const { data: dmMessageRows, error: dmMessageError } = await supabase
+            .from('meta_dm_messages')
+            .select('id, conversation_id, direction, message_text, created_at, attachments, read_at')
+            .in('conversation_id', dmConversationIds)
+            .order('created_at', { ascending: false });
+
+          if (dmMessageError) throw dmMessageError;
+
+          ((dmMessageRows || []) as MetaDmMessageRow[]).forEach((message) => {
+            if (!latestDmMessageByConversation.has(message.conversation_id)) {
+              latestDmMessageByConversation.set(message.conversation_id, message);
+            }
+
+            if (message.direction === 'inbound' && !message.read_at) {
+              unreadDmCountByConversation.set(
+                message.conversation_id,
+                (unreadDmCountByConversation.get(message.conversation_id) || 0) + 1
+              );
+            }
+          });
+        }
+
+        ((dmConversationRows || []) as MetaDmConversationRow[]).forEach((conversation) => {
+          if (!conversation.lead_id || conversation.lead_source !== 'meta') return;
+
+          const lead = leadMap.get(conversation.lead_id);
+          if (!lead || lead.source !== 'meta') return;
+
+          const latestMessage = latestDmMessageByConversation.get(conversation.id);
+          conversationMap.set(`dm:${conversation.id}`, {
+            key: `dm:${conversation.id}`,
+            channel: 'dm',
+            conversationId: conversation.id,
+            leadId: lead.id,
+            source: lead.source,
+            leadName: getLeadDisplayName(lead),
+            leadEmail: lead.email,
+            platform: conversation.platform,
+            phone: lead.phone || '',
+            preview:
+              latestMessage?.message_text?.trim() ||
+              getMetaDmAttachmentPreview(latestMessage?.attachments) ||
+              'New DM',
+            latestMessageAt: latestMessage?.created_at || conversation.last_message_at || new Date(0).toISOString(),
+            latestDirection: latestMessage?.direction || null,
+            unreadCount: unreadDmCountByConversation.get(conversation.id) || 0,
+            isAutomated: false,
+            smsOptIn: lead.sms_opt_in,
+            smsOptedOut: lead.sms_opted_out,
+          });
         });
 
         setConversations(sortConversations(Array.from(conversationMap.values())));
@@ -262,24 +412,37 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
     [session?.user?.email, session?.user?.id]
   );
 
-  const markConversationAsRead = useCallback(async (leadId: string) => {
+  const markConversationAsRead = useCallback(async (conversation: ConversationSummary) => {
     setConversations((prev) =>
       sortConversations(
-        prev.map((conversation) =>
-          conversation.leadId === leadId ? { ...conversation, unreadCount: 0 } : conversation
+        prev.map((item) =>
+          item.key === conversation.key ? { ...item, unreadCount: 0 } : item
         )
       )
     );
 
-    const { error: updateError } = await supabase
-      .from('sms_messages')
-      .update({ read_at: new Date().toISOString() })
-      .eq('lead_id', leadId)
-      .eq('direction', 'inbound')
-      .is('read_at', null);
+    if (conversation.channel === 'sms') {
+      const { error: updateError } = await supabase
+        .from('sms_messages')
+        .update({ read_at: new Date().toISOString() })
+        .eq('lead_id', conversation.leadId)
+        .eq('direction', 'inbound')
+        .is('read_at', null);
 
-    if (updateError) {
-      console.error('Error marking inbox conversation read:', updateError);
+      if (updateError) {
+        console.error('Error marking inbox SMS conversation read:', updateError);
+      }
+      return;
+    }
+
+    if (conversation.channel === 'dm' && conversation.conversationId) {
+      const { error: markDmReadError } = await supabase.rpc('mark_meta_dm_conversation_read', {
+        p_conversation_id: conversation.conversationId,
+      });
+
+      if (markDmReadError) {
+        console.error('Error marking inbox DM conversation read:', markDmReadError);
+      }
     }
   }, []);
 
@@ -293,6 +456,20 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'sms_messages' },
+        () => {
+          loadConversations();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'meta_dm_messages' },
+        () => {
+          loadConversations();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'meta_dm_conversations' },
         () => {
           loadConversations();
         }
@@ -332,7 +509,7 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
     (conversation: ConversationSummary) => {
       setScreenState({ screen: 'thread', conversation });
       if (conversation.unreadCount > 0) {
-        markConversationAsRead(conversation.leadId).catch(() => undefined);
+        markConversationAsRead(conversation).catch(() => undefined);
       }
     },
     [markConversationAsRead]
@@ -345,6 +522,10 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
 
   if (screenState.screen === 'thread') {
     const conversation = screenState.conversation;
+    const threadSubtitleParts = [
+      getChannelLabel(conversation.channel),
+      conversation.phone ? formatPhoneNumber(conversation.phone) : null,
+    ].filter(Boolean);
 
     return (
       <View style={[styles.safeAreaShell, { backgroundColor: colors.cardBackground }]}>
@@ -365,7 +546,7 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
                 {conversation.leadName}
               </Text>
               <Text style={[styles.threadSubtitle, { color: colors.textSecondary }]} numberOfLines={1}>
-                {conversation.phone ? formatPhoneNumber(conversation.phone) : 'No phone on file'}
+                {threadSubtitleParts.join(' • ') || 'Conversation'}
               </Text>
             </View>
 
@@ -378,18 +559,35 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
             </TouchableOpacity>
           </View>
 
-          <SmsMessaging
-            leadId={conversation.leadId}
-            leadPhone={conversation.phone}
-            leadName={conversation.leadName}
-            leadSource={conversation.source === 'meta' ? 'meta_ads' : 'leads'}
-            initialSmsOptIn={conversation.smsOptIn}
-            initialSmsOptedOut={conversation.smsOptedOut}
-            onMessageSent={() => {
-              loadConversations();
-            }}
-            showHeader={false}
-          />
+          {conversation.channel === 'sms' ? (
+            <SmsMessaging
+              leadId={conversation.leadId}
+              leadPhone={conversation.phone}
+              leadName={conversation.leadName}
+              leadSource={conversation.source === 'meta' ? 'meta_ads' : 'leads'}
+              initialSmsOptIn={conversation.smsOptIn}
+              initialSmsOptedOut={conversation.smsOptedOut}
+              onMessageSent={() => {
+                loadConversations();
+              }}
+              showHeader={false}
+            />
+          ) : (
+            <MetaDmMessaging
+              leadId={conversation.leadId}
+              leadSource={conversation.source === 'meta' ? 'meta' : 'organic'}
+              conversationId={conversation.conversationId}
+              leadName={conversation.leadName}
+              leadPhone={conversation.phone || null}
+              leadEmail={conversation.leadEmail || null}
+              onConversationRead={() => {
+                loadConversations();
+              }}
+              onMessageSent={() => {
+                loadConversations();
+              }}
+            />
+          )}
         </SafeAreaView>
       </View>
     );
@@ -397,7 +595,16 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
 
   const renderConversationItem = ({ item }: { item: ConversationSummary }) => {
     const hasUnread = item.unreadCount > 0;
-    const previewPrefix = item.latestDirection === 'outbound' ? 'You: ' : '';
+    const previewPrefix = item.latestDirection === 'outbound' ? `${item.isAutomated ? 'Gio' : 'You'}: ` : '';
+    const iconName =
+      item.channel === 'dm'
+        ? getMetaDmInboxIcon(item.platform)
+        : 'chatbubble-ellipses-outline';
+    const iconColor = hasUnread
+      ? '#FFFFFF'
+      : item.channel === 'dm'
+        ? '#4338CA'
+        : ACCENT;
 
     return (
       <TouchableOpacity
@@ -406,23 +613,46 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
         onPress={() => handleConversationPress(item)}
       >
         <View style={styles.avatarWrap}>
-          <View style={[styles.avatarCircle, hasUnread && styles.avatarCircleUnread]}>
-            <Ionicons name="chatbubble-ellipses-outline" size={18} color={hasUnread ? '#FFFFFF' : ACCENT} />
+          <View
+            style={[
+              styles.avatarCircle,
+              item.channel === 'dm' ? styles.avatarCircleDm : styles.avatarCircleSms,
+              hasUnread && styles.avatarCircleUnread,
+            ]}
+          >
+            <Ionicons name={iconName} size={18} color={iconColor} />
           </View>
         </View>
 
         <View style={styles.conversationBody}>
           <View style={styles.conversationTopRow}>
-            <Text
-              style={[
-                styles.conversationName,
-                { color: colors.textPrimary },
-                hasUnread && styles.conversationNameUnread,
-              ]}
-              numberOfLines={1}
-            >
-              {item.leadName}
-            </Text>
+            <View style={styles.conversationTitleWrap}>
+              <Text
+                style={[
+                  styles.conversationName,
+                  { color: colors.textPrimary },
+                  hasUnread && styles.conversationNameUnread,
+                ]}
+                numberOfLines={1}
+              >
+                {item.leadName}
+              </Text>
+              <View
+                style={[
+                  styles.channelBadge,
+                  item.channel === 'dm' ? styles.channelBadgeDm : styles.channelBadgeSms,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.channelBadgeText,
+                    item.channel === 'dm' ? styles.channelBadgeTextDm : styles.channelBadgeTextSms,
+                  ]}
+                >
+                  {getChannelLabel(item.channel)}
+                </Text>
+              </View>
+            </View>
             <Text style={[styles.conversationTime, { color: colors.textSecondary }]}>
               {formatTimestamp(item.latestMessageAt)}
             </Text>
@@ -447,10 +677,10 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
 
             {hasUnread ? (
               <View style={styles.unreadBadge}>
-                <Text style={styles.unreadBadgeText}>{item.unreadCount}</Text>
-              </View>
-            ) : null}
-          </View>
+              <Text style={styles.unreadBadgeText}>{item.unreadCount > 99 ? '99+' : item.unreadCount}</Text>
+            </View>
+          ) : null}
+        </View>
         </View>
       </TouchableOpacity>
     );
@@ -461,7 +691,7 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={[styles.header, { backgroundColor: colors.headerBackground }]}>
           <Text style={styles.headerTitle}>Messages</Text>
-          <Text style={styles.headerSubtitle}>Recent SMS and MMS conversations</Text>
+          <Text style={styles.headerSubtitle}>Recent SMS, MMS, and DM conversations</Text>
         </View>
 
         <View style={[styles.controlsCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
@@ -515,7 +745,7 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
         ) : (
           <FlatList
             data={filteredConversations}
-            keyExtractor={(item) => item.leadId}
+            keyExtractor={(item) => item.key}
             renderItem={renderConversationItem}
             contentContainerStyle={styles.listContent}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={ACCENT} />}
@@ -648,6 +878,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#F5F3FF',
   },
+  avatarCircleSms: {
+    backgroundColor: '#F5F3FF',
+  },
+  avatarCircleDm: {
+    backgroundColor: '#EEF2FF',
+  },
   avatarCircleUnread: {
     backgroundColor: ACCENT,
   },
@@ -660,13 +896,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
   },
-  conversationName: {
+  conversationTitleWrap: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  conversationName: {
     fontSize: 16,
     fontWeight: '600',
+    flexShrink: 1,
   },
   conversationNameUnread: {
     fontWeight: '700',
+  },
+  channelBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+  },
+  channelBadgeSms: {
+    backgroundColor: '#F1F5F9',
+  },
+  channelBadgeDm: {
+    backgroundColor: '#E0E7FF',
+  },
+  channelBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  channelBadgeTextSms: {
+    color: '#475569',
+  },
+  channelBadgeTextDm: {
+    color: '#4338CA',
   },
   conversationTime: {
     fontSize: 12,

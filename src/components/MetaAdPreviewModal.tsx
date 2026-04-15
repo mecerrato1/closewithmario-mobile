@@ -5,6 +5,7 @@ import {
   type ImageSourcePropType,
   Linking,
   Modal,
+  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -384,147 +385,148 @@ export function MetaAdPreviewModal({
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={modalStyles.overlay}>
-        <View style={[modalStyles.card, { backgroundColor: colors.cardBackground }]}>
-          <View style={[modalStyles.header, { borderBottomColor: colors.border }]}>
-            <View style={modalStyles.headerText}>
-              <Text style={[modalStyles.title, { color: colors.textPrimary }]}>
-                {adName || data?.ad.name || 'Meta Ad Preview'}
-              </Text>
-              <Text style={[modalStyles.subtitle, { color: colors.textSecondary }]}>
-                {campaignName || data?.ad.campaign.name || 'Campaign unavailable'}
-                {platform ? ` • ${getPlatformLabel(platform)}` : ''}
-              </Text>
-              {adId ? (
-                <Text style={[modalStyles.adId, { color: colors.textSecondary }]}>Ad ID: {adId}</Text>
-              ) : null}
-            </View>
-            <TouchableOpacity
-              onPress={onClose}
-              style={[modalStyles.closeButton, { backgroundColor: isDark ? '#1E293B' : '#F3F4F6' }]}
-            >
-              <Text style={[modalStyles.closeButtonText, { color: colors.textPrimary }]}>✕</Text>
-            </TouchableOpacity>
-          </View>
-
-          {tabs.length > 1 ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={modalStyles.tabRow}
-              style={[modalStyles.tabScroll, { borderBottomColor: colors.border }]}
-            >
-              {tabs.map((tab) => (
-                <TouchableOpacity
-                  key={tab.key}
-                  style={[
-                    modalStyles.tab,
-                    viewMode === tab.key
-                      ? { backgroundColor: PLUM }
-                      : { backgroundColor: isDark ? '#1E293B' : '#F3F4F6' },
-                  ]}
-                  onPress={() => setViewMode(tab.key)}
-                >
-                  <Text
-                    style={[
-                      modalStyles.tabText,
-                      { color: viewMode === tab.key ? '#FFFFFF' : colors.textSecondary },
-                    ]}
-                  >
-                    {tab.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          ) : null}
-
-          <ScrollView
-            style={modalStyles.content}
-            contentContainerStyle={modalStyles.contentInner}
-            showsVerticalScrollIndicator={false}
-          >
-            {warningMessage ? (
-              <View style={modalStyles.warningBox}>
-                <Text style={modalStyles.warningText}>{warningMessage}</Text>
-              </View>
-            ) : null}
-
-            {formWarning && (viewMode === 'form' || !formAvailable) ? (
-              <View style={modalStyles.warningBox}>
-                <Text style={modalStyles.warningText}>{formWarning}</Text>
-              </View>
-            ) : null}
-
-            {loading ? (
-              <View style={modalStyles.loadingWrap}>
-                <ActivityIndicator size="large" color={PLUM} />
-                <Text style={[modalStyles.loadingText, { color: colors.textSecondary }]}>
-                  Loading Meta ad preview...
+        <SafeAreaView style={modalStyles.safeArea}>
+          <View style={[modalStyles.card, { backgroundColor: colors.cardBackground }]}>
+            <View style={[modalStyles.header, { borderBottomColor: colors.border }]}>
+              <View style={modalStyles.headerText}>
+                <Text style={[modalStyles.title, { color: colors.textPrimary }]}>
+                  {adName || data?.ad.name || 'Meta Ad Preview'}
                 </Text>
-              </View>
-            ) : viewMode === 'video' && playableVideoAvailable ? (
-              <View style={modalStyles.section}>
-                <Text style={[modalStyles.sectionHint, { color: colors.textSecondary }]}>
-                  Native video playback with audio controls. Tap the play button to start.
+                <Text style={[modalStyles.subtitle, { color: colors.textSecondary }]}>
+                  {campaignName || data?.ad.campaign.name || 'Campaign unavailable'}
+                  {platform ? ` • ${getPlatformLabel(platform)}` : ''}
                 </Text>
-                <View style={modalStyles.videoFrame}>
-                  <TouchableOpacity
-                    activeOpacity={0.92}
-                    onPress={handlePlayVideo}
-                    style={modalStyles.videoTouchable}
-                  >
-                  <Video
-                    ref={(node) => {
-                      videoRef.current = node;
-                    }}
-                    source={{ uri: data?.creative.video_source || '' }}
-                    style={modalStyles.video}
-                    useNativeControls
-                    resizeMode={ResizeMode.CONTAIN}
-                    shouldPlay={false}
-                    isLooping={false}
-                    onPlaybackStatusUpdate={handleVideoStatusChange}
-                    posterSource={
-                      data?.creative.thumbnail_url
-                        ? { uri: data.creative.thumbnail_url }
-                        : data?.creative.image_url
-                          ? { uri: data.creative.image_url }
-                          : undefined
-                    }
-                    usePoster={Boolean(data?.creative.thumbnail_url || data?.creative.image_url)}
-                  />
-                    {showVideoPlayOverlay ? (
-                      <View style={modalStyles.videoOverlay}>
-                        <View style={modalStyles.videoPlayButton}>
-                          <Text style={modalStyles.videoPlayIcon}>▶</Text>
-                        </View>
-                        <Text style={modalStyles.videoOverlayText}>Tap to play with sound</Text>
-                      </View>
-                    ) : null}
-                  </TouchableOpacity>
-                </View>
-                {metaVideoUrl ? (
-                  <TouchableOpacity onPress={() => Linking.openURL(metaVideoUrl)} style={modalStyles.linkButton}>
-                    <Text style={modalStyles.linkButtonText}>Open on Meta</Text>
-                  </TouchableOpacity>
+                {adId ? (
+                  <Text style={[modalStyles.adId, { color: colors.textSecondary }]}>Ad ID: {adId}</Text>
                 ) : null}
               </View>
-            ) : viewMode === 'preview' && previewAvailable ? (
-              <View style={modalStyles.section}>
-                <Text style={[modalStyles.sectionHint, { color: colors.textSecondary }]}>
-                  Exact Meta-hosted preview. Audio may still be muted here.
-                </Text>
-                <View style={modalStyles.webViewWrap}>
-                  <WebView
-                    source={{ uri: data?.preview?.iframe_src || '' }}
-                    style={modalStyles.webView}
-                    mediaPlaybackRequiresUserAction={false}
-                    allowsInlineMediaPlayback
-                    javaScriptEnabled
-                    domStorageEnabled
-                  />
+              <TouchableOpacity
+                onPress={onClose}
+                style={[modalStyles.closeButton, { backgroundColor: isDark ? '#1E293B' : '#F3F4F6' }]}
+              >
+                <Text style={[modalStyles.closeButtonText, { color: colors.textPrimary }]}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {tabs.length > 1 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={modalStyles.tabRow}
+                style={[modalStyles.tabScroll, { borderBottomColor: colors.border }]}
+              >
+                {tabs.map((tab) => (
+                  <TouchableOpacity
+                    key={tab.key}
+                    style={[
+                      modalStyles.tab,
+                      viewMode === tab.key
+                        ? { backgroundColor: PLUM }
+                        : { backgroundColor: isDark ? '#1E293B' : '#F3F4F6' },
+                    ]}
+                    onPress={() => setViewMode(tab.key)}
+                  >
+                    <Text
+                      style={[
+                        modalStyles.tabText,
+                        { color: viewMode === tab.key ? '#FFFFFF' : colors.textSecondary },
+                      ]}
+                    >
+                      {tab.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : null}
+
+            <ScrollView
+              style={modalStyles.content}
+              contentContainerStyle={modalStyles.contentInner}
+              showsVerticalScrollIndicator={false}
+            >
+              {warningMessage ? (
+                <View style={modalStyles.warningBox}>
+                  <Text style={modalStyles.warningText}>{warningMessage}</Text>
                 </View>
-              </View>
-            ) : viewMode === 'form' ? (
+              ) : null}
+
+              {formWarning && (viewMode === 'form' || !formAvailable) ? (
+                <View style={modalStyles.warningBox}>
+                  <Text style={modalStyles.warningText}>{formWarning}</Text>
+                </View>
+              ) : null}
+
+              {loading ? (
+                <View style={modalStyles.loadingWrap}>
+                  <ActivityIndicator size="large" color={PLUM} />
+                  <Text style={[modalStyles.loadingText, { color: colors.textSecondary }]}>
+                    Loading Meta ad preview...
+                  </Text>
+                </View>
+              ) : viewMode === 'video' && playableVideoAvailable ? (
+                <View style={modalStyles.section}>
+                  <Text style={[modalStyles.sectionHint, { color: colors.textSecondary }]}>
+                    Native video playback with audio controls. Tap the play button to start.
+                  </Text>
+                  <View style={modalStyles.videoFrame}>
+                    <TouchableOpacity
+                      activeOpacity={0.92}
+                      onPress={handlePlayVideo}
+                      style={modalStyles.videoTouchable}
+                    >
+                    <Video
+                      ref={(node) => {
+                        videoRef.current = node;
+                      }}
+                      source={{ uri: data?.creative.video_source || '' }}
+                      style={modalStyles.video}
+                      useNativeControls
+                      resizeMode={ResizeMode.CONTAIN}
+                      shouldPlay={false}
+                      isLooping={false}
+                      onPlaybackStatusUpdate={handleVideoStatusChange}
+                      posterSource={
+                        data?.creative.thumbnail_url
+                          ? { uri: data.creative.thumbnail_url }
+                          : data?.creative.image_url
+                            ? { uri: data.creative.image_url }
+                            : undefined
+                      }
+                      usePoster={Boolean(data?.creative.thumbnail_url || data?.creative.image_url)}
+                    />
+                      {showVideoPlayOverlay ? (
+                        <View style={modalStyles.videoOverlay}>
+                          <View style={modalStyles.videoPlayButton}>
+                            <Text style={modalStyles.videoPlayIcon}>▶</Text>
+                          </View>
+                          <Text style={modalStyles.videoOverlayText}>Tap to play with sound</Text>
+                        </View>
+                      ) : null}
+                    </TouchableOpacity>
+                  </View>
+                  {metaVideoUrl ? (
+                    <TouchableOpacity onPress={() => Linking.openURL(metaVideoUrl)} style={modalStyles.linkButton}>
+                      <Text style={modalStyles.linkButtonText}>Open on Meta</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              ) : viewMode === 'preview' && previewAvailable ? (
+                <View style={modalStyles.section}>
+                  <Text style={[modalStyles.sectionHint, { color: colors.textSecondary }]}>
+                    Exact Meta-hosted preview. Audio may still be muted here.
+                  </Text>
+                  <View style={modalStyles.webViewWrap}>
+                    <WebView
+                      source={{ uri: data?.preview?.iframe_src || '' }}
+                      style={modalStyles.webView}
+                      mediaPlaybackRequiresUserAction={false}
+                      allowsInlineMediaPlayback
+                      javaScriptEnabled
+                      domStorageEnabled
+                    />
+                  </View>
+                </View>
+              ) : viewMode === 'form' ? (
               leadForm ? (
                 <View style={modalStyles.section}>
                   <View style={[modalStyles.detailCard, { backgroundColor: isDark ? '#111827' : '#F8FAFC' }]}>
@@ -818,15 +820,16 @@ export function MetaAdPreviewModal({
               <View style={modalStyles.section}>
                 <Image source={fallbackImage} style={modalStyles.fallbackImage} resizeMode="contain" />
               </View>
-            ) : (
-              <View style={modalStyles.emptyState}>
-                <Text style={[modalStyles.emptyText, { color: colors.textSecondary }]}>
-                  No preview is available for this ad yet.
-                </Text>
-              </View>
-            )}
-          </ScrollView>
-        </View>
+              ) : (
+                <View style={modalStyles.emptyState}>
+                  <Text style={[modalStyles.emptyText, { color: colors.textSecondary }]}>
+                    No preview is available for this ad yet.
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </SafeAreaView>
       </View>
     </Modal>
   );
@@ -838,9 +841,12 @@ const modalStyles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(2, 6, 23, 0.88)',
-    justifyContent: 'center',
+  },
+  safeArea: {
+    flex: 1,
     paddingHorizontal: 14,
-    paddingVertical: 26,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
   card: {
     flex: 1,
