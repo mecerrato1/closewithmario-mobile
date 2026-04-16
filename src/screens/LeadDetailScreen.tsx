@@ -161,6 +161,16 @@ type DetailThemeColors = {
   textSecondary: string;
 };
 
+type SavedMetaAdCreative = {
+  imageUrl: string | null;
+  headline: string | null;
+  body: string | null;
+  adName: string | null;
+  adType: string | null;
+  adsetName: string | null;
+  campaignName: string | null;
+};
+
 type MetadataItemCard = {
   title: string;
   subtitle?: string | null;
@@ -192,6 +202,8 @@ const EXCLUDED_LEAD_METADATA_KEYS = new Set([
   'co_borrowers',
   'loan_originator',
   'has_co_borrower',
+  'ad_creative',
+  'raw',
   'import_date',
   'import_source',
   'mismo_version',
@@ -284,6 +296,12 @@ const humanizeMetadataString = (value: string) => {
 
 const hasDisplayValue = (value?: string | null) => typeof value === 'string' && value.trim().length > 0;
 
+const getTrimmedString = (value: unknown): string | null =>
+  typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
 const hasRenderableMetadataValue = (value: unknown): boolean => {
   if (value == null) return false;
   if (typeof value === 'string') return value.trim().length > 0;
@@ -343,6 +361,28 @@ const formatMetadataDisplayValue = (key: string, value: unknown): string | null 
   }
 
   return JSON.stringify(value, null, 2);
+};
+
+const getSavedMetaAdCreative = (metaLead?: MetaLead | null): SavedMetaAdCreative | null => {
+  if (!metaLead) return null;
+
+  const metadataCreative = isPlainObject(metaLead.metadata?.ad_creative) ? metaLead.metadata.ad_creative : null;
+  const rawCreative = isPlainObject(metaLead.raw?.ad_creative) ? metaLead.raw.ad_creative : null;
+  const creative = (metadataCreative || rawCreative) as Record<string, unknown> | null;
+
+  if (!creative) return null;
+
+  const savedCreative: SavedMetaAdCreative = {
+    imageUrl: getTrimmedString(creative.image_url) || getTrimmedString(creative.thumbnail_url),
+    headline: getTrimmedString(creative.headline),
+    body: getTrimmedString(creative.body),
+    adName: getTrimmedString(creative.ad_name) || getTrimmedString(metaLead.ad_name),
+    adType: getTrimmedString(creative.ad_type),
+    adsetName: getTrimmedString(creative.adset_name) || getTrimmedString(metaLead.adset_name),
+    campaignName: getTrimmedString(creative.campaign_name) || getTrimmedString(metaLead.campaign_name),
+  };
+
+  return Object.values(savedCreative).some((value) => hasDisplayValue(value)) ? savedCreative : null;
 };
 
 const buildMetadataRowsFromObject = (
@@ -691,6 +731,124 @@ const LeadMetadataCard = ({
           </View>
         );
       })}
+    </View>
+  );
+};
+
+const MetaAdCreativeCard = ({
+  creative,
+  colors,
+}: {
+  creative: SavedMetaAdCreative;
+  colors: DetailThemeColors;
+}) => {
+  const [hideImage, setHideImage] = useState(!hasDisplayValue(creative.imageUrl));
+  const [imageAspectRatio, setImageAspectRatio] = useState(1.2);
+
+  useEffect(() => {
+    let cancelled = false;
+    const imageUrl = creative.imageUrl;
+
+    if (typeof imageUrl !== 'string' || imageUrl.trim().length === 0) {
+      setHideImage(true);
+      setImageAspectRatio(1.2);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setHideImage(false);
+    Image.getSize(
+      imageUrl,
+      (width, height) => {
+        if (cancelled || width <= 0 || height <= 0) return;
+        setImageAspectRatio(width / height);
+      },
+      () => {
+        if (!cancelled) setImageAspectRatio(1.2);
+      }
+    );
+
+    return () => {
+      cancelled = true;
+    };
+  }, [creative.imageUrl]);
+
+  const metaItems = [
+    { label: 'Ad Name', value: creative.adName },
+    { label: 'Ad Type', value: creative.adType },
+    { label: 'Adset Name', value: creative.adsetName },
+    { label: 'Campaign Name', value: creative.campaignName },
+  ].filter((item) => hasDisplayValue(item.value));
+
+  const hasImage = !hideImage && hasDisplayValue(creative.imageUrl);
+  const hasCopy = hasDisplayValue(creative.headline) || hasDisplayValue(creative.body);
+
+  if (!hasImage && !hasCopy && metaItems.length === 0) return null;
+
+  const imageHeight = Math.min(260, Math.max(150, 320 / Math.max(imageAspectRatio, 0.5)));
+
+  return (
+    <View
+      style={[
+        styles.savedAdCreativeCard,
+        {
+          backgroundColor: colors.cardBackground,
+          borderColor: colors.border,
+        },
+      ]}
+    >
+      <Text style={[styles.savedAdCreativeLabel, { color: colors.textSecondary }]}>Ad Creative</Text>
+
+      {hasImage ? (
+        <View style={[styles.savedAdCreativeImageWrap, { backgroundColor: colors.border }]}>
+          <Image
+            source={{ uri: creative.imageUrl || undefined }}
+            style={[styles.savedAdCreativeImage, { height: imageHeight }]}
+            resizeMode="contain"
+            onError={() => setHideImage(true)}
+          />
+        </View>
+      ) : null}
+
+      {hasDisplayValue(creative.headline) ? (
+        <Text style={[styles.savedAdCreativeHeadline, { color: colors.textPrimary }]}>
+          {creative.headline}
+        </Text>
+      ) : null}
+
+      {hasDisplayValue(creative.body) ? (
+        <Text style={[styles.savedAdCreativeBody, { color: colors.textSecondary }]}>
+          {creative.body}
+        </Text>
+      ) : null}
+
+      {metaItems.length > 0 ? (
+        <View style={styles.savedAdCreativeMetaGrid}>
+          {metaItems.map((item) => (
+            <View
+              key={item.label}
+              style={[
+                styles.savedAdCreativeMetaItem,
+                {
+                  backgroundColor: colors.cardBackground,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <Text style={[styles.savedAdCreativeMetaLabel, { color: colors.textSecondary }]}>
+                {item.label}
+              </Text>
+              <Text
+                style={[styles.savedAdCreativeMetaValue, { color: colors.textPrimary }]}
+                numberOfLines={2}
+              >
+                {item.value}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 };
@@ -1353,6 +1511,20 @@ export function LeadDetailView({
   ] : [];
   const recordMetadata = record?.metadata || null;
   const metadataSections = buildMetadataSections(recordMetadata as Record<string, unknown> | null);
+  const metaRecord = isMeta ? (record as MetaLead | undefined) : undefined;
+  const savedMetaAdCreative = getSavedMetaAdCreative(metaRecord);
+  const hasLiveMetaPreview = Boolean(metaRecord?.ad_id);
+  const isImportedMetaLead = Boolean(
+    metaRecord &&
+      (
+        hasDisplayValue(getTrimmedString(metaRecord.metadata?.import_source)) ||
+        hasDisplayValue(getTrimmedString(metaRecord.metadata?.import_date)) ||
+        isPlainObject(metaRecord.metadata?.raw_fields) ||
+        !hasLiveMetaPreview
+      )
+  );
+  const shouldShowSavedAdCreativeCard = Boolean(savedMetaAdCreative && (isImportedMetaLead || !hasLiveMetaPreview));
+  const shouldHideImportedMetaMetadata = Boolean(isMeta && isImportedMetaLead);
   
   // Use AI attention badge if available, otherwise fall back to rule-based
   // Show AI badge if we have AI data (even if needsAttention is false - shows "No Action Needed")
@@ -3895,10 +4067,12 @@ export function LeadDetailView({
                 rows={leadOriginatorRows}
                 colors={leadSummaryColors}
               />
-              <LeadMetadataCard
-                sections={metadataSections}
-                colors={leadSummaryColors}
-              />
+              {!shouldShowSavedAdCreativeCard && (
+                <LeadMetadataCard
+                  sections={metadataSections}
+                  colors={leadSummaryColors}
+                />
+              )}
             </>
           )}
 
@@ -3941,12 +4115,12 @@ export function LeadDetailView({
                   })()}</Text>
                 </Text>
               )}
-              {(record as MetaLead).campaign_name && (
+              {!shouldShowSavedAdCreativeCard && (record as MetaLead).campaign_name && (
                 <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Campaign: {(record as MetaLead).campaign_name}
                 </Text>
               )}
-              {(record as MetaLead).ad_name && (
+              {!shouldShowSavedAdCreativeCard && (record as MetaLead).ad_name && (
                 <>
                   <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                     Ad Name: {(record as MetaLead).ad_name}
@@ -3961,6 +4135,12 @@ export function LeadDetailView({
                   )}
                 </>
               )}
+              {shouldShowSavedAdCreativeCard && savedMetaAdCreative ? (
+                <MetaAdCreativeCard
+                  creative={savedMetaAdCreative}
+                  colors={leadSummaryColors}
+                />
+              ) : null}
               {(record as MetaLead).subject_address && (
                 <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Address: {(record as MetaLead).subject_address}
@@ -4145,10 +4325,12 @@ export function LeadDetailView({
                   </>
                 );
               })()}
-              <LeadMetadataCard
-                sections={metadataSections}
-                colors={leadSummaryColors}
-              />
+              {!shouldHideImportedMetaMetadata && (
+                <LeadMetadataCard
+                  sections={metadataSections}
+                  colors={leadSummaryColors}
+                />
+              )}
             </>
           )}
 

@@ -27,6 +27,10 @@ export type LeadMetadata = {
   has_co_borrower?: boolean;
   co_borrowers?: CoBorrowerInfo[];
   loan_originator?: LoanOriginatorInfo;
+  ad_creative?: Record<string, unknown> | null;
+  raw?: Record<string, unknown> | null;
+  import_source?: string | null;
+  import_date?: string | null;
   [key: string]: unknown;
 };
 
@@ -107,6 +111,7 @@ export type MetaLead = {
   lo_id?: string | null;
   realtor_id?: string | null;
   ad_id?: string | null;
+  adset_name?: string | null;
   platform: string | null;
   campaign_name: string | null;
   ad_name?: string | null;
@@ -126,6 +131,7 @@ export type MetaLead = {
   meta_ad_notes?: string | null;
   form_data?: Record<string, string> | null;
   metadata?: LeadMetadata | null;
+  raw?: Record<string, unknown> | null;
   sms_opt_in?: boolean | null;
   sms_opted_out?: boolean | null;
   // Tracking fields
