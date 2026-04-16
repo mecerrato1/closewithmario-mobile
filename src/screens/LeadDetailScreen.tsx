@@ -61,6 +61,38 @@ function getMetaDmTabIcon(platform?: string | null): keyof typeof Ionicons.glyph
   return 'logo-facebook';
 }
 
+function getMetaPlatformLabel(platform?: string | null): string | null {
+  const normalized = platform?.trim().toLowerCase() || '';
+  if (!normalized) return null;
+  if (normalized.includes('fb') || normalized.includes('facebook')) return 'Facebook';
+  if (normalized.includes('ig') || normalized.includes('instagram')) return 'Instagram';
+  if (normalized.includes('messenger')) return 'Messenger';
+  if (normalized.includes('whatsapp')) return 'WhatsApp';
+  return platform?.trim() || null;
+}
+
+function getDealSnapshotSourceLabel(record: Lead | MetaLead, isMeta: boolean): string | null {
+  if (isMeta) {
+    const platformLabel = getMetaPlatformLabel((record as MetaLead).platform);
+    return platformLabel === 'Facebook' || platformLabel === 'Instagram' ? platformLabel : null;
+  }
+
+  const source = (record as Lead).source?.trim().toLowerCase();
+  return source === 'my lead' ? null : 'Website';
+}
+
+function getDealSnapshotSourceIcon(label: string): keyof typeof Ionicons.glyphMap {
+  switch (label) {
+    case 'Facebook':
+      return 'logo-facebook';
+    case 'Instagram':
+      return 'logo-instagram';
+    case 'Website':
+    default:
+      return 'globe-outline';
+  }
+}
+
 const normalizeEmailRecipients = (value?: string[] | string | null) => {
   if (!value) return [];
   if (Array.isArray(value)) {
@@ -1352,6 +1384,7 @@ export function LeadDetailView({
   const showDmTab = isMeta;
   const hasDetailTabs = showMessagesTab || showDmTab;
   const sourceDetail = !isMeta ? (record as Lead | undefined)?.source_detail || null : (record as MetaLead | undefined)?.source_detail || null;
+  const dealSnapshotSourceLabel = record ? getDealSnapshotSourceLabel(record, isMeta) : null;
   const formatTabBadgeCount = (count: number) => (count > 99 ? '99+' : String(count));
 
   const loadDetailMessageIndicators = useCallback(async () => {
@@ -3059,7 +3092,21 @@ export function LeadDetailView({
           })()}
         </ScrollView>
         <Text style={styles.dealSnapshotTimestamp}>
-          {new Date(record.created_at).toLocaleDateString('en-US', { 
+          {dealSnapshotSourceLabel ? (
+            <>
+              <Ionicons
+                name={getDealSnapshotSourceIcon(dealSnapshotSourceLabel)}
+                size={12}
+                color={colors.textPrimary}
+              />
+              {' '}
+              <Text style={{ fontWeight: '700', color: colors.textPrimary }}>
+                {dealSnapshotSourceLabel}
+              </Text>
+            </>
+          ) : null}
+          {dealSnapshotSourceLabel ? ' • ' : ''}
+          {new Date(record.created_at).toLocaleDateString('en-US', {
             month: 'short', 
             day: 'numeric',
             year: 'numeric'
@@ -4101,18 +4148,9 @@ export function LeadDetailView({
                   <Ionicons name="chevron-forward" size={16} color={PLUM} />
                 </TouchableOpacity>
               )}
-              {(record as MetaLead).platform && (
+              {getMetaPlatformLabel((record as MetaLead).platform) && (
                 <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
-                  Platform: <Text style={{ fontWeight: '700' }}>{(() => {
-                    const platformValue = (record as MetaLead).platform;
-                    if (!platformValue) return '';
-                    const platform = platformValue.toLowerCase();
-                    if (platform.includes('fb') || platform.includes('facebook')) return 'Facebook';
-                    if (platform.includes('ig') || platform.includes('instagram')) return 'Instagram';
-                    if (platform.includes('messenger')) return 'Messenger';
-                    if (platform.includes('whatsapp')) return 'WhatsApp';
-                    return platformValue;
-                  })()}</Text>
+                  Platform: <Text style={{ fontWeight: '700' }}>{getMetaPlatformLabel((record as MetaLead).platform)}</Text>
                 </Text>
               )}
               {!shouldShowSavedAdCreativeCard && (record as MetaLead).campaign_name && (
