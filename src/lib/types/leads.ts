@@ -56,6 +56,16 @@ export type Lead = {
   message?: string | null;
   source?: string | null; // e.g., 'My Lead', 'CTA Form', etc.
   source_detail?: string | null; // Referral source for self-created leads
+  db_source?: string | null;
+  ad_id?: string | null;
+  ad_name?: string | null;
+  adset_id?: string | null;
+  campaign_id?: string | null;
+  campaign_name?: string | null;
+  platform?: string | null;
+  preferred_language?: string | null;
+  county_interest?: string | null;
+  income_type?: string | null;
   subject_address?: string | null;
   subject_city?: string | null;
   subject_state?: string | null;
@@ -96,6 +106,7 @@ export type Lead = {
   last_referral_update_summary?: string | null;
   // Metadata (JSONB) — contains co-borrowers from XML imports
   metadata?: LeadMetadata | null;
+  raw?: Record<string, unknown> | null;
 };
 
 export type MetaLead = {

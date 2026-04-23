@@ -110,6 +110,8 @@ type Props = {
   adName?: string | null;
   campaignName?: string | null;
   fallbackImage?: ImageSourcePropType | null;
+  fallbackHeadline?: string | null;
+  fallbackBody?: string | null;
 };
 
 function getPlatformLabel(platform?: string | null) {
@@ -148,6 +150,8 @@ export function MetaAdPreviewModal({
   adName,
   campaignName,
   fallbackImage,
+  fallbackHeadline,
+  fallbackBody,
 }: Props) {
   const { colors, isDark } = useThemeColors();
   const { width: windowWidth } = useWindowDimensions();
@@ -752,6 +756,20 @@ export function MetaAdPreviewModal({
             ) : viewMode === 'fallback' && fallbackImage ? (
               <View style={modalStyles.section}>
                 <Image source={fallbackImage} style={modalStyles.fallbackImage} resizeMode="contain" />
+                {(fallbackHeadline || fallbackBody) ? (
+                  <View style={[modalStyles.detailCard, { backgroundColor: isDark ? '#111827' : '#F8FAFC' }]}>
+                    {fallbackHeadline ? (
+                      <Text style={[modalStyles.formCardTitle, { color: colors.textPrimary }]}>
+                        {fallbackHeadline}
+                      </Text>
+                    ) : null}
+                    {fallbackBody ? (
+                      <Text style={[modalStyles.formCardBody, { color: colors.textSecondary }]}>
+                        {fallbackBody}
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
               </View>
             ) : data ? (
               <View style={modalStyles.section}>

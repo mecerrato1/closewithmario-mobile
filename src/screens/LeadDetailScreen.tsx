@@ -20,6 +20,7 @@ import {
   TouchableWithoutFeedback,
   StyleSheet,
   useWindowDimensions,
+  type ImageSourcePropType,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Session } from '@supabase/supabase-js';
@@ -71,7 +72,12 @@ function getMetaPlatformLabel(platform?: string | null): string | null {
   return platform?.trim() || null;
 }
 
-function getDealSnapshotSourceLabel(record: Lead | MetaLead, isMeta: boolean): string | null {
+function getDealSnapshotSourceLabel(record: Lead | MetaLead, isMeta: boolean, attributedPlatform?: string | null): string | null {
+  const attributedPlatformLabel = getMetaPlatformLabel(attributedPlatform);
+  if (attributedPlatformLabel === 'Facebook' || attributedPlatformLabel === 'Instagram') {
+    return attributedPlatformLabel;
+  }
+
   if (isMeta) {
     const platformLabel = getMetaPlatformLabel((record as MetaLead).platform);
     return platformLabel === 'Facebook' || platformLabel === 'Instagram' ? platformLabel : null;
@@ -195,12 +201,24 @@ type DetailThemeColors = {
 
 type SavedMetaAdCreative = {
   imageUrl: string | null;
+  thumbnailUrl: string | null;
   headline: string | null;
   body: string | null;
   adName: string | null;
   adType: string | null;
   adsetName: string | null;
   campaignName: string | null;
+};
+
+type LandingAdAttribution = {
+  adId: string | null;
+  adName: string | null;
+  adsetId: string | null;
+  campaignId: string | null;
+  campaignName: string | null;
+  platform: string | null;
+  sourceDetail: string | null;
+  dbSource: string | null;
 };
 
 type MetadataItemCard = {
@@ -235,7 +253,9 @@ const EXCLUDED_LEAD_METADATA_KEYS = new Set([
   'loan_originator',
   'has_co_borrower',
   'ad_creative',
+  'attribution',
   'raw',
+  'va_loan_landing',
   'import_date',
   'import_source',
   'mismo_version',
@@ -331,8 +351,21 @@ const hasDisplayValue = (value?: string | null) => typeof value === 'string' && 
 const getTrimmedString = (value: unknown): string | null =>
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 
+const getRecordValue = (record: Record<string, unknown> | null | undefined, ...keys: string[]): unknown => {
+  if (!record) return null;
+  for (const key of keys) {
+    if (record[key] != null) return record[key];
+  }
+  return null;
+};
+
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const getPositiveNumberValue = (value: unknown): number | null => {
+  const numeric = typeof value === 'string' ? Number(value.replace(/[^0-9.]/g, '')) : Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+};
 
 const hasRenderableMetadataValue = (value: unknown): boolean => {
   if (value == null) return false;
@@ -395,26 +428,151 @@ const formatMetadataDisplayValue = (key: string, value: unknown): string | null 
   return JSON.stringify(value, null, 2);
 };
 
-const getSavedMetaAdCreative = (metaLead?: MetaLead | null): SavedMetaAdCreative | null => {
-  if (!metaLead) return null;
+const getSavedMetaAdCreative = (lead?: Lead | MetaLead | null): SavedMetaAdCreative | null => {
+  if (!lead) return null;
 
-  const metadataCreative = isPlainObject(metaLead.metadata?.ad_creative) ? metaLead.metadata.ad_creative : null;
-  const rawCreative = isPlainObject(metaLead.raw?.ad_creative) ? metaLead.raw.ad_creative : null;
-  const creative = (metadataCreative || rawCreative) as Record<string, unknown> | null;
+  const leadWithRaw = lead as (Lead | MetaLead) & { raw?: Record<string, unknown> | null };
+  const metadataRaw = isPlainObject(lead.metadata?.raw) ? lead.metadata.raw : null;
+  const creativeCandidates = [
+    lead.metadata?.ad_creative,
+    leadWithRaw.raw?.ad_creative,
+    metadataRaw?.ad_creative,
+    lead.metadata?.saved_ad_creative,
+    lead.metadata?.creative,
+  ];
+  const creative = creativeCandidates.find(isPlainObject) as Record<string, unknown> | undefined;
 
   if (!creative) return null;
 
+  const leadAdName = getTrimmedString((lead as MetaLead).ad_name) || getTrimmedString((lead as Lead).ad_name);
+  const leadAdsetName = getTrimmedString((lead as MetaLead).adset_name);
+  const leadCampaignName = getTrimmedString((lead as MetaLead).campaign_name) || getTrimmedString((lead as Lead).campaign_name);
+  const imageUrl = getTrimmedString(creative.image_url);
+  const thumbnailUrl = getTrimmedString(creative.thumbnail_url);
   const savedCreative: SavedMetaAdCreative = {
-    imageUrl: getTrimmedString(creative.image_url) || getTrimmedString(creative.thumbnail_url),
+    imageUrl: imageUrl || thumbnailUrl,
+    thumbnailUrl,
     headline: getTrimmedString(creative.headline),
     body: getTrimmedString(creative.body),
-    adName: getTrimmedString(creative.ad_name) || getTrimmedString(metaLead.ad_name),
+    adName: getTrimmedString(creative.ad_name) || leadAdName,
     adType: getTrimmedString(creative.ad_type),
-    adsetName: getTrimmedString(creative.adset_name) || getTrimmedString(metaLead.adset_name),
-    campaignName: getTrimmedString(creative.campaign_name) || getTrimmedString(metaLead.campaign_name),
+    adsetName: getTrimmedString(creative.adset_name) || leadAdsetName,
+    campaignName: getTrimmedString(creative.campaign_name) || leadCampaignName,
   };
 
   return Object.values(savedCreative).some((value) => hasDisplayValue(value)) ? savedCreative : null;
+};
+
+const getLandingAdAttribution = (lead?: Lead | MetaLead | null): LandingAdAttribution => {
+  if (!lead) {
+    return {
+      adId: null,
+      adName: null,
+      adsetId: null,
+      campaignId: null,
+      campaignName: null,
+      platform: null,
+      sourceDetail: null,
+      dbSource: null,
+    };
+  }
+
+  const metadata = isPlainObject(lead.metadata) ? lead.metadata : null;
+  const vaLanding = isPlainObject(metadata?.va_loan_landing) ? metadata.va_loan_landing : null;
+  const attribution = isPlainObject(metadata?.attribution) ? metadata.attribution : null;
+  const metadataRaw = isPlainObject(metadata?.raw) ? metadata.raw : null;
+  const rawAttribution = isPlainObject(metadataRaw?.attribution) ? metadataRaw.attribution : null;
+  const rawVaLanding = isPlainObject(metadataRaw?.va_loan_landing) ? metadataRaw.va_loan_landing : null;
+  const leadWithRaw = lead as (Lead | MetaLead) & { raw?: Record<string, unknown> | null };
+  const raw = isPlainObject(leadWithRaw.raw) ? leadWithRaw.raw : null;
+
+  const numericUtmContent =
+    typeof vaLanding?.utm_content === 'string' && /^\d{8,}$/.test(vaLanding.utm_content)
+      ? vaLanding.utm_content
+      : null;
+  const numericUtmTerm =
+    typeof vaLanding?.utm_term === 'string' && /^\d{8,}$/.test(vaLanding.utm_term)
+      ? vaLanding.utm_term
+      : null;
+  const numericUtmCampaign =
+    typeof vaLanding?.utm_campaign === 'string' && /^\d{8,}$/.test(vaLanding.utm_campaign)
+      ? vaLanding.utm_campaign
+      : null;
+
+  const pickString = (...values: unknown[]) => {
+    for (const value of values) {
+      const trimmed = getTrimmedString(value);
+      if (trimmed) return trimmed;
+    }
+    return null;
+  };
+
+  return {
+    adId: pickString((lead as MetaLead).ad_id, (lead as Lead).ad_id, vaLanding?.ad_id, attribution?.ad_id, rawAttribution?.ad_id, rawVaLanding?.ad_id, raw?.ad_id, numericUtmContent),
+    adName: pickString((lead as MetaLead).ad_name, (lead as Lead).ad_name, vaLanding?.ad_name, attribution?.ad_name, rawAttribution?.ad_name, raw?.ad_name),
+    adsetId: pickString((lead as Lead).adset_id, vaLanding?.adset_id, attribution?.adset_id, rawAttribution?.adset_id, raw?.adset_id, numericUtmTerm),
+    campaignId: pickString((lead as Lead).campaign_id, vaLanding?.campaign_id, attribution?.campaign_id, rawAttribution?.campaign_id, raw?.campaign_id, numericUtmCampaign),
+    campaignName: pickString((lead as MetaLead).campaign_name, (lead as Lead).campaign_name, vaLanding?.campaign_name, attribution?.campaign_name, rawAttribution?.campaign_name, vaLanding?.utm_campaign, raw?.campaign_name),
+    platform: pickString((lead as MetaLead).platform, (lead as Lead).platform, vaLanding?.platform, attribution?.platform, rawAttribution?.platform, raw?.platform),
+    sourceDetail: pickString((lead as Lead).source_detail, (lead as MetaLead).source_detail, vaLanding?.source_detail, attribution?.source_detail, rawAttribution?.source_detail),
+    dbSource: pickString((lead as Lead).db_source, vaLanding?.db_source, attribution?.db_source, rawAttribution?.db_source),
+  };
+};
+
+const getMetaAdImageAsset = (adNameRaw?: string | null, campaignNameRaw?: string | null): ImageSourcePropType | null => {
+  const adName = adNameRaw?.toLowerCase() || '';
+  const normalizedAdName = adName.replace(/[–—]/g, '-').trim();
+  const campaignName = campaignNameRaw?.toLowerCase() || '';
+  const searchText = `${adName} ${campaignName}`.toLowerCase();
+
+  if (normalizedAdName.includes('florida renter video ad - veterans')) {
+    return require('../../assets/FLRenterPoster.jpg');
+  } else if (normalizedAdName === 'florida renter video ad') {
+    return require('../../assets/Fl_Renter_Ad.png');
+  } else if (searchText.includes('florida renter image')) {
+    return require('../../assets/FLRenterPoster.jpg');
+  } else if (searchText.includes('florida renter')) {
+    return require('../../assets/Fl_Renter_Ad.png');
+  } else if (searchText.includes('hpa')) {
+    return require('../../assets/BrowardHPA_Ad.jpg');
+  } else if (searchText.includes('condo')) {
+    return require('../../assets/Condo_Ad.jpg');
+  } else if (searchText.includes('green acres') || searchText.includes('greenacres')) {
+    return require('../../assets/Greenacres_ Ad.png');
+  }
+
+  return null;
+};
+
+const getAdImageUrl = (lead?: Lead | MetaLead | null): string | null => {
+  const savedCreative = getSavedMetaAdCreative(lead);
+  return savedCreative?.imageUrl || savedCreative?.thumbnailUrl || null;
+};
+
+const getVaLandingRows = (lead?: Lead | null): DetailSummaryRow[] => {
+  if (!lead) return [];
+
+  const vaLanding = isPlainObject(lead.metadata?.va_loan_landing) ? lead.metadata.va_loan_landing : null;
+  if (!vaLanding) return [];
+
+  const estimatedSalesPrice =
+    getPositiveNumberValue(getRecordValue(vaLanding, 'estimated_sales_price', 'estimatedSalesPrice')) ??
+    getPositiveNumberValue(getRecordValue(vaLanding, 'estimated_loan_amount', 'estimatedLoanAmount')) ??
+    lead.price ??
+    lead.loan_amount ??
+    null;
+
+  return [
+    { label: 'Branch of Service', value: formatMetadataDisplayValue('branch_of_service', getRecordValue(vaLanding, 'branch_of_service', 'branchOfService')) },
+    { label: 'Service Status', value: formatMetadataDisplayValue('service_status', getRecordValue(vaLanding, 'service_status', 'serviceStatus')) },
+    { label: 'County Interest', value: formatMetadataDisplayValue('county_interest', getRecordValue(vaLanding, 'county_interest', 'countyInterest') || lead.subject_county) },
+    { label: 'Preferred Language', value: formatMetadataDisplayValue('preferred_language', getRecordValue(vaLanding, 'preferred_language', 'preferredLanguage') || lead.preferred_language) },
+    { label: 'Credit Score Range', value: formatMetadataDisplayValue('credit_score', getRecordValue(vaLanding, 'credit_score', 'creditScore') || lead.credit_score) },
+    { label: 'Income Type', value: formatMetadataDisplayValue('income_type', getRecordValue(vaLanding, 'income_type', 'incomeType')) },
+    { label: 'Estimated Sales Price', value: formatCurrencyValue(estimatedSalesPrice) },
+    { label: 'Loan Type', value: formatMetadataDisplayValue('loan_type', getRecordValue(vaLanding, 'loan_type', 'loanType') || lead.mortgage_type) },
+    { label: 'Phone Verified', value: formatMetadataDisplayValue('phone_verified', getRecordValue(vaLanding, 'phone_verified', 'phoneVerified')) },
+  ];
 };
 
 const buildMetadataRowsFromObject = (
@@ -1189,31 +1347,26 @@ export function LeadDetailView({
   
   const currentIndex = navigableList.findIndex((item) => item.id === selected.id && item.source === selected.source);
   
-  // Function to get ad image based on ad name or campaign name
-  const getAdImage = () => {
-    if (!isMeta || !record) return null;
-    
-    const adName = (record as MetaLead).ad_name?.toLowerCase() || '';
-    const campaignName = (record as MetaLead).campaign_name?.toLowerCase() || '';
-    const searchText = `${adName} ${campaignName}`.toLowerCase();
-    
-    // Check specific "florida renter image ad" first before general "florida renter"
-    if (searchText.includes('florida renter image')) {
-      return require('../../assets/FLRenterPoster.jpg');
-    } else if (searchText.includes('florida renter')) {
-      return require('../../assets/Fl_Renter_Ad.png');
-    } else if (searchText.includes('hpa')) {
-      return require('../../assets/BrowardHPA_Ad.jpg');
-    } else if (searchText.includes('condo')) {
-      return require('../../assets/Condo_Ad.jpg');
-    } else if (searchText.includes('green acres') || searchText.includes('greenacres')) {
-      return require('../../assets/Greenacres_ Ad.png');
-    }
-    
-    return null;
-  };
-  
-  const adImage = getAdImage();
+  const landingAdAttribution = getLandingAdAttribution(record);
+  const savedMetaAdCreative = getSavedMetaAdCreative(record);
+  const previewAdId = landingAdAttribution.adId;
+  const previewPlatform = landingAdAttribution.platform;
+  const previewAdName = landingAdAttribution.adName;
+  const previewCampaignName = landingAdAttribution.campaignName;
+  const savedAdImageUrl = getAdImageUrl(record);
+  const bundledAdImage = getMetaAdImageAsset(previewAdName, previewCampaignName);
+  const adImage: ImageSourcePropType | null = savedAdImageUrl ? { uri: savedAdImageUrl } : bundledAdImage;
+  const hasAdAttribution = Boolean(
+    record &&
+      (
+        isMeta ||
+        previewAdId ||
+        previewAdName ||
+        previewCampaignName ||
+        previewPlatform ||
+        savedAdImageUrl
+      )
+  );
 
   // Initialize tracking state from record
   useEffect(() => {
@@ -1384,7 +1537,7 @@ export function LeadDetailView({
   const showDmTab = isMeta;
   const hasDetailTabs = showMessagesTab || showDmTab;
   const sourceDetail = !isMeta ? (record as Lead | undefined)?.source_detail || null : (record as MetaLead | undefined)?.source_detail || null;
-  const dealSnapshotSourceLabel = record ? getDealSnapshotSourceLabel(record, isMeta) : null;
+  const dealSnapshotSourceLabel = record ? getDealSnapshotSourceLabel(record, isMeta, previewPlatform) : null;
   const formatTabBadgeCount = (count: number) => (count > 99 ? '99+' : String(count));
 
   const loadDetailMessageIndicators = useCallback(async () => {
@@ -1545,8 +1698,14 @@ export function LeadDetailView({
   const recordMetadata = record?.metadata || null;
   const metadataSections = buildMetadataSections(recordMetadata as Record<string, unknown> | null);
   const metaRecord = isMeta ? (record as MetaLead | undefined) : undefined;
-  const savedMetaAdCreative = getSavedMetaAdCreative(metaRecord);
-  const hasLiveMetaPreview = Boolean(metaRecord?.ad_id);
+  const hasLiveMetaPreview = Boolean(previewAdId);
+  const vaLandingRows = getVaLandingRows(leadRecord);
+  const adAttributionRows: DetailSummaryRow[] = hasAdAttribution ? [
+    { label: 'Platform', value: getMetaPlatformLabel(previewPlatform) || previewPlatform },
+    { label: 'Source Detail', value: landingAdAttribution.sourceDetail },
+    { label: 'Campaign', value: previewCampaignName },
+    { label: 'Ad Name', value: previewAdName },
+  ] : [];
   const isImportedMetaLead = Boolean(
     metaRecord &&
       (
@@ -1556,7 +1715,7 @@ export function LeadDetailView({
         !hasLiveMetaPreview
       )
   );
-  const shouldShowSavedAdCreativeCard = Boolean(savedMetaAdCreative && (isImportedMetaLead || !hasLiveMetaPreview));
+  const shouldShowSavedAdCreativeCard = Boolean(savedMetaAdCreative && (!isMeta || isImportedMetaLead || !hasLiveMetaPreview));
   const shouldHideImportedMetaMetadata = Boolean(isMeta && isImportedMetaLead);
   
   // Use AI attention badge if available, otherwise fall back to rule-based
@@ -3882,7 +4041,17 @@ export function LeadDetailView({
           </Modal>
 
           {/* Basic fields */}
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>ℹ️ Details</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginBottom: 0 }]}>ℹ️ Details</Text>
+            {hasAdAttribution && (previewAdId || adImage) ? (
+              <TouchableOpacity
+                style={[styles.viewAdButton, { marginBottom: 0, marginTop: 0, paddingHorizontal: 12, paddingVertical: 7 }]}
+                onPress={() => setShowAdImage(true)}
+              >
+                <Text style={styles.viewAdButtonText}>📸 View Ad</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
           <Text style={[styles.detailFieldBlock, { color: colors.textPrimary }]} selectable={true}>
             Email: {email || 'N/A'}{'\n'}
             Phone: {phone ? formatPhoneNumber(phone) : 'N/A'}
@@ -4001,6 +4170,22 @@ export function LeadDetailView({
                   Down Payment: ${(record as Lead).down_payment?.toLocaleString()}
                 </Text>
               )}
+              <LeadSummaryCard
+                title="VA LOAN LANDING"
+                rows={vaLandingRows}
+                colors={leadSummaryColors}
+              />
+              <LeadSummaryCard
+                title="META ATTRIBUTION"
+                rows={adAttributionRows}
+                colors={leadSummaryColors}
+              />
+              {shouldShowSavedAdCreativeCard && savedMetaAdCreative ? (
+                <MetaAdCreativeCard
+                  creative={savedMetaAdCreative}
+                  colors={leadSummaryColors}
+                />
+              ) : null}
               <LeadSummaryCard
                 title="LOAN DETAILS"
                 rows={leadLoanDetailsRows}
@@ -4153,6 +4338,11 @@ export function LeadDetailView({
                   Platform: <Text style={{ fontWeight: '700' }}>{getMetaPlatformLabel((record as MetaLead).platform)}</Text>
                 </Text>
               )}
+              <LeadSummaryCard
+                title="META ATTRIBUTION"
+                rows={adAttributionRows}
+                colors={leadSummaryColors}
+              />
               {!shouldShowSavedAdCreativeCard && (record as MetaLead).campaign_name && (
                 <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                   Campaign: {(record as MetaLead).campaign_name}
@@ -4163,14 +4353,6 @@ export function LeadDetailView({
                   <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
                     Ad Name: {(record as MetaLead).ad_name}
                   </Text>
-                  {((record as MetaLead).ad_id || adImage) && (
-                    <TouchableOpacity 
-                      style={styles.viewAdButton}
-                      onPress={() => setShowAdImage(true)}
-                    >
-                      <Text style={styles.viewAdButtonText}>📸 View Ad</Text>
-                    </TouchableOpacity>
-                  )}
                 </>
               )}
               {shouldShowSavedAdCreativeCard && savedMetaAdCreative ? (
@@ -4838,11 +5020,13 @@ export function LeadDetailView({
         visible={showAdImage}
         onClose={() => setShowAdImage(false)}
         accessToken={session?.access_token}
-        adId={isMeta ? (record as MetaLead | undefined)?.ad_id ?? null : null}
-        platform={isMeta ? (record as MetaLead | undefined)?.platform ?? null : null}
-        adName={isMeta ? (record as MetaLead | undefined)?.ad_name ?? null : null}
-        campaignName={isMeta ? (record as MetaLead | undefined)?.campaign_name ?? null : null}
+        adId={previewAdId}
+        platform={previewPlatform}
+        adName={previewAdName}
+        campaignName={previewCampaignName}
         fallbackImage={adImage}
+        fallbackHeadline={savedMetaAdCreative?.headline ?? null}
+        fallbackBody={savedMetaAdCreative?.body ?? null}
       />
 
       {/* Text Template Modal */}
