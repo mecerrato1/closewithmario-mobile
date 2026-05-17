@@ -221,6 +221,18 @@ type LandingAdAttribution = {
   dbSource: string | null;
 };
 
+type LandingMetadataCandidate = {
+  key: string;
+  title: string;
+  data: Record<string, unknown>;
+};
+
+type LandingSummarySection = {
+  key: string;
+  title: string;
+  rows: DetailSummaryRow[];
+};
+
 type MetadataItemCard = {
   title: string;
   subtitle?: string | null;
@@ -303,6 +315,214 @@ const METADATA_LABEL_MAP: Record<string, string> = {
   description: 'Description',
 };
 
+const LANDING_METADATA_SECTION_LABEL_MAP: Record<string, string> = {
+  va_loan_landing: 'VA Loan Landing',
+};
+
+const LANDING_METADATA_LABEL_MAP: Record<string, string> = {
+  ad_id: 'Ad ID',
+  adset_id: 'Ad Set ID',
+  campaign_id: 'Campaign ID',
+  branch_of_service: 'Branch of Service',
+  service_status: 'Service Status',
+  county_interest: 'County Interest',
+  preferred_language: 'Preferred Language',
+  credit_score: 'Credit Score Range',
+  credit_score_range: 'Credit Score Range',
+  current_credit_score_range: 'Credit Score Range',
+  income_type: 'Income Type',
+  monthly_income: 'Monthly Income',
+  estimated_sales_price: 'Estimated Sales Price',
+  estimated_loan_amount: 'Estimated Loan Amount',
+  loan_type: 'Loan Type',
+  loan_purpose: 'Loan Purpose',
+  looking_to: 'Looking To',
+  purpose: 'Purpose',
+  price_range: 'Price Range',
+  purchase_timeline: 'Purchase Timeline',
+  down_payment_saved: 'Down Payment Saved',
+  has_realtor: 'Has Realtor',
+  phone_verified: 'Phone Verified',
+  marketing_sms_consent: 'SMS Consent',
+  sms_consent: 'SMS Consent',
+  subject_address: 'Property Address',
+  subject_city: 'City',
+  subject_state: 'State',
+  subject_county: 'County',
+  zip_code: 'ZIP Code',
+  zipcode: 'ZIP Code',
+  additional_notes: 'Additional Notes',
+  notes: 'Notes',
+};
+
+const LANDING_METADATA_BUSINESS_KEYS = new Set([
+  'additional_notes',
+  'branch_of_service',
+  'city',
+  'county',
+  'county_interest',
+  'credit_range',
+  'credit_score',
+  'credit_score_range',
+  'current_credit_score_range',
+  'down_payment_saved',
+  'estimated_loan_amount',
+  'estimated_sales_price',
+  'goal',
+  'has_realtor',
+  'income_type',
+  'loan_purpose',
+  'loan_type',
+  'looking_to',
+  'marketing_sms_consent',
+  'message',
+  'monthly_income',
+  'notes',
+  'phone_verified',
+  'preferred_language',
+  'price_range',
+  'purchase_timeline',
+  'purpose',
+  'service_status',
+  'sms_consent',
+  'state',
+  'subject_address',
+  'subject_city',
+  'subject_county',
+  'subject_state',
+  'zip_code',
+  'zipcode',
+]);
+
+const LANDING_METADATA_ATTRIBUTION_KEYS = new Set([
+  'ad_id',
+  'ad_name',
+  'adset_id',
+  'ad_set_id',
+  'adset_name',
+  'campaign',
+  'campaign_id',
+  'campaign_name',
+  'db_source',
+  'fbclid',
+  'fbc',
+  'fbp',
+  'form_id',
+  'landing_page_url',
+  'page_url',
+  'platform',
+  'referrer',
+  'source_detail',
+  'submitted_from',
+  'url',
+  'utm_campaign',
+  'utm_content',
+  'utm_id',
+  'utm_medium',
+  'utm_source',
+  'utm_term',
+  'website_url',
+]);
+
+const LANDING_METADATA_DISPLAY_NOISE_KEYS = new Set([
+  'ad_id',
+  'ad_name',
+  'adset_id',
+  'ad_set_id',
+  'adset_name',
+  'browser',
+  'campaign',
+  'campaign_id',
+  'campaign_name',
+  'client_ip',
+  'client_ip_address',
+  'created_time',
+  'db_source',
+  'device',
+  'fbclid',
+  'fbc',
+  'fbp',
+  'form_id',
+  'full_url',
+  'ip',
+  'ip_address',
+  'landing_page_url',
+  'page_url',
+  'referrer',
+  'source_detail',
+  'submitted_from',
+  'url',
+  'user_agent',
+  'utm_campaign',
+  'utm_content',
+  'utm_id',
+  'utm_medium',
+  'utm_source',
+  'utm_term',
+  'website_url',
+]);
+
+const LANDING_METADATA_IDENTITY_KEYS = new Set([
+  'email',
+  'first_name',
+  'full_name',
+  'last_name',
+  'name',
+  'phone',
+  'phone_number',
+]);
+
+const LANDING_METADATA_NON_CANDIDATE_KEYS = new Set([
+  'ad_creative',
+  'attribution',
+  'co_borrowers',
+  'has_co_borrower',
+  'import_date',
+  'import_source',
+  'liabilities',
+  'loan_originator',
+  'raw',
+  'saved_ad_creative',
+]);
+
+const LANDING_METADATA_FIELD_ORDER = [
+  'branch_of_service',
+  'service_status',
+  'loan_type',
+  'loan_purpose',
+  'looking_to',
+  'purpose',
+  'goal',
+  'subject_address',
+  'city',
+  'subject_city',
+  'state',
+  'subject_state',
+  'county',
+  'subject_county',
+  'county_interest',
+  'zipcode',
+  'zip_code',
+  'preferred_language',
+  'credit_score',
+  'credit_score_range',
+  'current_credit_score_range',
+  'income_type',
+  'monthly_income',
+  'estimated_sales_price',
+  'estimated_loan_amount',
+  'price_range',
+  'purchase_timeline',
+  'down_payment_saved',
+  'has_realtor',
+  'phone_verified',
+  'marketing_sms_consent',
+  'sms_consent',
+  'additional_notes',
+  'notes',
+  'message',
+];
+
 const LIABILITY_SUMMARY_ORDER = [
   'carPayment',
   'creditCardPayment',
@@ -351,16 +571,174 @@ const hasDisplayValue = (value?: string | null) => typeof value === 'string' && 
 const getTrimmedString = (value: unknown): string | null =>
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 
-const getRecordValue = (record: Record<string, unknown> | null | undefined, ...keys: string[]): unknown => {
-  if (!record) return null;
-  for (const key of keys) {
-    if (record[key] != null) return record[key];
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const normalizeMetadataLookupKey = (key: string) =>
+  key
+    .trim()
+    .replace(/([a-z])([A-Z])/g, '$1_$2')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .toLowerCase();
+
+const isLikelyUrlString = (value?: string | null) => {
+  const trimmed = value?.trim() || '';
+  return /^https?:\/\//i.test(trimmed) || /^[\w.-]+\.[a-z]{2,}\//i.test(trimmed);
+};
+
+const hasLandingTrackingQueryText = (value?: string | null) => {
+  const normalized = value?.trim().toLowerCase() || '';
+  return (
+    normalized.includes('fbclid=') ||
+    /[?&]utm[_-]?(source|medium|campaign|content|term|id)=/.test(normalized)
+  );
+};
+
+const formatLandingTitleValue = (value?: string | null) => {
+  const trimmed = value?.trim();
+  if (!trimmed || trimmed.length > 80 || isLikelyUrlString(trimmed)) return null;
+  return trimmed
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
+const getLandingSectionTitle = (key: string, data: Record<string, unknown>) => {
+  const normalizedKey = normalizeMetadataLookupKey(key);
+  const explicitTitle =
+    formatLandingTitleValue(getTrimmedString(data.source_detail)) ||
+    formatLandingTitleValue(getTrimmedString(data.submitted_from)) ||
+    formatLandingTitleValue(getTrimmedString(data.form_name));
+
+  return explicitTitle || LANDING_METADATA_SECTION_LABEL_MAP[normalizedKey] || formatMetadataKeyLabel(key);
+};
+
+const isLandingTrackingIdentifierKey = (key: string) => {
+  const normalizedKey = normalizeMetadataLookupKey(key);
+  const rawKey = key.trim().toLowerCase();
+  return (
+    LANDING_METADATA_DISPLAY_NOISE_KEYS.has(normalizedKey) ||
+    normalizedKey.startsWith('utm_') ||
+    normalizedKey.includes('fbclid') ||
+    normalizedKey === 'fb' ||
+    normalizedKey.startsWith('fb_') ||
+    /^fb[._-]?\d/.test(rawKey)
+  );
+};
+
+const isLandingMetadataDisplayNoiseKey = (key: string) => {
+  const normalizedKey = normalizeMetadataLookupKey(key);
+  return (
+    isLikelyUrlString(key) ||
+    hasLandingTrackingQueryText(key) ||
+    isLandingTrackingIdentifierKey(key) ||
+    LANDING_METADATA_IDENTITY_KEYS.has(normalizedKey) ||
+    normalizedKey.includes('user_agent') ||
+    normalizedKey.includes('ip_address') ||
+    normalizedKey.endsWith('_url') ||
+    normalizedKey === 'url'
+  );
+};
+
+const isLandingMetadataDisplayNoiseValue = (value: unknown) => {
+  const text = getTrimmedString(value);
+  if (!text) return false;
+  return isLikelyUrlString(text) || hasLandingTrackingQueryText(text) || /^mozilla\/5\.0/i.test(text);
+};
+
+const isLandingMetadataPayload = (key: string, value: unknown): value is Record<string, unknown> => {
+  if (!isPlainObject(value)) return false;
+
+  const normalizedKey = normalizeMetadataLookupKey(key);
+  if (LANDING_METADATA_NON_CANDIDATE_KEYS.has(normalizedKey)) return false;
+  if (normalizedKey.includes('landing')) return true;
+
+  const normalizedChildKeys = Object.keys(value).map(normalizeMetadataLookupKey);
+  const businessKeyCount = normalizedChildKeys.filter((childKey) => LANDING_METADATA_BUSINESS_KEYS.has(childKey)).length;
+  const attributionKeyCount = normalizedChildKeys.filter((childKey) => LANDING_METADATA_ATTRIBUTION_KEYS.has(childKey) || childKey.startsWith('utm_')).length;
+
+  return businessKeyCount >= 2 && attributionKeyCount >= 1;
+};
+
+const getLandingMetadataCandidates = (
+  metadata?: Record<string, unknown> | null,
+  options?: { includeRaw?: boolean }
+): LandingMetadataCandidate[] => {
+  if (!metadata) return [];
+
+  const candidates: LandingMetadataCandidate[] = [];
+  const seen = new Set<string>();
+
+  const addCandidate = (key: string, value: unknown) => {
+    if (!isLandingMetadataPayload(key, value)) return;
+
+    const normalizedKey = normalizeMetadataLookupKey(key);
+    if (seen.has(normalizedKey)) return;
+
+    seen.add(normalizedKey);
+    candidates.push({
+      key,
+      title: getLandingSectionTitle(key, value),
+      data: value,
+    });
+  };
+
+  for (const [key, value] of Object.entries(metadata)) {
+    addCandidate(key, value);
   }
+
+  if (options?.includeRaw && isPlainObject(metadata.raw)) {
+    for (const [key, value] of Object.entries(metadata.raw)) {
+      addCandidate(key, value);
+    }
+  }
+
+  return candidates;
+};
+
+const getLandingUrlSearchParam = (value: unknown, aliases: Set<string>) => {
+  const text = getTrimmedString(value);
+  if (!text || !text.includes('?')) return null;
+
+  try {
+    const parsedUrl = new URL(text, 'https://www.closewithmario.com');
+    for (const alias of aliases) {
+      const paramValue = parsedUrl.searchParams.get(alias);
+      if (paramValue && paramValue.trim().length > 0) {
+        return paramValue.trim();
+      }
+    }
+  } catch {
+    return null;
+  }
+
   return null;
 };
 
-const isPlainObject = (value: unknown): value is Record<string, unknown> =>
-  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+const getLandingFieldRawValueFromCandidates = (
+  candidates: LandingMetadataCandidate[],
+  aliases: string[]
+): unknown => {
+  const aliasSet = new Set(aliases.map(normalizeMetadataLookupKey));
+
+  for (const candidate of candidates) {
+    for (const [key, value] of Object.entries(candidate.data)) {
+      if (aliasSet.has(normalizeMetadataLookupKey(key)) && hasRenderableMetadataValue(value)) {
+        return value;
+      }
+    }
+  }
+
+  for (const candidate of candidates) {
+    for (const value of Object.values(candidate.data)) {
+      const paramValue = getLandingUrlSearchParam(value, aliasSet);
+      if (paramValue) return paramValue;
+    }
+  }
+
+  return null;
+};
 
 const getPositiveNumberValue = (value: unknown): number | null => {
   const numeric = typeof value === 'string' ? Number(value.replace(/[^0-9.]/g, '')) : Number(value);
@@ -478,26 +856,12 @@ const getLandingAdAttribution = (lead?: Lead | MetaLead | null): LandingAdAttrib
   }
 
   const metadata = isPlainObject(lead.metadata) ? lead.metadata : null;
-  const vaLanding = isPlainObject(metadata?.va_loan_landing) ? metadata.va_loan_landing : null;
   const attribution = isPlainObject(metadata?.attribution) ? metadata.attribution : null;
   const metadataRaw = isPlainObject(metadata?.raw) ? metadata.raw : null;
   const rawAttribution = isPlainObject(metadataRaw?.attribution) ? metadataRaw.attribution : null;
-  const rawVaLanding = isPlainObject(metadataRaw?.va_loan_landing) ? metadataRaw.va_loan_landing : null;
   const leadWithRaw = lead as (Lead | MetaLead) & { raw?: Record<string, unknown> | null };
   const raw = isPlainObject(leadWithRaw.raw) ? leadWithRaw.raw : null;
-
-  const numericUtmContent =
-    typeof vaLanding?.utm_content === 'string' && /^\d{8,}$/.test(vaLanding.utm_content)
-      ? vaLanding.utm_content
-      : null;
-  const numericUtmTerm =
-    typeof vaLanding?.utm_term === 'string' && /^\d{8,}$/.test(vaLanding.utm_term)
-      ? vaLanding.utm_term
-      : null;
-  const numericUtmCampaign =
-    typeof vaLanding?.utm_campaign === 'string' && /^\d{8,}$/.test(vaLanding.utm_campaign)
-      ? vaLanding.utm_campaign
-      : null;
+  const landingCandidates = getLandingMetadataCandidates(metadata, { includeRaw: true });
 
   const pickString = (...values: unknown[]) => {
     for (const value of values) {
@@ -507,15 +871,85 @@ const getLandingAdAttribution = (lead?: Lead | MetaLead | null): LandingAdAttrib
     return null;
   };
 
+  const pickSourceDetail = (...values: unknown[]) => {
+    for (const value of values) {
+      const trimmed = getTrimmedString(value);
+      if (trimmed && !UUID_PATTERN.test(trimmed) && !isLikelyUrlString(trimmed)) {
+        return trimmed;
+      }
+    }
+    return null;
+  };
+
+  const getLandingString = (aliases: string[], options?: { numericOnly?: boolean; nonNumericOnly?: boolean }) => {
+    const value = getLandingFieldRawValueFromCandidates(landingCandidates, aliases);
+    const trimmed = getTrimmedString(value);
+    if (!trimmed) return null;
+    if (options?.numericOnly && !/^\d{8,}$/.test(trimmed)) return null;
+    if (options?.nonNumericOnly && /^\d{8,}$/.test(trimmed)) return null;
+    return trimmed;
+  };
+
+  const landingSourceTitle = landingCandidates
+    .map((candidate) => formatLandingTitleValue(candidate.title))
+    .find(Boolean) || null;
+
   return {
-    adId: pickString((lead as MetaLead).ad_id, (lead as Lead).ad_id, vaLanding?.ad_id, attribution?.ad_id, rawAttribution?.ad_id, rawVaLanding?.ad_id, raw?.ad_id, numericUtmContent),
-    adName: pickString((lead as MetaLead).ad_name, (lead as Lead).ad_name, vaLanding?.ad_name, attribution?.ad_name, rawAttribution?.ad_name, raw?.ad_name),
-    adsetId: pickString((lead as Lead).adset_id, vaLanding?.adset_id, attribution?.adset_id, rawAttribution?.adset_id, raw?.adset_id, numericUtmTerm),
-    campaignId: pickString((lead as Lead).campaign_id, vaLanding?.campaign_id, attribution?.campaign_id, rawAttribution?.campaign_id, raw?.campaign_id, numericUtmCampaign),
-    campaignName: pickString((lead as MetaLead).campaign_name, (lead as Lead).campaign_name, vaLanding?.campaign_name, attribution?.campaign_name, rawAttribution?.campaign_name, vaLanding?.utm_campaign, raw?.campaign_name),
-    platform: pickString((lead as MetaLead).platform, (lead as Lead).platform, vaLanding?.platform, attribution?.platform, rawAttribution?.platform, raw?.platform),
-    sourceDetail: pickString((lead as Lead).source_detail, (lead as MetaLead).source_detail, vaLanding?.source_detail, attribution?.source_detail, rawAttribution?.source_detail),
-    dbSource: pickString((lead as Lead).db_source, vaLanding?.db_source, attribution?.db_source, rawAttribution?.db_source),
+    adId: pickString(
+      (lead as MetaLead).ad_id,
+      (lead as Lead).ad_id,
+      getLandingString(['ad_id', 'utm_content'], { numericOnly: true }),
+      attribution?.ad_id,
+      rawAttribution?.ad_id,
+      raw?.ad_id
+    ),
+    adName: pickString(
+      (lead as MetaLead).ad_name,
+      (lead as Lead).ad_name,
+      getLandingString(['ad_name']),
+      attribution?.ad_name,
+      rawAttribution?.ad_name,
+      raw?.ad_name
+    ),
+    adsetId: pickString(
+      (lead as Lead).adset_id,
+      getLandingString(['adset_id', 'ad_set_id', 'utm_term'], { numericOnly: true }),
+      attribution?.adset_id,
+      rawAttribution?.adset_id,
+      raw?.adset_id
+    ),
+    campaignId: pickString(
+      (lead as Lead).campaign_id,
+      getLandingString(['campaign_id', 'utm_id', 'utm_campaign'], { numericOnly: true }),
+      attribution?.campaign_id,
+      rawAttribution?.campaign_id,
+      raw?.campaign_id
+    ),
+    campaignName: pickString(
+      (lead as MetaLead).campaign_name,
+      (lead as Lead).campaign_name,
+      getLandingString(['campaign_name', 'campaign', 'utm_campaign'], { nonNumericOnly: true }),
+      attribution?.campaign_name,
+      rawAttribution?.campaign_name,
+      raw?.campaign_name
+    ),
+    platform: pickString(
+      (lead as MetaLead).platform,
+      (lead as Lead).platform,
+      getLandingString(['platform', 'utm_source']),
+      attribution?.platform,
+      rawAttribution?.platform,
+      raw?.platform
+    ),
+    sourceDetail: pickSourceDetail(
+      (lead as Lead).source_detail,
+      (lead as MetaLead).source_detail,
+      getLandingString(['source_detail', 'submitted_from']),
+      attribution?.source_detail,
+      rawAttribution?.source_detail,
+      landingSourceTitle
+    ),
+    dbSource: pickString((lead as Lead).db_source, getLandingString(['db_source']), attribution?.db_source, rawAttribution?.db_source),
   };
 };
 
@@ -549,30 +983,135 @@ const getAdImageUrl = (lead?: Lead | MetaLead | null): string | null => {
   return savedCreative?.imageUrl || savedCreative?.thumbnailUrl || null;
 };
 
-const getVaLandingRows = (lead?: Lead | null): DetailSummaryRow[] => {
+const getLandingFieldRawValue = (lead: Lead | MetaLead, aliases: string[]): unknown => {
+  const metadata = isPlainObject(lead.metadata) ? lead.metadata : null;
+  return getLandingFieldRawValueFromCandidates(
+    getLandingMetadataCandidates(metadata, { includeRaw: true }),
+    aliases
+  );
+};
+
+const getLandingFieldDisplayValue = (lead: Lead | MetaLead, aliases: string[]): string | null => {
+  const value = getLandingFieldRawValue(lead, aliases);
+  return formatMetadataDisplayValue(aliases[0], value);
+};
+
+const formatLandingMetadataLabel = (key: string) => {
+  const normalizedKey = normalizeMetadataLookupKey(key);
+  return LANDING_METADATA_LABEL_MAP[normalizedKey] || formatMetadataKeyLabel(key);
+};
+
+const formatLandingMetadataSummaryValue = (key: string, value: unknown): string | null => {
+  const normalizedKey = normalizeMetadataLookupKey(key);
+  const numericValue = getPositiveNumberValue(value);
+
+  if (numericValue != null && /(amount|payment|price|income|loan)/.test(normalizedKey)) {
+    return formatCurrencyValue(numericValue);
+  }
+
+  return formatMetadataDisplayValue(key, value);
+};
+
+const normalizeDisplayText = (value?: string | null) =>
+  value?.trim().replace(/\s+/g, ' ').toLowerCase() || null;
+
+const landingSummaryValueDuplicatesLeadField = (lead: Lead, key: string, displayValue: string) => {
+  const normalizedKey = normalizeMetadataLookupKey(key);
+  const comparisonValue = normalizeDisplayText(displayValue);
+  if (!comparisonValue) return false;
+
+  const candidates: Array<string | null | undefined> = [];
+
+  if (['loan_purpose', 'looking_to', 'purpose'].includes(normalizedKey)) {
+    candidates.push(lead.loan_purpose);
+  }
+
+  if (['city', 'subject_city'].includes(normalizedKey)) {
+    candidates.push(lead.subject_city);
+  }
+
+  if (['state', 'subject_state'].includes(normalizedKey)) {
+    candidates.push(lead.subject_state);
+  }
+
+  if (['county', 'subject_county', 'county_interest'].includes(normalizedKey)) {
+    candidates.push(lead.subject_county);
+  }
+
+  if (['zipcode', 'zip_code', 'subject_zipcode'].includes(normalizedKey)) {
+    candidates.push(lead.subject_zipcode);
+  }
+
+  if (['message', 'notes', 'additional_notes', 'comments'].includes(normalizedKey)) {
+    candidates.push(lead.message);
+  }
+
+  if (['credit_score', 'credit_score_range', 'current_credit_score_range', 'credit_range'].includes(normalizedKey)) {
+    candidates.push(lead.credit_score != null ? String(lead.credit_score) : null);
+  }
+
+  if (['estimated_sales_price', 'sales_price', 'price', 'price_range'].includes(normalizedKey)) {
+    candidates.push(formatCurrencyValue(lead.price));
+  }
+
+  if (['estimated_loan_amount', 'loan_amount'].includes(normalizedKey)) {
+    candidates.push(formatCurrencyValue(lead.loan_amount));
+  }
+
+  return candidates.some((candidate) => normalizeDisplayText(candidate) === comparisonValue);
+};
+
+const buildLandingMetadataSummarySections = (lead?: Lead | null): LandingSummarySection[] => {
   if (!lead) return [];
 
-  const vaLanding = isPlainObject(lead.metadata?.va_loan_landing) ? lead.metadata.va_loan_landing : null;
-  if (!vaLanding) return [];
+  const metadata = isPlainObject(lead.metadata) ? lead.metadata : null;
+  const candidates = getLandingMetadataCandidates(metadata);
 
-  const estimatedSalesPrice =
-    getPositiveNumberValue(getRecordValue(vaLanding, 'estimated_sales_price', 'estimatedSalesPrice')) ??
-    getPositiveNumberValue(getRecordValue(vaLanding, 'estimated_loan_amount', 'estimatedLoanAmount')) ??
-    lead.price ??
-    lead.loan_amount ??
-    null;
+  return candidates
+    .map((candidate) => {
+      const seenLabels = new Set<string>();
+      const rows = Object.entries(candidate.data)
+        .filter(([key, value]) => (
+          !isLandingMetadataDisplayNoiseKey(key) &&
+          !isLandingMetadataDisplayNoiseValue(value) &&
+          hasRenderableMetadataValue(value)
+        ))
+        .sort(([leftKey], [rightKey]) => {
+          const leftIndex = LANDING_METADATA_FIELD_ORDER.indexOf(normalizeMetadataLookupKey(leftKey));
+          const rightIndex = LANDING_METADATA_FIELD_ORDER.indexOf(normalizeMetadataLookupKey(rightKey));
+          if (leftIndex !== -1 && rightIndex !== -1) return leftIndex - rightIndex;
+          if (leftIndex !== -1) return -1;
+          if (rightIndex !== -1) return 1;
+          return formatMetadataKeyLabel(leftKey).localeCompare(formatMetadataKeyLabel(rightKey));
+        })
+        .reduce<DetailSummaryRow[]>((summaryRows, [key, value]) => {
+          const label = formatLandingMetadataLabel(key);
+          const displayValue = formatLandingMetadataSummaryValue(key, value);
+          if (
+            !displayValue ||
+            seenLabels.has(label) ||
+            landingSummaryValueDuplicatesLeadField(lead, key, displayValue)
+          ) {
+            return summaryRows;
+          }
 
-  return [
-    { label: 'Branch of Service', value: formatMetadataDisplayValue('branch_of_service', getRecordValue(vaLanding, 'branch_of_service', 'branchOfService')) },
-    { label: 'Service Status', value: formatMetadataDisplayValue('service_status', getRecordValue(vaLanding, 'service_status', 'serviceStatus')) },
-    { label: 'County Interest', value: formatMetadataDisplayValue('county_interest', getRecordValue(vaLanding, 'county_interest', 'countyInterest') || lead.subject_county) },
-    { label: 'Preferred Language', value: formatMetadataDisplayValue('preferred_language', getRecordValue(vaLanding, 'preferred_language', 'preferredLanguage') || lead.preferred_language) },
-    { label: 'Credit Score Range', value: formatMetadataDisplayValue('credit_score', getRecordValue(vaLanding, 'credit_score', 'creditScore') || lead.credit_score) },
-    { label: 'Income Type', value: formatMetadataDisplayValue('income_type', getRecordValue(vaLanding, 'income_type', 'incomeType')) },
-    { label: 'Estimated Sales Price', value: formatCurrencyValue(estimatedSalesPrice) },
-    { label: 'Loan Type', value: formatMetadataDisplayValue('loan_type', getRecordValue(vaLanding, 'loan_type', 'loanType') || lead.mortgage_type) },
-    { label: 'Phone Verified', value: formatMetadataDisplayValue('phone_verified', getRecordValue(vaLanding, 'phone_verified', 'phoneVerified')) },
-  ];
+          seenLabels.add(label);
+          summaryRows.push({
+            label,
+            value: displayValue,
+          });
+          return summaryRows;
+        }, []);
+
+      return rows.length > 0
+        ? {
+            key: candidate.key,
+            title: candidate.title,
+            rows,
+          }
+        : null;
+    })
+    .filter((section): section is LandingSummarySection => section !== null);
 };
 
 const buildMetadataRowsFromObject = (
@@ -583,7 +1122,7 @@ const buildMetadataRowsFromObject = (
   const rows: DetailSummaryRow[] = [];
 
   for (const [key, value] of Object.entries(objectValue)) {
-    if (omitKeys.has(key) || HIDDEN_METADATA_FIELD_KEYS.has(key)) continue;
+    if (omitKeys.has(key) || HIDDEN_METADATA_FIELD_KEYS.has(key) || isLandingMetadataDisplayNoiseKey(key)) continue;
     if (key === 'liabilityType' && hasRenderableMetadataValue(objectValue.liabilityTypeDescription)) continue;
     if ((key === 'excluded' || key === 'payoff') && value === false) continue;
     if (key === 'exclusionReason' && (!value || value === 'excluded')) continue;
@@ -655,7 +1194,12 @@ const buildMetadataSections = (metadata?: Record<string, unknown> | null): Metad
   if (!metadata) return [];
 
   const entries = Object.entries(metadata)
-    .filter(([key, value]) => !EXCLUDED_LEAD_METADATA_KEYS.has(key) && hasRenderableMetadataValue(value))
+    .filter(([key, value]) => (
+      !EXCLUDED_LEAD_METADATA_KEYS.has(key) &&
+      !isLandingMetadataDisplayNoiseKey(key) &&
+      !isLandingMetadataPayload(key, value) &&
+      hasRenderableMetadataValue(value)
+    ))
     .sort(([a], [b]) => {
       const aIndex = METADATA_SECTION_ORDER.indexOf(a);
       const bIndex = METADATA_SECTION_ORDER.indexOf(b);
@@ -1642,21 +2186,32 @@ export function LeadDetailView({
     textPrimary: colors.textPrimary,
     textSecondary: colors.textSecondary,
   };
+  const landingPurpose = leadRecord ? getLandingFieldDisplayValue(leadRecord, ['loan_purpose', 'looking_to', 'purpose']) : null;
+  const landingCredit = leadRecord ? getLandingFieldDisplayValue(leadRecord, ['credit_score', 'credit_score_range', 'current_credit_score_range', 'credit_range']) : null;
+  const landingSalesPrice = leadRecord ? getLandingFieldDisplayValue(leadRecord, ['estimated_sales_price', 'sales_price', 'price', 'price_range']) : null;
+  const landingLoanAmount = leadRecord ? getLandingFieldDisplayValue(leadRecord, ['estimated_loan_amount', 'loan_amount']) : null;
+  const landingCity = leadRecord ? getLandingFieldDisplayValue(leadRecord, ['subject_city', 'city']) : null;
+  const landingState = leadRecord ? getLandingFieldDisplayValue(leadRecord, ['subject_state', 'state']) : null;
+  const landingCounty = leadRecord ? getLandingFieldDisplayValue(leadRecord, ['subject_county', 'county', 'county_interest']) : null;
+  const landingZip = leadRecord ? getLandingFieldDisplayValue(leadRecord, ['subject_zipcode', 'zipcode', 'zip_code']) : null;
+  const leadMessage = leadRecord
+    ? leadRecord.message || getLandingFieldDisplayValue(leadRecord, ['message', 'notes', 'additional_notes', 'comments'])
+    : null;
   const leadLoanDetailsRows: DetailSummaryRow[] = leadRecord ? [
-    { label: 'Sales Price', value: formatCurrencyValue(leadRecord.price) },
-    { label: 'Loan Amount', value: formatCurrencyValue(leadRecord.loan_amount) },
-    { label: 'Purpose', value: leadRecord.loan_purpose || null },
-    { label: 'Credit', value: leadRecord.credit_score != null ? String(leadRecord.credit_score) : null },
+    { label: 'Sales Price', value: formatCurrencyValue(leadRecord.price) || landingSalesPrice },
+    { label: 'Loan Amount', value: formatCurrencyValue(leadRecord.loan_amount) || landingLoanAmount },
+    { label: 'Purpose', value: leadRecord.loan_purpose || landingPurpose },
+    { label: 'Credit', value: leadRecord.credit_score != null ? String(leadRecord.credit_score) : landingCredit },
     { label: 'LTV', value: formatPercentValue(leadRecord.ltv) },
     { label: 'Interest Rate', value: formatPercentValue(leadRecord.interest_rate) },
   ] : [];
   const leadPropertyDetailsRows: DetailSummaryRow[] = leadRecord ? [
     {
       label: 'City / State',
-      value: [leadRecord.subject_city, leadRecord.subject_state].filter(Boolean).join(', ') || null,
+      value: [leadRecord.subject_city || landingCity, leadRecord.subject_state || landingState].filter(Boolean).join(', ') || null,
     },
-    { label: 'County', value: leadRecord.subject_county || null },
-    { label: 'ZIP Code', value: leadRecord.subject_zipcode || null },
+    { label: 'County', value: leadRecord.subject_county || landingCounty },
+    { label: 'ZIP Code', value: leadRecord.subject_zipcode || landingZip },
     { label: 'Property Type', value: leadRecord.xml_property_type || null },
     { label: 'Occupancy', value: leadRecord.occupancy_type || null },
   ] : [];
@@ -1699,12 +2254,15 @@ export function LeadDetailView({
   const metadataSections = buildMetadataSections(recordMetadata as Record<string, unknown> | null);
   const metaRecord = isMeta ? (record as MetaLead | undefined) : undefined;
   const hasLiveMetaPreview = Boolean(previewAdId);
-  const vaLandingRows = getVaLandingRows(leadRecord);
+  const landingSummarySections = buildLandingMetadataSummarySections(leadRecord);
   const adAttributionRows: DetailSummaryRow[] = hasAdAttribution ? [
     { label: 'Platform', value: getMetaPlatformLabel(previewPlatform) || previewPlatform },
     { label: 'Source Detail', value: landingAdAttribution.sourceDetail },
     { label: 'Campaign', value: previewCampaignName },
+    { label: 'Campaign ID', value: landingAdAttribution.campaignId },
+    { label: 'Ad Set ID', value: landingAdAttribution.adsetId },
     { label: 'Ad Name', value: previewAdName },
+    { label: 'Ad ID', value: landingAdAttribution.adId },
   ] : [];
   const isImportedMetaLead = Boolean(
     metaRecord &&
@@ -4170,11 +4728,14 @@ export function LeadDetailView({
                   Down Payment: ${(record as Lead).down_payment?.toLocaleString()}
                 </Text>
               )}
-              <LeadSummaryCard
-                title="VA LOAN LANDING"
-                rows={vaLandingRows}
-                colors={leadSummaryColors}
-              />
+              {landingSummarySections.map((section) => (
+                <LeadSummaryCard
+                  key={section.key}
+                  title={section.title}
+                  rows={section.rows}
+                  colors={leadSummaryColors}
+                />
+              ))}
               <LeadSummaryCard
                 title="META ATTRIBUTION"
                 rows={adAttributionRows}
@@ -4211,8 +4772,8 @@ export function LeadDetailView({
                 rows={leadDemographicRows}
                 colors={leadSummaryColors}
               />
-              {(record as Lead).message && (() => {
-                const msg = (record as Lead).message!;
+              {leadMessage && (() => {
+                const msg = leadMessage;
                 const isXmlImport = msg.includes('IMPORTED FROM XML');
                 if (isXmlImport) {
                   return (
