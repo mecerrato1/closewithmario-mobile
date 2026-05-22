@@ -18,8 +18,11 @@ import {
   Alert,
   Keyboard,
   TouchableWithoutFeedback,
+  Clipboard,
+  Share,
   StyleSheet,
   useWindowDimensions,
+  ActionSheetIOS,
   type ImageSourcePropType,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -48,6 +51,8 @@ import { ReferralAgreementsSection } from '../components/ReferralAgreementsSecti
 import { MetaAdPreviewModal } from '../components/MetaAdPreviewModal';
 
 const PLUM = '#4C1D95';
+const CRM_API_BASE_URL = 'https://www.closewithmario.com';
+const SCENARIO_VIEWING_NOW_WINDOW_MS = 3 * 60 * 1000;
 const HTML_TAG_PATTERN = /<[a-z][\s\S]*>/i;
 const HTML_TABLE_PATTERN = /<table[\s>]/i;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -259,6 +264,54 @@ type MetadataSection =
       kind: 'text';
       value: string;
     };
+
+type CrmLeadSource = 'organic' | 'meta';
+type QualificationRecipientType = 'borrower' | 'co_borrower' | 'realtor' | 'key_contact';
+type QualificationLinkStatus = 'active' | 'revoked' | 'expired' | 'completed';
+
+type LeadScenarioSummary = {
+  id: string;
+  leadId: string;
+  leadSource: CrmLeadSource;
+  name: string;
+  isPrimary: boolean;
+  displayOrder: number | null;
+  scenarioData: Record<string, unknown>;
+  borrowerInputs: Record<string, unknown>;
+  qualificationState: Record<string, unknown>;
+  resultSnapshot: Record<string, unknown>;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type QualificationLinkSummary = {
+  id: string;
+  scenarioId: string | null;
+  recipientType: QualificationRecipientType;
+  recipientKey: string;
+  status: QualificationLinkStatus;
+  publicUrl: string;
+  borrowerName: string | null;
+  borrowerEmail: string | null;
+  borrowerPhone: string | null;
+  recipientName: string | null;
+  recipientEmail: string | null;
+  recipientPhone: string | null;
+  lockedMonthlyIncome: number;
+  openCount: number;
+  sentAt: string;
+  expiresAt: string;
+  firstOpenedAt: string | null;
+  lastOpenedAt: string | null;
+  lastActivityAt: string | null;
+  lastCalculatedAt: string | null;
+  revokedAt: string | null;
+  completedAt: string | null;
+  scenarioData: Record<string, unknown>;
+  borrowerInputs: Record<string, unknown>;
+  latestResult: Record<string, unknown>;
+};
 
 const EXCLUDED_LEAD_METADATA_KEYS = new Set([
   'co_borrowers',
@@ -774,6 +827,80 @@ const formatPercentValue = (value?: number | null) => {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   })}%`;
+};
+
+const getRecordValue = (value: unknown): Record<string, unknown> | null => {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+};
+
+const getScenarioNumber = (...values: unknown[]): number | null => {
+  for (const value of values) {
+    if (value == null || value === '') continue;
+    const numeric = typeof value === 'string' ? Number(value.replace(/[^0-9.-]/g, '')) : Number(value);
+    if (Number.isFinite(numeric)) {
+      return numeric;
+    }
+  }
+  return null;
+};
+
+const getScenarioCurrencyDisplay = (...values: unknown[]) => {
+  const numeric = getScenarioNumber(...values);
+  return numeric == null ? null : formatCurrencyValue(numeric);
+};
+
+const getScenarioPercentDisplay = (...values: unknown[]) => {
+  const numeric = getScenarioNumber(...values);
+  return numeric == null ? null : formatPercentValue(numeric);
+};
+
+const formatScenarioDate = (value?: string | null) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+const formatScenarioDateTime = (value?: string | null) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+};
+
+const isScenarioLinkViewingNow = (
+  link?: Pick<QualificationLinkSummary, 'status' | 'lastActivityAt'> | null,
+  now = Date.now()
+) => {
+  if (!link || link.status !== 'active' || !link.lastActivityAt) return false;
+  const activityAt = new Date(link.lastActivityAt).getTime();
+  return Number.isFinite(activityAt) && now - activityAt <= SCENARIO_VIEWING_NOW_WINDOW_MS;
+};
+
+const formatScenarioOpenSummary = (
+  label: string,
+  link: Pick<QualificationLinkSummary, 'openCount' | 'lastOpenedAt' | 'lastActivityAt' | 'status'>,
+  now = Date.now()
+) => {
+  const count = Number(link.openCount || 0);
+  const openWord = count === 1 ? 'open' : 'opens';
+  const pieces = [`${label}: ${count} total ${openWord}`];
+  const lastOpened = formatScenarioDate(link.lastOpenedAt);
+  if (lastOpened) {
+    pieces.push(`last opened ${lastOpened}`);
+  }
+  if (isScenarioLinkViewingNow(link, now)) {
+    pieces.push('viewing now');
+  }
+  return pieces.join(' · ');
 };
 
 const formatCountValue = (value?: number | null) => {
@@ -1689,6 +1816,16 @@ export function LeadDetailView({
   const [showPartnerUpdateModal, setShowPartnerUpdateModal] = useState(false);
   const [partnerUpdateMessage, setPartnerUpdateMessage] = useState('');
   const [sendingPartnerUpdate, setSendingPartnerUpdate] = useState(false);
+
+  // Saved scenario sharing state
+  const [leadScenarios, setLeadScenarios] = useState<LeadScenarioSummary[]>([]);
+  const [scenarioLinks, setScenarioLinks] = useState<QualificationLinkSummary[]>([]);
+  const [loadingScenarios, setLoadingScenarios] = useState(false);
+  const [scenarioError, setScenarioError] = useState<string | null>(null);
+  const [scenarioActionKey, setScenarioActionKey] = useState<string | null>(null);
+  const [scenarioSectionExpanded, setScenarioSectionExpanded] = useState(true);
+  const [scenarioActivityClock, setScenarioActivityClock] = useState(Date.now());
+  const scenarioSectionTouchedRef = useRef(false);
   
   // Licensed realtor flag (for referral agreements visibility gate)
   const [isLicensedRealtor, setIsLicensedRealtor] = useState(false);
@@ -2050,6 +2187,652 @@ export function LeadDetailView({
   // Check if partner update is available (has referral email or linked realtor)
   const hasPartnerEmail = record?.referral_source_email || (record?.realtor_id && currentRealtorName);
   const partnerName = record?.referral_source_name || currentRealtorName || 'Partner';
+  const crmLeadSource: CrmLeadSource = isMeta ? 'meta' : 'organic';
+
+  const fetchCrmApi = useCallback(async (
+    path: string,
+    init: { method?: string; body?: string; headers?: Record<string, string> } = {}
+  ) => {
+    const token = session?.access_token;
+    if (!token) {
+      throw new Error('Sign in again to manage scenario links.');
+    }
+
+    const response = await fetch(`${CRM_API_BASE_URL}${path}`, {
+      method: init.method || 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+        Authorization: `Bearer ${token}`,
+        ...(init.headers || {}),
+      },
+      body: init.body,
+    });
+
+    const responseText = await response.text();
+    let payload: Record<string, any> = {};
+    if (responseText) {
+      try {
+        payload = JSON.parse(responseText);
+      } catch {
+        payload = { error: responseText };
+      }
+    }
+
+    if (!response.ok) {
+      throw new Error(payload.error || `CRM request failed (${response.status})`);
+    }
+
+    return payload;
+  }, [session?.access_token]);
+
+  const loadLeadScenarios = useCallback(async () => {
+    if (!record) {
+      setLeadScenarios([]);
+      setScenarioLinks([]);
+      setScenarioSectionExpanded(true);
+      scenarioSectionTouchedRef.current = false;
+      return;
+    }
+
+    if (!session?.access_token) {
+      setLeadScenarios([]);
+      setScenarioLinks([]);
+      setScenarioError('Sign in again to load saved scenarios.');
+      setScenarioSectionExpanded(true);
+      scenarioSectionTouchedRef.current = false;
+      return;
+    }
+
+    setLoadingScenarios(true);
+    setScenarioError(null);
+
+    try {
+      const query = `leadId=${encodeURIComponent(record.id)}&source=${encodeURIComponent(crmLeadSource)}`;
+      const [scenarioPayload, linkPayload] = await Promise.all([
+        fetchCrmApi(`/api/leads/scenarios?${query}`),
+        fetchCrmApi(`/api/leads/qualification-link?${query}&all=1`),
+      ]);
+
+      const nextScenarios = Array.isArray(scenarioPayload.scenarios) ? scenarioPayload.scenarios : [];
+      setLeadScenarios(nextScenarios);
+      setScenarioLinks(Array.isArray(linkPayload.links) ? linkPayload.links : []);
+      setScenarioActivityClock(Date.now());
+      if (!scenarioSectionTouchedRef.current) {
+        setScenarioSectionExpanded(nextScenarios.length <= 2);
+      }
+    } catch (error: any) {
+      console.error('[LeadDetail] Failed to load scenarios:', error);
+      setLeadScenarios([]);
+      setScenarioLinks([]);
+      setScenarioError(error?.message || 'Failed to load saved scenarios.');
+    } finally {
+      setLoadingScenarios(false);
+    }
+  }, [crmLeadSource, fetchCrmApi, record?.id, session?.access_token]);
+
+  useEffect(() => {
+    scenarioSectionTouchedRef.current = false;
+    setScenarioSectionExpanded(true);
+  }, [selected.id, selected.source]);
+
+  useEffect(() => {
+    if (activeDetailTab !== 'details') {
+      return;
+    }
+    loadLeadScenarios().catch(() => undefined);
+  }, [activeDetailTab, loadLeadScenarios]);
+
+  useEffect(() => {
+    if (activeDetailTab !== 'details' || scenarioLinks.length === 0) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setScenarioActivityClock(Date.now());
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [activeDetailTab, scenarioLinks.length]);
+
+  const getActiveScenarioLink = (scenarioId: string, recipientType: 'borrower' | 'realtor') => {
+    return scenarioLinks.find((link) => {
+      if (link.scenarioId !== scenarioId || link.status !== 'active') {
+        return false;
+      }
+      return recipientType === 'borrower'
+        ? link.recipientType === 'borrower'
+        : link.recipientType === 'realtor';
+    }) || null;
+  };
+
+  const updateTouchedAtFromScenarioResult = (payload: Record<string, any>) => {
+    if (!record || typeof payload.touchedAt !== 'string') return;
+    onLeadUpdate({ ...record, last_touched_at: payload.touchedAt } as Lead | MetaLead, isMeta ? 'meta' : 'lead');
+  };
+
+  const createScenarioLink = async (
+    scenario: LeadScenarioSummary,
+    recipientType: 'borrower' | 'realtor',
+    sendEmail: boolean
+  ) => {
+    if (!record) {
+      Alert.alert('Scenario Link', 'Lead not found.');
+      return;
+    }
+
+    const leadId = record.id;
+    const actionKey = `${sendEmail ? 'email' : 'create'}:${scenario.id}:${recipientType}`;
+    setScenarioActionKey(actionKey);
+    setScenarioError(null);
+
+    try {
+      const payload = await fetchCrmApi('/api/leads/qualification-link', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'create',
+          leadId,
+          source: crmLeadSource,
+          scenarioId: scenario.id,
+          recipientType,
+          recipientKey: recipientType,
+          sendEmail,
+        }),
+      });
+
+      updateTouchedAtFromScenarioResult(payload);
+      await loadLeadScenarios();
+      Alert.alert('Scenario Link', sendEmail ? 'Scenario link emailed.' : 'Scenario link generated.');
+    } catch (error: any) {
+      console.error('[LeadDetail] Failed to create scenario link:', error);
+      const message = error?.message || 'Failed to create scenario link.';
+      setScenarioError(message);
+      Alert.alert('Scenario Link', message);
+    } finally {
+      setScenarioActionKey(null);
+    }
+  };
+
+  const revokeScenarioLink = async (link: QualificationLinkSummary) => {
+    setScenarioActionKey(`revoke:${link.id}`);
+    setScenarioError(null);
+
+    try {
+      const payload = await fetchCrmApi('/api/leads/qualification-link', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'revoke',
+          linkId: link.id,
+        }),
+      });
+
+      updateTouchedAtFromScenarioResult(payload);
+      await loadLeadScenarios();
+      Alert.alert('Scenario Link', 'Scenario link disabled.');
+    } catch (error: any) {
+      console.error('[LeadDetail] Failed to disable scenario link:', error);
+      const message = error?.message || 'Failed to disable scenario link.';
+      setScenarioError(message);
+      Alert.alert('Scenario Link', message);
+    } finally {
+      setScenarioActionKey(null);
+    }
+  };
+
+  const copyScenarioLink = (link: QualificationLinkSummary) => {
+    Clipboard.setString(link.publicUrl);
+    Alert.alert('Copied', 'Scenario link copied.');
+  };
+
+  const shareScenarioLink = async (scenario: LeadScenarioSummary, link: QualificationLinkSummary) => {
+    const message = `${scenario.name || 'Payment scenario'}\n${link.publicUrl}`;
+    try {
+      await Share.share({
+        title: scenario.name || 'Payment scenario',
+        message,
+        url: link.publicUrl,
+      });
+    } catch (error: any) {
+      Alert.alert('Share Scenario', error?.message || 'Unable to open the share sheet.');
+    }
+  };
+
+  const textScenarioLink = (scenario: LeadScenarioSummary, link: QualificationLinkSummary) => {
+    const recipientPhone = link.recipientPhone || (link.recipientType === 'borrower' ? record?.phone : null);
+    if (!recipientPhone) {
+      Alert.alert('Text Scenario', 'This recipient does not have a phone number on file.');
+      return;
+    }
+
+    const body = `Here is the payment scenario for ${fullName}: ${link.publicUrl}`;
+    Linking.openURL(`sms:${recipientPhone}?body=${encodeURIComponent(body)}`);
+  };
+
+  const emailScenarioLink = (scenario: LeadScenarioSummary, link: QualificationLinkSummary) => {
+    const recipientEmail =
+      link.recipientEmail ||
+      (link.recipientType === 'borrower' ? record?.email : record?.referral_source_email);
+    if (!recipientEmail) {
+      Alert.alert('Email Scenario', 'This recipient does not have an email address on file.');
+      return;
+    }
+
+    const subject = encodeURIComponent(`Payment scenario${fullName ? ` for ${fullName}` : ''}`);
+    const body = encodeURIComponent(`Hi,\n\nHere is the payment scenario:\n${link.publicUrl}\n\nThis is an estimate only and does not guarantee loan approval.`);
+    Linking.openURL(`mailto:${recipientEmail}?subject=${subject}&body=${body}`);
+  };
+
+  const showScenarioRecipientActions = (
+    scenario: LeadScenarioSummary,
+    recipientType: 'borrower' | 'realtor'
+  ) => {
+    const link = getActiveScenarioLink(scenario.id, recipientType);
+    const label = recipientType === 'borrower' ? 'Buyer' : 'Partner/Realtor';
+
+    if (!link) {
+      Alert.alert(`${label} Scenario Link`, 'Create a tracked share link for this saved scenario.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Generate Link', onPress: () => createScenarioLink(scenario, recipientType, false) },
+        { text: 'Email Link', onPress: () => createScenarioLink(scenario, recipientType, true) },
+      ]);
+      return;
+    }
+
+    const actions: Array<{ text: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' }> = [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Copy Link', onPress: () => copyScenarioLink(link) },
+      { text: 'Share Link', onPress: () => shareScenarioLink(scenario, link) },
+      { text: 'Open Link', onPress: () => Linking.openURL(link.publicUrl) },
+    ];
+
+    if (link.recipientPhone || (recipientType === 'borrower' && record?.phone)) {
+      actions.push({ text: 'Text Link', onPress: () => textScenarioLink(scenario, link) });
+    }
+
+    if (link.recipientEmail || (recipientType === 'borrower' ? record?.email : record?.referral_source_email)) {
+      actions.push({ text: 'Email Link', onPress: () => emailScenarioLink(scenario, link) });
+    }
+
+    actions.push({ text: 'Disable Link', style: 'destructive', onPress: () => revokeScenarioLink(link) });
+
+    Alert.alert(`${label} Scenario Link`, scenario.name || 'Saved scenario', actions);
+  };
+
+  const renderScenarioSharingSection = () => {
+    const scenarioCountLabel = leadScenarios.length === 1 ? '1 saved scenario' : `${leadScenarios.length} saved scenarios`;
+    const hasCollapsibleScenarios = leadScenarios.length > 2;
+    const showScenarioList = !hasCollapsibleScenarios || scenarioSectionExpanded;
+    const featuredScenario = leadScenarios.find((scenario) => scenario.isPrimary) || leadScenarios[0] || null;
+    const featuredSnapshot = featuredScenario ? getRecordValue(featuredScenario.resultSnapshot) || {} : {};
+    const featuredScenarioData = featuredScenario ? getRecordValue(featuredScenario.scenarioData) || {} : {};
+    const featuredPaymentBreakdown = getRecordValue(featuredSnapshot.paymentBreakdown) || {};
+    const featuredCashToCloseDetails = getRecordValue(featuredSnapshot.cashToCloseDetails) || {};
+    const featuredPayment = getScenarioCurrencyDisplay(featuredSnapshot.totalPayment, featuredPaymentBreakdown.totalPayment);
+    const featuredCashToClose = getScenarioCurrencyDisplay(featuredCashToCloseDetails.cashToClose, featuredSnapshot.cashToClose);
+    const featuredSalesPrice = getScenarioCurrencyDisplay(featuredSnapshot.salesPrice, featuredScenarioData.salesPrice);
+    const scenarioNow = scenarioActivityClock;
+    const buyerViewingNow = scenarioLinks.some((link) => (
+      link.recipientType === 'borrower' && isScenarioLinkViewingNow(link, scenarioNow)
+    ));
+    const partnerViewingNow = scenarioLinks.some((link) => (
+      link.recipientType === 'realtor' && isScenarioLinkViewingNow(link, scenarioNow)
+    ));
+    const hasViewingNow = buyerViewingNow || partnerViewingNow;
+
+    const toggleScenarioSection = () => {
+      if (!hasCollapsibleScenarios) return;
+      scenarioSectionTouchedRef.current = true;
+      setScenarioSectionExpanded((expanded) => !expanded);
+    };
+
+    return (
+      <View style={scenarioShareStyles.container}>
+        <View style={scenarioShareStyles.headerRow}>
+          <TouchableOpacity
+            style={scenarioShareStyles.headerTitleRow}
+            onPress={toggleScenarioSection}
+            disabled={!hasCollapsibleScenarios}
+            activeOpacity={0.75}
+          >
+            <Ionicons name="albums-outline" size={17} color={PLUM} />
+            <Text style={[scenarioShareStyles.title, { color: colors.textPrimary }]}>
+              {leadScenarios.length > 0 ? `Scenarios (${leadScenarios.length})` : 'Scenarios'}
+            </Text>
+            {hasCollapsibleScenarios && (
+              <Ionicons
+                name={scenarioSectionExpanded ? 'chevron-up' : 'chevron-down'}
+                size={16}
+                color={PLUM}
+              />
+            )}
+          </TouchableOpacity>
+          <View style={scenarioShareStyles.headerActions}>
+            <TouchableOpacity
+              style={scenarioShareStyles.iconButton}
+              onPress={loadLeadScenarios}
+              disabled={loadingScenarios}
+            >
+              {loadingScenarios ? (
+                <ActivityIndicator size="small" color={PLUM} />
+              ) : (
+                <Ionicons name="refresh" size={16} color={PLUM} />
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <Text style={[scenarioShareStyles.subtitle, { color: colors.textSecondary }]}>
+          {leadScenarios.length > 0
+            ? `${scenarioCountLabel}. ${hasCollapsibleScenarios && !scenarioSectionExpanded ? 'Expand to manage tracked borrower or partner links.' : 'Generate and manage tracked borrower or partner links from the saved web scenarios.'}`
+            : 'Saved scenarios are created from the desktop CRM calculator.'}
+        </Text>
+
+        {hasViewingNow && (
+          <View style={scenarioShareStyles.viewingNowRow}>
+            {buyerViewingNow && (
+              <View style={scenarioShareStyles.viewingNowPill}>
+                <View style={scenarioShareStyles.viewingNowDot} />
+                <Text style={scenarioShareStyles.viewingNowText}>Buyer viewing now</Text>
+              </View>
+            )}
+            {partnerViewingNow && (
+              <View style={scenarioShareStyles.viewingNowPill}>
+                <View style={scenarioShareStyles.viewingNowDot} />
+                <Text style={scenarioShareStyles.viewingNowText}>Partner viewing now</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {scenarioError && (
+          <View style={scenarioShareStyles.errorBox}>
+            <Ionicons name="alert-circle-outline" size={15} color="#B91C1C" />
+            <Text style={scenarioShareStyles.errorText}>{scenarioError}</Text>
+          </View>
+        )}
+
+        {loadingScenarios && leadScenarios.length === 0 ? (
+          <View style={scenarioShareStyles.emptyBox}>
+            <ActivityIndicator size="small" color={PLUM} />
+            <Text style={[scenarioShareStyles.emptyText, { color: colors.textSecondary }]}>
+              Loading saved scenarios...
+            </Text>
+          </View>
+        ) : leadScenarios.length === 0 ? (
+          <View style={scenarioShareStyles.emptyBox}>
+            <Ionicons name="calculator-outline" size={18} color="#64748B" />
+            <Text style={[scenarioShareStyles.emptyText, { color: colors.textSecondary }]}>
+              No saved scenarios yet. Create one from the desktop CRM, then refresh this section.
+            </Text>
+          </View>
+        ) : !showScenarioList && featuredScenario ? (
+          <TouchableOpacity
+            style={[
+              scenarioShareStyles.scenarioCard,
+              scenarioShareStyles.collapsedScenarioCard,
+              { backgroundColor: colors.cardBackground, borderColor: colors.border },
+            ]}
+            onPress={toggleScenarioSection}
+            activeOpacity={0.75}
+          >
+            <View style={scenarioShareStyles.scenarioHeader}>
+              <View style={scenarioShareStyles.scenarioTitleBlock}>
+                <View style={scenarioShareStyles.scenarioNameRow}>
+                  <Text style={[scenarioShareStyles.scenarioIndex, { color: colors.textSecondary }]}>
+                    {featuredScenario.isPrimary ? 'Primary Scenario' : 'Latest Scenario'}
+                  </Text>
+                  {featuredScenario.isPrimary && (
+                    <View style={scenarioShareStyles.primaryPill}>
+                      <Text style={scenarioShareStyles.primaryPillText}>Primary</Text>
+                    </View>
+                  )}
+                </View>
+                <Text style={[scenarioShareStyles.scenarioName, { color: colors.textPrimary }]} numberOfLines={2}>
+                  {featuredScenario.name || 'Saved scenario'}
+                </Text>
+                {formatScenarioDateTime(featuredScenario.updatedAt) && (
+                  <Text style={[scenarioShareStyles.scenarioUpdated, { color: colors.textSecondary }]}>
+                    Updated {formatScenarioDateTime(featuredScenario.updatedAt)}
+                  </Text>
+                )}
+              </View>
+              <Ionicons name="chevron-down" size={18} color={PLUM} />
+            </View>
+
+            <View style={scenarioShareStyles.metricGrid}>
+              <View style={scenarioShareStyles.metricItem}>
+                <Text style={[scenarioShareStyles.metricLabel, { color: colors.textSecondary }]}>Payment</Text>
+                <Text style={[scenarioShareStyles.metricValue, { color: colors.textPrimary }]}>
+                  {featuredPayment || '-'}
+                </Text>
+              </View>
+              <View style={scenarioShareStyles.metricItem}>
+                <Text style={[scenarioShareStyles.metricLabel, { color: colors.textSecondary }]}>Cash to Close</Text>
+                <Text style={[scenarioShareStyles.metricValue, { color: colors.textPrimary }]}>
+                  {featuredCashToClose || '-'}
+                </Text>
+              </View>
+              <View style={scenarioShareStyles.metricItem}>
+                <Text style={[scenarioShareStyles.metricLabel, { color: colors.textSecondary }]}>Price</Text>
+                <Text style={[scenarioShareStyles.metricValue, { color: colors.textPrimary }]}>
+                  {featuredSalesPrice || '-'}
+                </Text>
+              </View>
+            </View>
+            <Text style={[scenarioShareStyles.collapsedHint, { color: colors.textSecondary }]}>
+              Tap to show all scenarios.
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={scenarioShareStyles.scenarioList}>
+            {leadScenarios.map((scenario, index) => {
+              const snapshot = getRecordValue(scenario.resultSnapshot) || {};
+              const scenarioData = getRecordValue(scenario.scenarioData) || {};
+              const paymentBreakdown = getRecordValue(snapshot.paymentBreakdown) || {};
+              const cashToCloseDetails = getRecordValue(snapshot.cashToCloseDetails) || {};
+              const qualification = getRecordValue(snapshot.qualification) || {};
+              const borrowerLink = getActiveScenarioLink(scenario.id, 'borrower');
+              const realtorLink = getActiveScenarioLink(scenario.id, 'realtor');
+              const borrowerViewingNow = isScenarioLinkViewingNow(borrowerLink, scenarioNow);
+              const realtorViewingNow = isScenarioLinkViewingNow(realtorLink, scenarioNow);
+              const payment = getScenarioCurrencyDisplay(snapshot.totalPayment, paymentBreakdown.totalPayment);
+              const cashToClose = getScenarioCurrencyDisplay(cashToCloseDetails.cashToClose, snapshot.cashToClose);
+              const salesPrice = getScenarioCurrencyDisplay(snapshot.salesPrice, scenarioData.salesPrice);
+              const rate = getScenarioPercentDisplay(snapshot.interestRate, scenarioData.interestRate);
+              const loanType = typeof snapshot.loanType === 'string'
+                ? snapshot.loanType
+                : typeof scenarioData.loanType === 'string'
+                  ? scenarioData.loanType
+                  : null;
+              const housingRatio = getScenarioPercentDisplay(qualification.housingRatio);
+              const dtiRatio = getScenarioPercentDisplay(qualification.dtiRatio);
+              const hasQualificationResult = typeof qualification.overallWithinLimit === 'boolean';
+              const actionBusy = scenarioActionKey?.includes(`:${scenario.id}:`) || false;
+
+              return (
+                <View
+                  key={scenario.id}
+                  style={[
+                    scenarioShareStyles.scenarioCard,
+                    { backgroundColor: colors.cardBackground, borderColor: colors.border },
+                  ]}
+                >
+                  <View style={scenarioShareStyles.scenarioHeader}>
+                    <View style={scenarioShareStyles.scenarioTitleBlock}>
+                      <View style={scenarioShareStyles.scenarioNameRow}>
+                        <Text style={[scenarioShareStyles.scenarioIndex, { color: colors.textSecondary }]}>
+                          {`Scenario ${index + 1}`}
+                        </Text>
+                        {scenario.isPrimary && (
+                          <View style={scenarioShareStyles.primaryPill}>
+                            <Text style={scenarioShareStyles.primaryPillText}>Primary</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={[scenarioShareStyles.scenarioName, { color: colors.textPrimary }]} numberOfLines={2}>
+                        {scenario.name || 'Saved scenario'}
+                      </Text>
+                      {formatScenarioDateTime(scenario.updatedAt) && (
+                        <Text style={[scenarioShareStyles.scenarioUpdated, { color: colors.textSecondary }]}>
+                          Updated {formatScenarioDateTime(scenario.updatedAt)}
+                        </Text>
+                      )}
+                    </View>
+                    {hasQualificationResult && (
+                      <View
+                        style={[
+                          scenarioShareStyles.qualificationPill,
+                          qualification.overallWithinLimit
+                            ? scenarioShareStyles.qualificationPillOk
+                            : scenarioShareStyles.qualificationPillWarn,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            scenarioShareStyles.qualificationPillText,
+                            qualification.overallWithinLimit
+                              ? scenarioShareStyles.qualificationPillTextOk
+                              : scenarioShareStyles.qualificationPillTextWarn,
+                          ]}
+                        >
+                          {qualification.overallWithinLimit ? 'OK' : 'Review'}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={scenarioShareStyles.metricGrid}>
+                    <View style={scenarioShareStyles.metricItem}>
+                      <Text style={[scenarioShareStyles.metricLabel, { color: colors.textSecondary }]}>Payment</Text>
+                      <Text style={[scenarioShareStyles.metricValue, { color: colors.textPrimary }]}>
+                        {payment || '-'}
+                      </Text>
+                    </View>
+                    <View style={scenarioShareStyles.metricItem}>
+                      <Text style={[scenarioShareStyles.metricLabel, { color: colors.textSecondary }]}>Cash to Close</Text>
+                      <Text style={[scenarioShareStyles.metricValue, { color: colors.textPrimary }]}>
+                        {cashToClose || '-'}
+                      </Text>
+                    </View>
+                    <View style={scenarioShareStyles.metricItem}>
+                      <Text style={[scenarioShareStyles.metricLabel, { color: colors.textSecondary }]}>Price</Text>
+                      <Text style={[scenarioShareStyles.metricValue, { color: colors.textPrimary }]}>
+                        {salesPrice || '-'}
+                      </Text>
+                    </View>
+                    <View style={scenarioShareStyles.metricItem}>
+                      <Text style={[scenarioShareStyles.metricLabel, { color: colors.textSecondary }]}>Rate</Text>
+                      <Text style={[scenarioShareStyles.metricValue, { color: colors.textPrimary }]}>
+                        {rate || '-'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {(loanType || housingRatio || dtiRatio) && (
+                    <Text style={[scenarioShareStyles.scenarioMeta, { color: colors.textSecondary }]}>
+                      {[loanType, housingRatio ? `Housing ${housingRatio}` : null, dtiRatio ? `DTI ${dtiRatio}` : null]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </Text>
+                  )}
+
+                  <View style={scenarioShareStyles.linkStatusRow}>
+                    <View
+                      style={[
+                        scenarioShareStyles.linkPill,
+                        borrowerLink ? scenarioShareStyles.linkPillActive : scenarioShareStyles.linkPillInactive,
+                      ]}
+                    >
+                      <Ionicons
+                        name={borrowerLink ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={13}
+                        color={borrowerLink ? '#047857' : '#64748B'}
+                      />
+                      <Text
+                        style={[
+                          scenarioShareStyles.linkPillText,
+                          borrowerLink ? scenarioShareStyles.linkPillTextActive : scenarioShareStyles.linkPillTextInactive,
+                        ]}
+                      >
+                        Buyer {borrowerLink ? (borrowerViewingNow ? 'viewing now' : 'link live') : 'not sent'}
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        scenarioShareStyles.linkPill,
+                        realtorLink ? scenarioShareStyles.linkPillActive : scenarioShareStyles.linkPillInactive,
+                      ]}
+                    >
+                      <Ionicons
+                        name={realtorLink ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={13}
+                        color={realtorLink ? '#047857' : '#64748B'}
+                      />
+                      <Text
+                        style={[
+                          scenarioShareStyles.linkPillText,
+                          realtorLink ? scenarioShareStyles.linkPillTextActive : scenarioShareStyles.linkPillTextInactive,
+                        ]}
+                      >
+                        Partner {realtorLink ? (realtorViewingNow ? 'viewing now' : 'link live') : 'not sent'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {(borrowerLink || realtorLink) && (
+                    <View style={scenarioShareStyles.activityRow}>
+                      {borrowerLink && (
+                        <Text style={[scenarioShareStyles.activityText, { color: colors.textSecondary }]}>
+                          {formatScenarioOpenSummary('Buyer', borrowerLink, scenarioNow)}
+                        </Text>
+                      )}
+                      {realtorLink && (
+                        <Text style={[scenarioShareStyles.activityText, { color: colors.textSecondary }]}>
+                          {formatScenarioOpenSummary('Partner', realtorLink, scenarioNow)}
+                        </Text>
+                      )}
+                    </View>
+                  )}
+
+                  <View style={scenarioShareStyles.actionRow}>
+                    <TouchableOpacity
+                      style={[
+                        scenarioShareStyles.actionButton,
+                        scenarioShareStyles.borrowerButton,
+                        (scenarioActionKey !== null || actionBusy) && scenarioShareStyles.actionButtonDisabled,
+                      ]}
+                      onPress={() => showScenarioRecipientActions(scenario, 'borrower')}
+                      disabled={scenarioActionKey !== null}
+                    >
+                      <Ionicons name="person-outline" size={14} color={PLUM} />
+                      <Text style={scenarioShareStyles.borrowerButtonText}>
+                        {borrowerLink ? 'Buyer Link' : 'Share Buyer'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        scenarioShareStyles.actionButton,
+                        scenarioShareStyles.partnerButton,
+                        (!hasPartnerEmail || scenarioActionKey !== null || actionBusy) && scenarioShareStyles.actionButtonDisabled,
+                      ]}
+                      onPress={() => showScenarioRecipientActions(scenario, 'realtor')}
+                      disabled={!hasPartnerEmail || scenarioActionKey !== null}
+                    >
+                      <Ionicons name="people-outline" size={14} color="#FFFFFF" />
+                      <Text style={scenarioShareStyles.partnerButtonText}>
+                        {realtorLink ? 'Partner Link' : 'Share Partner'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
+      </View>
+    );
+  };
 
   const hasPrevious = currentIndex > 0;
   const hasNext = currentIndex < navigableList.length - 1;
@@ -3623,29 +4406,10 @@ export function LeadDetailView({
     }
   };
 
-  const handleSaveContact = async () => {
-    if (!phone && !email) {
-      console.log('[Contacts] No phone or email, skipping save');
-      return;
-    }
-
-    if (!record) {
-      console.log('[Contacts] No record, skipping save');
-      return;
-    }
-
+  const buildLeadNotes = (): string => {
+    if (!record) return '';
     const r = record;
-
-    try {
-      console.log('[Contacts] Save contact pressed', {
-        leadId: r.id,
-        isMeta,
-        hasPhone: !!phone,
-        hasEmail: !!email,
-      });
-
-      const company = isMeta ? 'Mortgage Meta' : 'Mortgage';
-      const notesLines: string[] = [];
+    const notesLines: string[] = [];
 
       if (!isMeta && (r as any).source) {
         notesLines.push(`Source: ${(r as any).source}`);
@@ -3694,13 +4458,34 @@ export function LeadDetailView({
       });
       notesLines.push(`Lead Date: ${createdDate}`);
 
-      const notes = notesLines.join('\n');
+      return notesLines.join('\n');
+  };
+
+  const saveBorrowerContact = async (borrower: {
+    firstName: string;
+    lastName: string;
+    phone: string;
+    email: string;
+    extraNotes?: string;
+  }) => {
+    if (!record) return;
+    if (!borrower.phone && !borrower.email) {
+      Alert.alert('Missing Info', 'This borrower has no phone or email to save.');
+      return;
+    }
+
+    try {
+      const company = isMeta ? 'Mortgage Meta' : 'Mortgage';
+      const baseNotes = buildLeadNotes();
+      const notes = borrower.extraNotes
+        ? `${borrower.extraNotes}\n${baseNotes}`.trim()
+        : baseNotes;
 
       const payload = {
-        firstName: r.first_name || 'Lead',
-        lastName: r.last_name || '',
-        phone: phone || '',
-        email: email || '',
+        firstName: borrower.firstName || 'Lead',
+        lastName: borrower.lastName || '',
+        phone: borrower.phone || '',
+        email: borrower.email || '',
         company,
         notes,
       };
@@ -3713,6 +4498,102 @@ export function LeadDetailView({
     } catch (error) {
       console.error('[Contacts] Failed to save contact:', error);
       Alert.alert('Error', 'Could not save contact. Please try again.');
+    }
+  };
+
+  const handleSaveContact = async () => {
+    if (!record) {
+      console.log('[Contacts] No record, skipping save');
+      return;
+    }
+
+    const r = record;
+
+    // Build candidate list: primary borrower + co-borrowers (only those with phone/email).
+    type BorrowerCandidate = {
+      label: string;
+      firstName: string;
+      lastName: string;
+      phone: string;
+      email: string;
+      extraNotes?: string;
+    };
+
+    const candidates: BorrowerCandidate[] = [];
+
+    if (phone || email) {
+      candidates.push({
+        label: `${(r.first_name || 'Lead')} ${(r.last_name || '')}`.trim() + ' (Primary)',
+        firstName: r.first_name || 'Lead',
+        lastName: r.last_name || '',
+        phone: phone || '',
+        email: email || '',
+      });
+    }
+
+    const coBorrowers = !isMeta ? (r as Lead).metadata?.co_borrowers : undefined;
+    if (coBorrowers && coBorrowers.length > 0) {
+      const primaryFullName = `${r.first_name || ''} ${r.last_name || ''}`.trim() || 'Primary Borrower';
+      coBorrowers.forEach((cb) => {
+        const cbPhone = (cb.phone || '').trim();
+        const cbEmail = (cb.email || '').trim();
+        if (!cbPhone && !cbEmail) return;
+        const name = `${cb.first_name || ''} ${cb.last_name || ''}`.trim() || 'Co-Borrower';
+        candidates.push({
+          label: `${name} (Co-Borrower)`,
+          firstName: cb.first_name || 'Co-Borrower',
+          lastName: cb.last_name || '',
+          phone: cbPhone,
+          email: cbEmail,
+          extraNotes: `Co-Borrower of ${primaryFullName}`,
+        });
+      });
+    }
+
+    if (candidates.length === 0) {
+      console.log('[Contacts] No savable borrowers (no phone/email)');
+      Alert.alert('Missing Info', 'This lead has no phone or email to save.');
+      return;
+    }
+
+    // Single borrower – save directly with no prompt.
+    if (candidates.length === 1) {
+      await saveBorrowerContact(candidates[0]);
+      return;
+    }
+
+    // Multiple borrowers – ask which one to save.
+    if (Platform.OS === 'ios') {
+      const options = [...candidates.map((c) => c.label), 'Cancel'];
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: 'Save Contact',
+          message: 'Which borrower do you want to save?',
+          options,
+          cancelButtonIndex: options.length - 1,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === options.length - 1) return;
+          const chosen = candidates[buttonIndex];
+          if (chosen) {
+            void saveBorrowerContact(chosen);
+          }
+        }
+      );
+    } else {
+      Alert.alert(
+        'Save Contact',
+        'Which borrower do you want to save?',
+        [
+          ...candidates.map((c) => ({
+            text: c.label,
+            onPress: () => {
+              void saveBorrowerContact(c);
+            },
+          })),
+          { text: 'Cancel', style: 'cancel' as const },
+        ]
+      );
     }
   };
 
@@ -4336,6 +5217,8 @@ export function LeadDetailView({
             </View>
           )}
 
+          {renderScenarioSharingSection()}
+
           {/* Status Picker Modal */}
           <Modal
             visible={showStatusPicker}
@@ -4737,6 +5620,16 @@ export function LeadDetailView({
                 />
               ))}
               <LeadSummaryCard
+                title="LOAN DETAILS"
+                rows={leadLoanDetailsRows}
+                colors={leadSummaryColors}
+              />
+              <LeadSummaryCard
+                title="PROPERTY DETAILS"
+                rows={leadPropertyDetailsRows}
+                colors={leadSummaryColors}
+              />
+              <LeadSummaryCard
                 title="META ATTRIBUTION"
                 rows={adAttributionRows}
                 colors={leadSummaryColors}
@@ -4747,16 +5640,6 @@ export function LeadDetailView({
                   colors={leadSummaryColors}
                 />
               ) : null}
-              <LeadSummaryCard
-                title="LOAN DETAILS"
-                rows={leadLoanDetailsRows}
-                colors={leadSummaryColors}
-              />
-              <LeadSummaryCard
-                title="PROPERTY DETAILS"
-                rows={leadPropertyDetailsRows}
-                colors={leadSummaryColors}
-              />
               <LeadSummaryCard
                 title="LOAN SPECIFICS"
                 rows={leadLoanSpecificRows}
@@ -6379,6 +7262,291 @@ const trackingInfoStyles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '600',
+  },
+});
+
+const scenarioShareStyles = StyleSheet.create({
+  container: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  subtitle: {
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 6,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#F5F3FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  viewingNowRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  viewingNowPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 999,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  viewingNowDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+  },
+  viewingNowText: {
+    color: '#047857',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  errorBox: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 10,
+    padding: 10,
+  },
+  errorText: {
+    flex: 1,
+    color: '#B91C1C',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+  emptyBox: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  emptyText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  scenarioList: {
+    marginTop: 12,
+    gap: 10,
+  },
+  scenarioCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+  },
+  collapsedScenarioCard: {
+    marginTop: 12,
+  },
+  scenarioHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  scenarioTitleBlock: {
+    flex: 1,
+  },
+  scenarioNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 3,
+  },
+  scenarioIndex: {
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  primaryPill: {
+    borderRadius: 999,
+    backgroundColor: '#EDE9FE',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  primaryPillText: {
+    color: PLUM,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  scenarioName: {
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 19,
+  },
+  scenarioUpdated: {
+    fontSize: 11,
+    marginTop: 3,
+  },
+  qualificationPill: {
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  qualificationPillOk: {
+    backgroundColor: '#DCFCE7',
+  },
+  qualificationPillWarn: {
+    backgroundColor: '#FEF3C7',
+  },
+  qualificationPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  qualificationPillTextOk: {
+    color: '#047857',
+  },
+  qualificationPillTextWarn: {
+    color: '#B45309',
+  },
+  metricGrid: {
+    marginTop: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  metricItem: {
+    width: '47%',
+    minWidth: 120,
+    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
+    padding: 9,
+  },
+  metricLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.35,
+  },
+  metricValue: {
+    fontSize: 13,
+    fontWeight: '800',
+    marginTop: 3,
+  },
+  collapsedHint: {
+    marginTop: 10,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+  scenarioMeta: {
+    marginTop: 9,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  linkStatusRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  linkPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  linkPillActive: {
+    backgroundColor: '#DCFCE7',
+  },
+  linkPillInactive: {
+    backgroundColor: '#F1F5F9',
+  },
+  linkPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  linkPillTextActive: {
+    color: '#047857',
+  },
+  linkPillTextInactive: {
+    color: '#64748B',
+  },
+  activityRow: {
+    marginTop: 8,
+    gap: 3,
+  },
+  activityText: {
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  actionButton: {
+    flex: 1,
+    minHeight: 38,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+  },
+  borrowerButton: {
+    backgroundColor: '#F5F3FF',
+    borderWidth: 1,
+    borderColor: '#DDD6FE',
+  },
+  borrowerButtonText: {
+    color: PLUM,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  partnerButton: {
+    backgroundColor: PLUM,
+  },
+  partnerButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  actionButtonDisabled: {
+    opacity: 0.5,
   },
 });
 

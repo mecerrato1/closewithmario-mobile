@@ -124,6 +124,27 @@ function resolveNotificationOpenTab(
 
 const LEAD_SELECT_FIELDS =
   'id, created_at, first_name, last_name, email, phone, status, last_contact_date, last_touched_at, loan_purpose, price, loan_amount, down_payment, credit_score, ltv, interest_rate, message, lo_id, realtor_id, source, source_detail, subject_address, subject_city, subject_state, subject_county, subject_zipcode, xml_property_type, occupancy_type, mortgage_type, amortization_type, loan_term_months, lender_loan_number, estimated_closing_costs, employer_name, employment_title, employment_start_date, employment_monthly_income, self_employed, marital_status, dependent_count, citizenship_status, current_housing_type, current_housing_payment, originator_name, originator_company, originator_license, originator_email, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary, metadata';
+const CRM_API_BASE_URL = 'https://www.closewithmario.com';
+const SCENARIO_VIEWING_NOW_WINDOW_MS = 3 * 60 * 1000;
+
+type ScenarioShareLinkStatus = {
+  recipientType: 'borrower' | 'co_borrower' | 'realtor' | 'key_contact';
+  status: 'active' | 'revoked' | 'expired' | 'completed';
+  lastActivityAt: string | null;
+};
+
+type ScenarioShareStatus = {
+  borrower?: ScenarioShareLinkStatus | null;
+  realtor?: ScenarioShareLinkStatus | null;
+};
+
+const getScenarioShareStatusKey = (source: 'organic' | 'meta', id: string) => `${source}:${id}`;
+
+const isScenarioShareViewingNow = (link?: ScenarioShareLinkStatus | null, now = Date.now()) => {
+  if (!link || link.status !== 'active' || !link.lastActivityAt) return false;
+  const activityAt = new Date(link.lastActivityAt).getTime();
+  return Number.isFinite(activityAt) && now - activityAt <= SCENARIO_VIEWING_NOW_WINDOW_MS;
+};
 
 function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandled, defaultToMyLeads, skipDashboard, onNavigateToCapture }: LeadsScreenProps) {
   const { colors, isDark } = useThemeColors();
@@ -161,6 +182,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [showCallbackHistory, setShowCallbackHistory] = useState(false);
   const [callbackHistory, setCallbackHistory] = useState<any[]>([]);
   const [unreadMessageCounts, setUnreadMessageCounts] = useState<Record<string, number>>({});
+  const [scenarioShareStatuses, setScenarioShareStatuses] = useState<Record<string, ScenarioShareStatus>>({});
+  const [scenarioActivityClock, setScenarioActivityClock] = useState(Date.now());
   const [showAiRecommendationModal, setShowAiRecommendationModal] = useState(false);
   const [selectedAiAttention, setSelectedAiAttention] = useState<{ reason: string; suggestedAction: string; badge: string; leadId: string; source: 'lead' | 'meta'; phone: string; firstName: string } | null>(null);
   const [realtorProfilePicUrl, setRealtorProfilePicUrl] = useState<string | null>(null);
@@ -173,11 +196,24 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [showQuickCaptures, setShowQuickCaptures] = useState(false);
   const [quickCaptureStartOnAdd, setQuickCaptureStartOnAdd] = useState(false);
   const [showFabActionSheet, setShowFabActionSheet] = useState(false);
+  const scenarioShareStatusCount = Object.keys(scenarioShareStatuses).length;
 
   // Add Lead Modal state
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
   const [returnToDashboardAfterAddLead, setReturnToDashboardAfterAddLead] = useState(false);
   const [savingNewLead, setSavingNewLead] = useState(false);
+
+  useEffect(() => {
+    if (scenarioShareStatusCount === 0) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setScenarioActivityClock(Date.now());
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [scenarioShareStatusCount]);
   const [addLeadError, setAddLeadError] = useState<string | null>(null);
   const [newLead, setNewLead] = useState({
     first_name: '',
@@ -468,6 +504,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
         setLeads(safeLeads);
         setMetaLeads(safeMeta);
+        loadScenarioShareStatuses(safeLeads, safeMeta).catch(() => undefined);
 
         // Fetch AI attention data for all leads
         const allLeadIds = [...safeLeads.map(l => l.id), ...safeMeta.map(l => l.id)];
@@ -764,6 +801,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
       setLeads(safeLeads);
       setMetaLeads(safeMeta);
+      loadScenarioShareStatuses(safeLeads, safeMeta).catch(() => undefined);
       setDebugInfo(`leads rows: ${safeLeads.length} · meta_ads rows: ${safeMeta.length}`);
 
       // Refresh unread message counts
@@ -1398,6 +1436,54 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     });
   };
 
+  const loadScenarioShareStatuses = async (leadRows: Lead[], metaRows: MetaLead[]) => {
+    if (!session?.access_token) {
+      setScenarioShareStatuses({});
+      return;
+    }
+
+    const requestedLeads = [
+      ...leadRows.map((lead) => ({ id: lead.id, source: 'organic' as const, status: lead.status || null })),
+      ...metaRows.map((lead) => ({ id: lead.id, source: 'meta' as const, status: lead.status || null })),
+    ];
+
+    if (requestedLeads.length === 0) {
+      setScenarioShareStatuses({});
+      return;
+    }
+
+    try {
+      const response = await fetch(`${CRM_API_BASE_URL}/api/leads/shared-scenarios`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ leads: requestedLeads }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.error || `Shared scenario request failed (${response.status})`);
+      }
+      setScenarioShareStatuses(payload?.statuses && typeof payload.statuses === 'object' ? payload.statuses : {});
+      setScenarioActivityClock(Date.now());
+    } catch (error) {
+      console.warn('[App] Failed to load shared scenario statuses:', error);
+    }
+  };
+
+  const getScenarioViewingLabel = (source: 'organic' | 'meta', id: string) => {
+    const status = scenarioShareStatuses[getScenarioShareStatusKey(source, id)];
+    const buyerViewing = isScenarioShareViewingNow(status?.borrower || null, scenarioActivityClock);
+    const partnerViewing = isScenarioShareViewingNow(status?.realtor || null, scenarioActivityClock);
+
+    if (buyerViewing && partnerViewing) return 'Buyer + partner viewing';
+    if (buyerViewing) return 'Buyer viewing now';
+    if (partnerViewing) return 'Partner viewing now';
+    return null;
+  };
+
   const renderLeadItem = ({ item }: { item: Lead }) => {
     const fullName =
       [item.first_name, item.last_name].filter(Boolean).join(' ') ||
@@ -1413,6 +1499,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       : getLeadAlert(item);
     const borderColor = alert ? alert.color : '#7C3AED';
     const isUnread = (unreadMessageCounts[item.id] || 0) > 0;
+    const scenarioViewingLabel = getScenarioViewingLabel('organic', item.id);
     // Priority dot color for lead list (green for priority 5 = "On Track")
     const getPriorityDotColor = () => {
       if (aiAttention?.badge) {
@@ -1528,6 +1615,14 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   </Text>
                 </View>
               )}
+              {scenarioViewingLabel && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 5 }}>
+                  <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#10B981', marginRight: 5 }} />
+                  <Text style={{ color: '#047857', fontSize: 11, fontWeight: '700' }} numberOfLines={1}>
+                    {scenarioViewingLabel}
+                  </Text>
+                </View>
+              )}
             </View>
             <View style={{ alignItems: 'flex-end', flexShrink: 0 }}>
               <Text style={[styles.leadTimestamp, { marginBottom: 4 }]}>
@@ -1567,6 +1662,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       STATUS_COLOR_MAP[item.status || 'new'] || STATUS_COLOR_MAP['new'];
     const hasUnreadMessages = (unreadMessageCounts[item.id] || 0) > 0;
     const isUnread = hasUnreadMessages;
+    const scenarioViewingLabel = getScenarioViewingLabel('meta', item.id);
     // Priority dot color for lead list (green for priority 5 = "On Track")
     const getPriorityDotColor = () => {
       if (aiAttention?.badge) {
@@ -1693,6 +1789,14 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   <Ionicons name="person-circle-outline" size={14} color={colors.textSecondary} style={styles.leadLOIcon as any} />
                   <Text style={[styles.leadLOText, { color: colors.textSecondary }]} numberOfLines={1}>
                     {loanOfficers.find(lo => lo.id === item.lo_id)?.name || 'Unknown LO'}
+                  </Text>
+                </View>
+              )}
+              {scenarioViewingLabel && (
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 5 }}>
+                  <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#10B981', marginRight: 5 }} />
+                  <Text style={{ color: '#047857', fontSize: 11, fontWeight: '700' }} numberOfLines={1}>
+                    {scenarioViewingLabel}
                   </Text>
                 </View>
               )}
