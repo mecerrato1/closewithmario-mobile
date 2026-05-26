@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   FlatList,
+  ScrollView,
   ActivityIndicator,
   RefreshControl,
   SafeAreaView,
@@ -23,8 +24,10 @@ import {
   type SmsRawPayload,
   type SmsVoiceSummary,
 } from '../../lib/smsMedia';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type ThreadSource = 'lead' | 'meta';
+type ApiLeadSource = 'organic' | 'meta';
 type FilterMode = 'all' | 'unread';
 
 type ScreenState =
@@ -68,7 +71,7 @@ interface SmsMessageRow {
 
 interface ConversationSummary {
   key: string;
-  channel: 'sms' | 'dm';
+  channel: 'sms' | 'dm' | 'scenario_update';
   conversationId: string | null;
   leadId: string;
   source: ThreadSource;
@@ -83,6 +86,32 @@ interface ConversationSummary {
   isAutomated?: boolean;
   smsOptIn?: boolean | null;
   smsOptedOut?: boolean | null;
+  scenarioUpdates?: PendingScenarioUpdate[];
+}
+
+interface PendingScenarioUpdateChange {
+  key?: string;
+  label?: string;
+  kind?: 'currency' | 'percent' | 'number' | 'text';
+  before?: number | string | null;
+  after?: number | string | null;
+  beforeLabel?: string;
+  afterLabel?: string;
+}
+
+interface PendingScenarioUpdate {
+  id: string;
+  leadId: string;
+  leadSource: ApiLeadSource;
+  scenarioId: string | null;
+  scenarioName?: string | null;
+  recipientType: 'borrower' | 'co_borrower' | 'realtor' | 'key_contact';
+  recipientName: string | null;
+  recipientEmail?: string | null;
+  recipientPhone?: string | null;
+  changedSummary: PendingScenarioUpdateChange[];
+  status: 'pending' | 'applied' | 'dismissed';
+  submittedAt: string;
 }
 
 interface MetaDmConversationRow {
@@ -105,6 +134,41 @@ interface MetaDmMessageRow {
 }
 
 const ACCENT = '#7C3AED';
+const AMBER = '#D97706';
+const CRM_API_BASE_URL = 'https://www.closewithmario.com';
+const SCENARIO_UPDATE_READ_STORAGE_PREFIX = 'messages.scenarioUpdateReadIds.v1';
+
+function toApiLeadSource(source: ThreadSource): ApiLeadSource {
+  return source === 'meta' ? 'meta' : 'organic';
+}
+
+function toThreadSource(source: ApiLeadSource): ThreadSource {
+  return source === 'meta' ? 'meta' : 'lead';
+}
+
+function getScenarioUpdateReadStorageKey(userId?: string | null) {
+  return `${SCENARIO_UPDATE_READ_STORAGE_PREFIX}:${userId || 'anonymous'}`;
+}
+
+async function loadReadScenarioUpdateIds(userId?: string | null) {
+  try {
+    const stored = await AsyncStorage.getItem(getScenarioUpdateReadStorageKey(userId));
+    const parsed = stored ? JSON.parse(stored) : [];
+    return new Set(Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : []);
+  } catch (error) {
+    console.warn('Failed to load read scenario update ids:', error);
+    return new Set<string>();
+  }
+}
+
+async function saveReadScenarioUpdateIds(userId: string | undefined, ids: Set<string>) {
+  try {
+    const serialized = JSON.stringify(Array.from(ids).slice(-1000));
+    await AsyncStorage.setItem(getScenarioUpdateReadStorageKey(userId), serialized);
+  } catch (error) {
+    console.warn('Failed to save read scenario update ids:', error);
+  }
+}
 
 function getMetaDmInboxIcon(platform?: string | null): keyof typeof Ionicons.glyphMap {
   const normalized = platform?.trim().toLowerCase() || '';
@@ -191,7 +255,45 @@ function getMetaDmAttachmentPreview(attachments: unknown) {
 }
 
 function getChannelLabel(channel: ConversationSummary['channel']) {
+  if (channel === 'scenario_update') return 'Scenario';
   return channel === 'dm' ? 'DM' : 'SMS';
+}
+
+function getScenarioUpdatePreview(updates: PendingScenarioUpdate[]) {
+  const count = updates.length;
+  const latestScenario = updates[0]?.scenarioName;
+  const suffix = count === 1 ? 'pending scenario update' : 'pending scenario updates';
+  return latestScenario ? `${count} ${suffix} for ${latestScenario}` : `${count} ${suffix}`;
+}
+
+function formatScenarioUpdateSubmitter(update: PendingScenarioUpdate) {
+  const name = update.recipientName?.trim() || 'Shared link recipient';
+  const role = update.recipientType === 'co_borrower'
+    ? 'Co-borrower'
+    : update.recipientType === 'key_contact'
+      ? 'Key contact'
+      : update.recipientType === 'realtor'
+        ? 'Realtor'
+        : 'Borrower';
+  return `${name} • ${role}`;
+}
+
+function formatScenarioChangeValue(change: PendingScenarioUpdateChange, side: 'before' | 'after') {
+  const label = side === 'before' ? change.beforeLabel : change.afterLabel;
+  if (label) return label;
+  const value = side === 'before' ? change.before : change.after;
+  if (value == null || value === '') return 'blank';
+  if (change.kind === 'currency') {
+    const numeric = Number(value);
+    return Number.isFinite(numeric)
+      ? numeric.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+      : String(value);
+  }
+  if (change.kind === 'percent') {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? `${numeric}%` : String(value);
+  }
+  return String(value);
 }
 
 export default function MessagesTabScreen({ session, onNavigateToLead }: MessagesTabScreenProps) {
@@ -221,6 +323,7 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
         }
 
         const role = await getUserRole(session.user.id, session.user.email);
+        const readScenarioUpdateIds = await loadReadScenarioUpdateIds(session.user.id);
 
         let leadsQuery = supabase
           .from('leads')
@@ -274,6 +377,11 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
           }
         });
 
+        const leadByScopedKey = new Map<string, ConversationContact>();
+        Array.from(leadMap.values()).forEach((lead) => {
+          leadByScopedKey.set(`${toApiLeadSource(lead.source)}:${lead.id}`, lead);
+        });
+
         const accessibleLeadIds = Array.from(leadMap.keys());
         const accessibleMetaLeadIds = ((metaData || []) as LeadRecord[]).map((lead) => lead.id);
         if (accessibleLeadIds.length === 0) {
@@ -284,6 +392,7 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
         const [
           { data: messageRows, error: messageError },
           { data: dmConversationRows, error: dmConversationError },
+          pendingScenarioPayload,
         ] = await Promise.all([
           supabase
             .from('sms_messages')
@@ -297,10 +406,23 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
                 .in('lead_id', accessibleMetaLeadIds)
                 .order('last_message_at', { ascending: false })
             : Promise.resolve({ data: [] as MetaDmConversationRow[], error: null }),
+          fetch(`${CRM_API_BASE_URL}/api/leads/qualification-submissions?pending=1&limit=1000`, {
+            headers: {
+              Accept: 'application/json',
+              Authorization: `Bearer ${session.access_token}`,
+            },
+          }),
         ]);
 
         if (messageError) throw messageError;
         if (dmConversationError) throw dmConversationError;
+        const pendingScenarioResult = (await pendingScenarioPayload.json()) as {
+          error?: string;
+          submissions?: PendingScenarioUpdate[];
+        };
+        if (!pendingScenarioPayload.ok) {
+          throw new Error(pendingScenarioResult.error || 'Failed to load scenario updates');
+        }
 
         const conversationMap = new Map<string, ConversationSummary>();
 
@@ -400,6 +522,45 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
           });
         });
 
+        const pendingScenarioUpdatesByLeadKey = new Map<string, PendingScenarioUpdate[]>();
+        (pendingScenarioResult.submissions || []).forEach((submission) => {
+          if (submission.status !== 'pending') return;
+          const key = `${submission.leadSource}:${submission.leadId}`;
+          if (!leadByScopedKey.has(key)) return;
+          const updates = pendingScenarioUpdatesByLeadKey.get(key) || [];
+          updates.push(submission);
+          pendingScenarioUpdatesByLeadKey.set(key, updates);
+        });
+
+        pendingScenarioUpdatesByLeadKey.forEach((updates, leadKey) => {
+          const sortedUpdates = [...updates].sort(
+            (left, right) => new Date(right.submittedAt).getTime() - new Date(left.submittedAt).getTime()
+          );
+          const lead = leadByScopedKey.get(leadKey);
+          const latestUpdate = sortedUpdates[0];
+          if (!lead || !latestUpdate) return;
+
+          conversationMap.set(`scenario_update:${leadKey}`, {
+            key: `scenario_update:${leadKey}`,
+            channel: 'scenario_update',
+            conversationId: null,
+            leadId: lead.id,
+            source: toThreadSource(latestUpdate.leadSource),
+            leadName: getLeadDisplayName(lead),
+            leadEmail: lead.email,
+            platform: lead.platform,
+            phone: lead.phone || '',
+            preview: getScenarioUpdatePreview(sortedUpdates),
+            latestMessageAt: latestUpdate.submittedAt,
+            latestDirection: 'inbound',
+            unreadCount: sortedUpdates.filter((update) => !readScenarioUpdateIds.has(update.id)).length,
+            isAutomated: false,
+            smsOptIn: lead.sms_opt_in,
+            smsOptedOut: lead.sms_opted_out,
+            scenarioUpdates: sortedUpdates,
+          });
+        });
+
         setConversations(sortConversations(Array.from(conversationMap.values())));
       } catch (loadError) {
         console.error('Error loading message inbox:', loadError);
@@ -409,10 +570,37 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
         setRefreshing(false);
       }
     },
-    [session?.user?.email, session?.user?.id]
+    [session?.access_token, session?.user?.email, session?.user?.id]
   );
 
   const markConversationAsRead = useCallback(async (conversation: ConversationSummary) => {
+    if (conversation.channel === 'scenario_update') {
+      const updateIds = (conversation.scenarioUpdates || [])
+        .map((update) => update.id)
+        .filter(Boolean);
+      if (updateIds.length === 0) {
+        return;
+      }
+
+      setConversations((prev) =>
+        sortConversations(
+          prev.map((item) =>
+            item.key === conversation.key ? { ...item, unreadCount: 0 } : item
+          )
+        )
+      );
+      setScreenState((current) =>
+        current.screen === 'thread' && current.conversation.key === conversation.key
+          ? { screen: 'thread', conversation: { ...current.conversation, unreadCount: 0 } }
+          : current
+      );
+
+      const readIds = await loadReadScenarioUpdateIds(session?.user?.id);
+      updateIds.forEach((id) => readIds.add(id));
+      await saveReadScenarioUpdateIds(session?.user?.id, readIds);
+      return;
+    }
+
     setConversations((prev) =>
       sortConversations(
         prev.map((item) =>
@@ -444,7 +632,7 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
         console.error('Error marking inbox DM conversation read:', markDmReadError);
       }
     }
-  }, []);
+  }, [session?.user?.id]);
 
   useEffect(() => {
     loadConversations({ showLoading: true });
@@ -470,6 +658,13 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'meta_dm_conversations' },
+        () => {
+          loadConversations();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'qualification_link_submissions' },
         () => {
           loadConversations();
         }
@@ -522,9 +717,13 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
 
   if (screenState.screen === 'thread') {
     const conversation = screenState.conversation;
+    const isScenarioUpdate = conversation.channel === 'scenario_update';
+    const scenarioUpdateCount = conversation.scenarioUpdates?.length || conversation.unreadCount;
     const threadSubtitleParts = [
       getChannelLabel(conversation.channel),
-      conversation.phone ? formatPhoneNumber(conversation.phone) : null,
+      isScenarioUpdate
+        ? `${scenarioUpdateCount} pending update${scenarioUpdateCount === 1 ? '' : 's'}`
+        : conversation.phone ? formatPhoneNumber(conversation.phone) : null,
     ].filter(Boolean);
 
     return (
@@ -554,12 +753,73 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
               style={styles.leadDetailsButton}
               onPress={() => onNavigateToLead?.(conversation.leadId, conversation.source)}
             >
-              <Ionicons name="person-outline" size={16} color={ACCENT} />
-              <Text style={styles.leadDetailsButtonText}>Lead</Text>
+              <Ionicons name={isScenarioUpdate ? 'calculator-outline' : 'person-outline'} size={16} color={isScenarioUpdate ? AMBER : ACCENT} />
+              <Text style={[styles.leadDetailsButtonText, isScenarioUpdate && styles.leadDetailsButtonTextAmber]}>
+                {isScenarioUpdate ? 'Review' : 'Lead'}
+              </Text>
             </TouchableOpacity>
           </View>
 
-          {conversation.channel === 'sms' ? (
+          {isScenarioUpdate ? (
+            <ScrollView contentContainerStyle={styles.scenarioDetailContent}>
+              <View style={styles.scenarioNoticeCard}>
+                <View style={styles.scenarioNoticeIcon}>
+                  <Ionicons name="calculator-outline" size={20} color={AMBER} />
+                </View>
+                <View style={styles.scenarioNoticeBody}>
+                  <Text style={styles.scenarioNoticeTitle}>Shared scenario updates</Text>
+                  <Text style={styles.scenarioNoticeText}>
+                    Review these changes from the lead detail Scenarios section.
+                  </Text>
+                </View>
+              </View>
+
+              {(conversation.scenarioUpdates || []).map((update) => (
+                <View key={update.id} style={[styles.scenarioUpdateCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+                  <View style={styles.scenarioUpdateHeader}>
+                    <View style={styles.scenarioUpdateTitleBlock}>
+                      <Text style={[styles.scenarioUpdateSubmitter, { color: colors.textPrimary }]} numberOfLines={1}>
+                        {formatScenarioUpdateSubmitter(update)}
+                      </Text>
+                      <Text style={[styles.scenarioUpdateMeta, { color: colors.textSecondary }]} numberOfLines={2}>
+                        {[update.scenarioName || 'Saved scenario', formatTimestamp(update.submittedAt)].filter(Boolean).join(' • ')}
+                      </Text>
+                    </View>
+                    <View style={styles.scenarioUpdateBadge}>
+                      <Text style={styles.scenarioUpdateBadgeText}>Pending</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.scenarioChangeList}>
+                    {update.changedSummary.length > 0 ? (
+                      update.changedSummary.map((change, index) => (
+                        <View key={`${update.id}:${change.key || index}`} style={styles.scenarioChangeRow}>
+                          <Text style={[styles.scenarioChangeLabel, { color: colors.textPrimary }]} numberOfLines={1}>
+                            {change.label || change.key || 'Changed field'}
+                          </Text>
+                          <Text style={styles.scenarioChangeValue} numberOfLines={2}>
+                            {formatScenarioChangeValue(change, 'before')} → {formatScenarioChangeValue(change, 'after')}
+                          </Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={[styles.scenarioNoChangesText, { color: colors.textSecondary }]}>
+                        No field summary was included.
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              ))}
+
+              <TouchableOpacity
+                style={styles.scenarioReviewButton}
+                onPress={() => onNavigateToLead?.(conversation.leadId, conversation.source)}
+              >
+                <Ionicons name="open-outline" size={16} color="#FFFFFF" />
+                <Text style={styles.scenarioReviewButtonText}>Review on Lead Detail</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          ) : conversation.channel === 'sms' ? (
             <SmsMessaging
               leadId={conversation.leadId}
               leadPhone={conversation.phone}
@@ -597,12 +857,16 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
     const hasUnread = item.unreadCount > 0;
     const previewPrefix = item.latestDirection === 'outbound' ? `${item.isAutomated ? 'Gio' : 'You'}: ` : '';
     const iconName =
-      item.channel === 'dm'
+      item.channel === 'scenario_update'
+        ? 'calculator-outline'
+        : item.channel === 'dm'
         ? getMetaDmInboxIcon(item.platform)
         : 'chatbubble-ellipses-outline';
     const iconColor = hasUnread
       ? '#FFFFFF'
-      : item.channel === 'dm'
+      : item.channel === 'scenario_update'
+        ? AMBER
+        : item.channel === 'dm'
         ? '#4338CA'
         : ACCENT;
 
@@ -616,8 +880,11 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
           <View
             style={[
               styles.avatarCircle,
-              item.channel === 'dm' ? styles.avatarCircleDm : styles.avatarCircleSms,
+              item.channel === 'scenario_update'
+                ? styles.avatarCircleScenario
+                : item.channel === 'dm' ? styles.avatarCircleDm : styles.avatarCircleSms,
               hasUnread && styles.avatarCircleUnread,
+              hasUnread && item.channel === 'scenario_update' && styles.avatarCircleScenarioUnread,
             ]}
           >
             <Ionicons name={iconName} size={18} color={iconColor} />
@@ -640,13 +907,17 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
               <View
                 style={[
                   styles.channelBadge,
-                  item.channel === 'dm' ? styles.channelBadgeDm : styles.channelBadgeSms,
+                  item.channel === 'scenario_update'
+                    ? styles.channelBadgeScenario
+                    : item.channel === 'dm' ? styles.channelBadgeDm : styles.channelBadgeSms,
                 ]}
               >
                 <Text
                   style={[
                     styles.channelBadgeText,
-                    item.channel === 'dm' ? styles.channelBadgeTextDm : styles.channelBadgeTextSms,
+                    item.channel === 'scenario_update'
+                      ? styles.channelBadgeTextScenario
+                      : item.channel === 'dm' ? styles.channelBadgeTextDm : styles.channelBadgeTextSms,
                   ]}
                 >
                   {getChannelLabel(item.channel)}
@@ -659,7 +930,9 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
           </View>
 
           <Text style={[styles.conversationPhone, { color: colors.textSecondary }]} numberOfLines={1}>
-            {item.phone ? formatPhoneNumber(item.phone) : 'No phone on file'}
+            {item.channel === 'scenario_update'
+              ? 'Shared qualification link'
+              : item.phone ? formatPhoneNumber(item.phone) : 'No phone on file'}
           </Text>
 
           <View style={styles.conversationBottomRow}>
@@ -676,7 +949,7 @@ export default function MessagesTabScreen({ session, onNavigateToLead }: Message
             </Text>
 
             {hasUnread ? (
-              <View style={styles.unreadBadge}>
+              <View style={[styles.unreadBadge, item.channel === 'scenario_update' && styles.unreadBadgeScenario]}>
               <Text style={styles.unreadBadgeText}>{item.unreadCount > 99 ? '99+' : item.unreadCount}</Text>
             </View>
           ) : null}
@@ -884,8 +1157,14 @@ const styles = StyleSheet.create({
   avatarCircleDm: {
     backgroundColor: '#EEF2FF',
   },
+  avatarCircleScenario: {
+    backgroundColor: '#FEF3C7',
+  },
   avatarCircleUnread: {
     backgroundColor: ACCENT,
+  },
+  avatarCircleScenarioUnread: {
+    backgroundColor: AMBER,
   },
   conversationBody: {
     flex: 1,
@@ -921,6 +1200,9 @@ const styles = StyleSheet.create({
   channelBadgeDm: {
     backgroundColor: '#E0E7FF',
   },
+  channelBadgeScenario: {
+    backgroundColor: '#FEF3C7',
+  },
   channelBadgeText: {
     fontSize: 10,
     fontWeight: '700',
@@ -930,6 +1212,9 @@ const styles = StyleSheet.create({
   },
   channelBadgeTextDm: {
     color: '#4338CA',
+  },
+  channelBadgeTextScenario: {
+    color: '#B45309',
   },
   conversationTime: {
     fontSize: 12,
@@ -959,6 +1244,9 @@ const styles = StyleSheet.create({
     backgroundColor: ACCENT,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  unreadBadgeScenario: {
+    backgroundColor: AMBER,
   },
   unreadBadgeText: {
     fontSize: 12,
@@ -1024,5 +1312,115 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: ACCENT,
+  },
+  leadDetailsButtonTextAmber: {
+    color: AMBER,
+  },
+  scenarioDetailContent: {
+    padding: 16,
+    gap: 12,
+  },
+  scenarioNoticeCard: {
+    flexDirection: 'row',
+    gap: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    backgroundColor: '#FFFBEB',
+    padding: 14,
+  },
+  scenarioNoticeIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF3C7',
+  },
+  scenarioNoticeBody: {
+    flex: 1,
+  },
+  scenarioNoticeTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  scenarioNoticeText: {
+    marginTop: 3,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#B45309',
+  },
+  scenarioUpdateCard: {
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
+    gap: 12,
+  },
+  scenarioUpdateHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  scenarioUpdateTitleBlock: {
+    flex: 1,
+  },
+  scenarioUpdateSubmitter: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  scenarioUpdateMeta: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  scenarioUpdateBadge: {
+    borderRadius: 999,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  scenarioUpdateBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#B45309',
+    textTransform: 'uppercase',
+  },
+  scenarioChangeList: {
+    gap: 8,
+  },
+  scenarioChangeRow: {
+    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
+    padding: 10,
+  },
+  scenarioChangeLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  scenarioChangeValue: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#B45309',
+    fontWeight: '700',
+  },
+  scenarioNoChangesText: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  scenarioReviewButton: {
+    minHeight: 44,
+    borderRadius: 14,
+    backgroundColor: AMBER,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  scenarioReviewButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
   },
 });

@@ -313,6 +313,44 @@ type QualificationLinkSummary = {
   latestResult: Record<string, unknown>;
 };
 
+type QualificationSubmissionStatus = 'pending' | 'applied' | 'dismissed';
+
+type QualificationSubmissionChange = {
+  key?: string;
+  label?: string;
+  kind?: 'currency' | 'percent' | 'number' | 'text';
+  before?: number | string | null;
+  after?: number | string | null;
+  beforeLabel?: string;
+  afterLabel?: string;
+};
+
+type QualificationLinkSubmission = {
+  id: string;
+  leadId: string;
+  leadSource: CrmLeadSource;
+  scenarioId: string | null;
+  scenarioName?: string | null;
+  recipientType: QualificationRecipientType;
+  recipientName: string | null;
+  recipientEmail?: string | null;
+  recipientPhone?: string | null;
+  changedSummary: QualificationSubmissionChange[];
+  status: QualificationSubmissionStatus;
+  submittedAt: string;
+};
+
+type SavedIncomeAnalysisSummary = {
+  id: string;
+  name: string;
+  analysis_type: string | null;
+  borrower_label: string | null;
+  employer_name: string | null;
+  status: 'supported' | 'needs-review' | 'unsupported' | null;
+  total_monthly_income: number | string | null;
+  updated_at: string;
+};
+
 const EXCLUDED_LEAD_METADATA_KEYS = new Set([
   'co_borrowers',
   'loan_originator',
@@ -874,6 +912,58 @@ const formatScenarioDateTime = (value?: string | null) => {
     hour: 'numeric',
     minute: '2-digit',
   });
+};
+
+const formatIncomeAnalysisMoney = (value: unknown) => {
+  const numeric = typeof value === 'string' ? Number(value.replace(/[^0-9.-]/g, '')) : Number(value);
+  if (!Number.isFinite(numeric)) return '$0/mo';
+  return `${numeric.toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })}/mo`;
+};
+
+const getIncomeAnalysisStatusLabel = (status: SavedIncomeAnalysisSummary['status']) => {
+  if (status === 'supported') return 'Supported';
+  if (status === 'needs-review') return 'Needs Review';
+  if (status === 'unsupported') return 'Unsupported';
+  return 'Draft';
+};
+
+const getIncomeAnalysisStatusStyle = (status: SavedIncomeAnalysisSummary['status']) => {
+  if (status === 'supported') return incomeAnalysisStyles.statusSupported;
+  if (status === 'needs-review') return incomeAnalysisStyles.statusReview;
+  if (status === 'unsupported') return incomeAnalysisStyles.statusUnsupported;
+  return incomeAnalysisStyles.statusDraft;
+};
+
+const formatQualificationSubmitter = (submission: QualificationLinkSubmission) => {
+  const role = submission.recipientType === 'co_borrower'
+    ? 'Co-borrower'
+    : submission.recipientType === 'key_contact'
+      ? 'Key contact'
+      : submission.recipientType === 'realtor'
+        ? 'Realtor'
+        : 'Borrower';
+  return `${submission.recipientName || 'Shared link recipient'} • ${role}`;
+};
+
+const formatQualificationChangeValue = (change: QualificationSubmissionChange, side: 'before' | 'after') => {
+  const label = side === 'before' ? change.beforeLabel : change.afterLabel;
+  if (label) return label;
+  const value = side === 'before' ? change.before : change.after;
+  if (value == null || value === '') return 'blank';
+  if (change.kind === 'currency') {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? formatCurrencyValue(numeric) || String(value) : String(value);
+  }
+  if (change.kind === 'percent') {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? `${numeric}%` : String(value);
+  }
+  return String(value);
 };
 
 const isScenarioLinkViewingNow = (
@@ -1824,9 +1914,13 @@ export function LeadDetailView({
   const [loadingScenarios, setLoadingScenarios] = useState(false);
   const [scenarioError, setScenarioError] = useState<string | null>(null);
   const [scenarioActionKey, setScenarioActionKey] = useState<string | null>(null);
+  const [qualificationSubmissions, setQualificationSubmissions] = useState<QualificationLinkSubmission[]>([]);
+  const [qualificationSubmissionActionKey, setQualificationSubmissionActionKey] = useState<string | null>(null);
   const [scenarioSectionExpanded, setScenarioSectionExpanded] = useState(true);
   const [scenarioActivityClock, setScenarioActivityClock] = useState(Date.now());
   const scenarioSectionTouchedRef = useRef(false);
+  const [savedIncomeAnalyses, setSavedIncomeAnalyses] = useState<SavedIncomeAnalysisSummary[]>([]);
+  const [loadingIncomeAnalyses, setLoadingIncomeAnalyses] = useState(false);
   
   // Licensed realtor flag (for referral agreements visibility gate)
   const [isLicensedRealtor, setIsLicensedRealtor] = useState(false);
@@ -2231,6 +2325,7 @@ export function LeadDetailView({
     if (!record) {
       setLeadScenarios([]);
       setScenarioLinks([]);
+      setQualificationSubmissions([]);
       setScenarioSectionExpanded(true);
       scenarioSectionTouchedRef.current = false;
       return;
@@ -2239,6 +2334,7 @@ export function LeadDetailView({
     if (!session?.access_token) {
       setLeadScenarios([]);
       setScenarioLinks([]);
+      setQualificationSubmissions([]);
       setScenarioError('Sign in again to load saved scenarios.');
       setScenarioSectionExpanded(true);
       scenarioSectionTouchedRef.current = false;
@@ -2250,14 +2346,16 @@ export function LeadDetailView({
 
     try {
       const query = `leadId=${encodeURIComponent(record.id)}&source=${encodeURIComponent(crmLeadSource)}`;
-      const [scenarioPayload, linkPayload] = await Promise.all([
+      const [scenarioPayload, linkPayload, submissionPayload] = await Promise.all([
         fetchCrmApi(`/api/leads/scenarios?${query}`),
         fetchCrmApi(`/api/leads/qualification-link?${query}&all=1`),
+        fetchCrmApi(`/api/leads/qualification-submissions?${query}`),
       ]);
 
       const nextScenarios = Array.isArray(scenarioPayload.scenarios) ? scenarioPayload.scenarios : [];
       setLeadScenarios(nextScenarios);
       setScenarioLinks(Array.isArray(linkPayload.links) ? linkPayload.links : []);
+      setQualificationSubmissions(Array.isArray(submissionPayload.submissions) ? submissionPayload.submissions : []);
       setScenarioActivityClock(Date.now());
       if (!scenarioSectionTouchedRef.current) {
         setScenarioSectionExpanded(nextScenarios.length <= 2);
@@ -2266,6 +2364,7 @@ export function LeadDetailView({
       console.error('[LeadDetail] Failed to load scenarios:', error);
       setLeadScenarios([]);
       setScenarioLinks([]);
+      setQualificationSubmissions([]);
       setScenarioError(error?.message || 'Failed to load saved scenarios.');
     } finally {
       setLoadingScenarios(false);
@@ -2295,6 +2394,47 @@ export function LeadDetailView({
 
     return () => clearInterval(interval);
   }, [activeDetailTab, scenarioLinks.length]);
+
+  useEffect(() => {
+    if (!record || activeDetailTab !== 'details') {
+      setSavedIncomeAnalyses([]);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingIncomeAnalyses(true);
+
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('lead_income_analyses')
+          .select('id, name, analysis_type, borrower_label, employer_name, status, total_monthly_income, updated_at')
+          .eq('lead_id', record.id)
+          .eq('lead_source', crmLeadSource)
+          .eq('analysis_type', 'w2')
+          .is('archived_at', null)
+          .order('updated_at', { ascending: false })
+          .limit(3);
+
+        if (cancelled) return;
+        if (error) throw error;
+        setSavedIncomeAnalyses((data || []) as SavedIncomeAnalysisSummary[]);
+      } catch (error) {
+        if (!cancelled) {
+          console.error('[LeadDetail] Failed to load saved income analyses:', error);
+          setSavedIncomeAnalyses([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingIncomeAnalyses(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeDetailTab, crmLeadSource, record?.id]);
 
   const getActiveScenarioLink = (scenarioId: string, recipientType: 'borrower' | 'realtor') => {
     return scenarioLinks.find((link) => {
@@ -2377,6 +2517,39 @@ export function LeadDetailView({
       Alert.alert('Scenario Link', message);
     } finally {
       setScenarioActionKey(null);
+    }
+  };
+
+  const reviewQualificationSubmission = async (
+    submission: QualificationLinkSubmission,
+    action: 'apply' | 'dismiss'
+  ) => {
+    const actionKey = `${action}:${submission.id}`;
+    setQualificationSubmissionActionKey(actionKey);
+    setScenarioError(null);
+
+    try {
+      const payload = await fetchCrmApi('/api/leads/qualification-submissions', {
+        method: 'POST',
+        body: JSON.stringify({
+          action,
+          submissionId: submission.id,
+        }),
+      });
+
+      updateTouchedAtFromScenarioResult(payload);
+      await loadLeadScenarios();
+      Alert.alert(
+        'Scenario Update',
+        action === 'apply' ? 'Submitted changes applied.' : 'Submitted changes dismissed.'
+      );
+    } catch (error: any) {
+      console.error('[LeadDetail] Failed to review scenario update:', error);
+      const message = error?.message || 'Failed to review submitted update.';
+      setScenarioError(message);
+      Alert.alert('Scenario Update', message);
+    } finally {
+      setQualificationSubmissionActionKey(null);
     }
   };
 
@@ -2479,6 +2652,7 @@ export function LeadDetailView({
       link.recipientType === 'realtor' && isScenarioLinkViewingNow(link, scenarioNow)
     ));
     const hasViewingNow = buyerViewingNow || partnerViewingNow;
+    const pendingSubmissions = qualificationSubmissions.filter((submission) => submission.status === 'pending');
 
     const toggleScenarioSection = () => {
       if (!hasCollapsibleScenarios) return;
@@ -2542,6 +2716,84 @@ export function LeadDetailView({
                 <Text style={scenarioShareStyles.viewingNowText}>Partner viewing now</Text>
               </View>
             )}
+          </View>
+        )}
+
+        {pendingSubmissions.length > 0 && (
+          <View style={scenarioShareStyles.pendingUpdatesBox}>
+            <View style={scenarioShareStyles.pendingUpdatesHeader}>
+              <View style={scenarioShareStyles.pendingUpdatesTitleRow}>
+                <Ionicons name="calculator-outline" size={16} color="#B45309" />
+                <Text style={scenarioShareStyles.pendingUpdatesTitle}>
+                  {pendingSubmissions.length} pending scenario update{pendingSubmissions.length === 1 ? '' : 's'}
+                </Text>
+              </View>
+              <TouchableOpacity onPress={loadLeadScenarios} disabled={loadingScenarios}>
+                <Ionicons name="refresh" size={15} color="#B45309" />
+              </TouchableOpacity>
+            </View>
+
+            {pendingSubmissions.map((submission) => {
+              const actionBusy =
+                qualificationSubmissionActionKey === `apply:${submission.id}` ||
+                qualificationSubmissionActionKey === `dismiss:${submission.id}`;
+
+              return (
+                <View key={submission.id} style={scenarioShareStyles.pendingUpdateCard}>
+                  <View style={scenarioShareStyles.pendingUpdateHeader}>
+                    <View style={scenarioShareStyles.pendingUpdateTitleBlock}>
+                      <Text style={scenarioShareStyles.pendingUpdateSubmitter} numberOfLines={1}>
+                        {formatQualificationSubmitter(submission)}
+                      </Text>
+                      <Text style={scenarioShareStyles.pendingUpdateMeta} numberOfLines={2}>
+                        {[submission.scenarioName || 'Saved scenario', formatScenarioDateTime(submission.submittedAt)].filter(Boolean).join(' · ')}
+                      </Text>
+                    </View>
+                    <View style={scenarioShareStyles.pendingPill}>
+                      <Text style={scenarioShareStyles.pendingPillText}>Pending</Text>
+                    </View>
+                  </View>
+
+                  <View style={scenarioShareStyles.pendingChangeList}>
+                    {submission.changedSummary.length > 0 ? (
+                      submission.changedSummary.map((change, changeIndex) => (
+                        <View key={`${submission.id}:${change.key || changeIndex}`} style={scenarioShareStyles.pendingChangeRow}>
+                          <Text style={scenarioShareStyles.pendingChangeLabel} numberOfLines={1}>
+                            {change.label || change.key || 'Changed field'}
+                          </Text>
+                          <Text style={scenarioShareStyles.pendingChangeValue} numberOfLines={2}>
+                            {formatQualificationChangeValue(change, 'before')} → {formatQualificationChangeValue(change, 'after')}
+                          </Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={scenarioShareStyles.pendingUpdateMeta}>No field summary was included.</Text>
+                    )}
+                  </View>
+
+                  <View style={scenarioShareStyles.pendingActionRow}>
+                    <TouchableOpacity
+                      style={[scenarioShareStyles.dismissButton, actionBusy && scenarioShareStyles.actionButtonDisabled]}
+                      onPress={() => reviewQualificationSubmission(submission, 'dismiss')}
+                      disabled={Boolean(qualificationSubmissionActionKey)}
+                    >
+                      <Text style={scenarioShareStyles.dismissButtonText}>Dismiss</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[scenarioShareStyles.applyButton, actionBusy && scenarioShareStyles.actionButtonDisabled]}
+                      onPress={() => reviewQualificationSubmission(submission, 'apply')}
+                      disabled={Boolean(qualificationSubmissionActionKey)}
+                    >
+                      {qualificationSubmissionActionKey === `apply:${submission.id}` ? (
+                        <ActivityIndicator size="small" color="#FFFFFF" />
+                      ) : (
+                        <Text style={scenarioShareStyles.applyButtonText}>Apply</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })}
           </View>
         )}
 
@@ -2829,6 +3081,92 @@ export function LeadDetailView({
                 </View>
               );
             })}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderIncomeAnalysisSection = () => {
+    const latestIncomeAnalysis = savedIncomeAnalyses[0] || null;
+
+    return (
+      <View style={incomeAnalysisStyles.container}>
+        <View style={incomeAnalysisStyles.headerRow}>
+          <View style={incomeAnalysisStyles.titleRow}>
+            <View style={incomeAnalysisStyles.iconWrap}>
+              <Ionicons name="cash-outline" size={16} color="#047857" />
+            </View>
+            <View style={incomeAnalysisStyles.titleBlock}>
+              <Text style={[incomeAnalysisStyles.title, { color: colors.textPrimary }]}>Income Analysis</Text>
+              <Text style={[incomeAnalysisStyles.subtitle, { color: colors.textSecondary }]}>
+                {loadingIncomeAnalyses
+                  ? 'Checking saved W-2 calculations...'
+                  : latestIncomeAnalysis
+                    ? `Updated ${formatScenarioDateTime(latestIncomeAnalysis.updated_at) || 'recently'}`
+                    : 'No saved income analysis yet.'}
+              </Text>
+            </View>
+          </View>
+
+          {latestIncomeAnalysis && (
+            <View style={[incomeAnalysisStyles.statusPill, getIncomeAnalysisStatusStyle(latestIncomeAnalysis.status)]}>
+              <Text style={incomeAnalysisStyles.statusPillText}>
+                {getIncomeAnalysisStatusLabel(latestIncomeAnalysis.status)}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {loadingIncomeAnalyses ? (
+          <View style={incomeAnalysisStyles.emptyBox}>
+            <ActivityIndicator size="small" color="#047857" />
+            <Text style={[incomeAnalysisStyles.emptyText, { color: colors.textSecondary }]}>Loading saved income...</Text>
+          </View>
+        ) : latestIncomeAnalysis ? (
+          <>
+            <View style={incomeAnalysisStyles.metricGrid}>
+              <View style={incomeAnalysisStyles.metricItem}>
+                <Text style={incomeAnalysisStyles.metricLabel}>Monthly Total</Text>
+                <Text style={[incomeAnalysisStyles.metricValue, { color: colors.textPrimary }]}>
+                  {formatIncomeAnalysisMoney(latestIncomeAnalysis.total_monthly_income)}
+                </Text>
+              </View>
+              <View style={incomeAnalysisStyles.metricItem}>
+                <Text style={incomeAnalysisStyles.metricLabel}>Type</Text>
+                <Text style={[incomeAnalysisStyles.metricValue, { color: colors.textPrimary }]}>W-2 Income</Text>
+              </View>
+            </View>
+
+            <View style={incomeAnalysisStyles.detailList}>
+              <View style={incomeAnalysisStyles.detailRow}>
+                <Text style={[incomeAnalysisStyles.detailLabel, { color: colors.textSecondary }]}>Name</Text>
+                <Text style={[incomeAnalysisStyles.detailValue, { color: colors.textPrimary }]} numberOfLines={1}>
+                  {latestIncomeAnalysis.name || 'Saved analysis'}
+                </Text>
+              </View>
+              {(latestIncomeAnalysis.borrower_label || latestIncomeAnalysis.employer_name) && (
+                <View style={incomeAnalysisStyles.detailRow}>
+                  <Text style={[incomeAnalysisStyles.detailLabel, { color: colors.textSecondary }]}>Borrower / Employer</Text>
+                  <Text style={[incomeAnalysisStyles.detailValue, { color: colors.textPrimary }]} numberOfLines={1}>
+                    {[latestIncomeAnalysis.borrower_label, latestIncomeAnalysis.employer_name].filter(Boolean).join(' · ')}
+                  </Text>
+                </View>
+              )}
+              {savedIncomeAnalyses.length > 1 && (
+                <View style={incomeAnalysisStyles.detailRow}>
+                  <Text style={[incomeAnalysisStyles.detailLabel, { color: colors.textSecondary }]}>Saved analyses</Text>
+                  <Text style={[incomeAnalysisStyles.detailValue, { color: colors.textPrimary }]}>
+                    {savedIncomeAnalyses.length}
+                  </Text>
+                </View>
+              )}
+            </View>
+          </>
+        ) : (
+          <View style={incomeAnalysisStyles.emptyBox}>
+            <Ionicons name="document-text-outline" size={16} color="#64748B" />
+            <Text style={[incomeAnalysisStyles.emptyText, { color: colors.textSecondary }]}>No saved income analysis yet.</Text>
           </View>
         )}
       </View>
@@ -5249,6 +5587,8 @@ export function LeadDetailView({
             </View>
           )}
 
+          {renderIncomeAnalysisSection()}
+
           {renderScenarioSharingSection()}
 
           {/* Status Picker Modal */}
@@ -7365,6 +7705,123 @@ const scenarioShareStyles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
   },
+  pendingUpdatesBox: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    backgroundColor: '#FFFBEB',
+    padding: 12,
+    gap: 10,
+  },
+  pendingUpdatesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  pendingUpdatesTitleRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  pendingUpdatesTitle: {
+    color: '#92400E',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  pendingUpdateCard: {
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    padding: 10,
+    gap: 9,
+  },
+  pendingUpdateHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  pendingUpdateTitleBlock: {
+    flex: 1,
+  },
+  pendingUpdateSubmitter: {
+    color: '#1E293B',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  pendingUpdateMeta: {
+    color: '#B45309',
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  pendingPill: {
+    borderRadius: 999,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  pendingPillText: {
+    color: '#B45309',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  pendingChangeList: {
+    gap: 6,
+  },
+  pendingChangeRow: {
+    borderRadius: 8,
+    backgroundColor: '#F8FAFC',
+    padding: 8,
+  },
+  pendingChangeLabel: {
+    color: '#334155',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  pendingChangeValue: {
+    marginTop: 2,
+    color: '#B45309',
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '700',
+  },
+  pendingActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  dismissButton: {
+    flex: 1,
+    minHeight: 36,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dismissButtonText: {
+    color: '#B45309',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  applyButton: {
+    flex: 1,
+    minHeight: 36,
+    borderRadius: 10,
+    backgroundColor: '#D97706',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  applyButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
   errorBox: {
     marginTop: 10,
     flexDirection: 'row',
@@ -7579,6 +8036,127 @@ const scenarioShareStyles = StyleSheet.create({
   },
   actionButtonDisabled: {
     opacity: 0.5,
+  },
+});
+
+const incomeAnalysisStyles = StyleSheet.create({
+  container: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  titleRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 9,
+  },
+  iconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#ECFDF5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  titleBlock: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  subtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  statusPill: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  statusPillText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#064E3B',
+    textTransform: 'uppercase',
+  },
+  statusSupported: {
+    backgroundColor: '#DCFCE7',
+  },
+  statusReview: {
+    backgroundColor: '#FEF3C7',
+  },
+  statusUnsupported: {
+    backgroundColor: '#FFE4E6',
+  },
+  statusDraft: {
+    backgroundColor: '#F1F5F9',
+  },
+  metricGrid: {
+    marginTop: 12,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  metricItem: {
+    flex: 1,
+    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
+    padding: 10,
+  },
+  metricLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#64748B',
+    textTransform: 'uppercase',
+  },
+  metricValue: {
+    marginTop: 3,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  detailList: {
+    marginTop: 10,
+    gap: 7,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  detailLabel: {
+    fontSize: 12,
+  },
+  detailValue: {
+    flex: 1,
+    textAlign: 'right',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  emptyBox: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
+    padding: 12,
+  },
+  emptyText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
   },
 });
 
