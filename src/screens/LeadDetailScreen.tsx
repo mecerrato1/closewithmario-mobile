@@ -1786,6 +1786,7 @@ export function LeadDetailView({
   const [availableRealtors, setAvailableRealtors] = useState<Array<{ id: string; first_name: string; last_name: string; brokerage?: string }>>([]);
   const [loadingRealtors, setLoadingRealtors] = useState(false);
   const [currentRealtorName, setCurrentRealtorName] = useState<string | null>(null);
+  const [currentRealtorContact, setCurrentRealtorContact] = useState<{ name: string; phone: string; email: string } | null>(null);
   const [showAdImage, setShowAdImage] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [currentLOInfo, setCurrentLOInfo] = useState<{ firstName: string; lastName: string; phone: string; email: string; aiDraftAccess?: boolean; company?: string } | null>(null);
@@ -4309,21 +4310,31 @@ export function LeadDetailView({
     }
   };
 
-  // Fetch current realtor name when record changes
+  // Fetch current realtor contact details when record changes
   useEffect(() => {
     const fetchCurrentRealtor = async () => {
       if (record?.realtor_id) {
         const { data } = await supabase
           .from('realtors')
-          .select('first_name, last_name')
+          .select('first_name, last_name, phone, email')
           .eq('id', record.realtor_id)
           .single();
         
         if (data) {
-          setCurrentRealtorName(`${data.first_name} ${data.last_name}`);
+          const realtorName = `${data.first_name || ''} ${data.last_name || ''}`.trim();
+          setCurrentRealtorName(realtorName || null);
+          setCurrentRealtorContact({
+            name: realtorName || 'Realtor',
+            phone: data.phone || '',
+            email: data.email || '',
+          });
+        } else {
+          setCurrentRealtorName(null);
+          setCurrentRealtorContact(null);
         }
       } else {
         setCurrentRealtorName(null);
+        setCurrentRealtorContact(null);
       }
     };
     fetchCurrentRealtor();
@@ -4461,31 +4472,32 @@ export function LeadDetailView({
       return notesLines.join('\n');
   };
 
-  const saveBorrowerContact = async (borrower: {
+  const saveSelectedContact = async (contact: {
     firstName: string;
     lastName: string;
     phone: string;
     email: string;
+    company?: string;
     extraNotes?: string;
   }) => {
     if (!record) return;
-    if (!borrower.phone && !borrower.email) {
-      Alert.alert('Missing Info', 'This borrower has no phone or email to save.');
+    if (!contact.phone && !contact.email) {
+      Alert.alert('Missing Info', 'This contact has no phone or email to save.');
       return;
     }
 
     try {
-      const company = isMeta ? 'Mortgage Meta' : 'Mortgage';
+      const company = contact.company || (isMeta ? 'Mortgage Meta' : 'Mortgage');
       const baseNotes = buildLeadNotes();
-      const notes = borrower.extraNotes
-        ? `${borrower.extraNotes}\n${baseNotes}`.trim()
+      const notes = contact.extraNotes
+        ? `${contact.extraNotes}\n${baseNotes}`.trim()
         : baseNotes;
 
       const payload = {
-        firstName: borrower.firstName || 'Lead',
-        lastName: borrower.lastName || '',
-        phone: borrower.phone || '',
-        email: borrower.email || '',
+        firstName: contact.firstName || 'Lead',
+        lastName: contact.lastName || '',
+        phone: contact.phone || '',
+        email: contact.email || '',
         company,
         notes,
       };
@@ -4509,17 +4521,18 @@ export function LeadDetailView({
 
     const r = record;
 
-    // Build candidate list: primary borrower + co-borrowers (only those with phone/email).
-    type BorrowerCandidate = {
+    // Build candidate list: primary borrower, co-borrowers, and assigned realtor.
+    type ContactCandidate = {
       label: string;
       firstName: string;
       lastName: string;
       phone: string;
       email: string;
+      company?: string;
       extraNotes?: string;
     };
 
-    const candidates: BorrowerCandidate[] = [];
+    const candidates: ContactCandidate[] = [];
 
     if (phone || email) {
       candidates.push({
@@ -4550,25 +4563,44 @@ export function LeadDetailView({
       });
     }
 
+    const realtorName = currentRealtorContact?.name || currentRealtorName || r.referral_source_name || '';
+    const realtorPhone = (currentRealtorContact?.phone || '').trim();
+    const realtorEmail = (currentRealtorContact?.email || r.referral_source_email || '').trim();
+    if ((realtorPhone || realtorEmail) && (record.realtor_id || realtorName)) {
+      const primaryFullName = `${r.first_name || ''} ${r.last_name || ''}`.trim() || 'Primary Borrower';
+      const realtorNameParts = (realtorName || 'Realtor').trim().split(/\s+/);
+      const realtorFirstName = realtorNameParts[0] || 'Realtor';
+      const realtorLastName = realtorNameParts.slice(1).join(' ');
+      candidates.push({
+        label: `${realtorName || 'Realtor'} (Realtor)`,
+        firstName: realtorFirstName,
+        lastName: realtorLastName,
+        phone: realtorPhone,
+        email: realtorEmail,
+        company: 'Realtor',
+        extraNotes: `Realtor for ${primaryFullName}`,
+      });
+    }
+
     if (candidates.length === 0) {
-      console.log('[Contacts] No savable borrowers (no phone/email)');
-      Alert.alert('Missing Info', 'This lead has no phone or email to save.');
+      console.log('[Contacts] No savable contacts (no phone/email)');
+      Alert.alert('Missing Info', 'This lead has no contacts with phone or email to save.');
       return;
     }
 
-    // Single borrower – save directly with no prompt.
+    // Single contact - save directly with no prompt.
     if (candidates.length === 1) {
-      await saveBorrowerContact(candidates[0]);
+      await saveSelectedContact(candidates[0]);
       return;
     }
 
-    // Multiple borrowers – ask which one to save.
+    // Multiple contacts - ask which one to save.
     if (Platform.OS === 'ios') {
       const options = [...candidates.map((c) => c.label), 'Cancel'];
       ActionSheetIOS.showActionSheetWithOptions(
         {
           title: 'Save Contact',
-          message: 'Which borrower do you want to save?',
+          message: 'Which contact do you want to save?',
           options,
           cancelButtonIndex: options.length - 1,
         },
@@ -4576,19 +4608,19 @@ export function LeadDetailView({
           if (buttonIndex === options.length - 1) return;
           const chosen = candidates[buttonIndex];
           if (chosen) {
-            void saveBorrowerContact(chosen);
+            void saveSelectedContact(chosen);
           }
         }
       );
     } else {
       Alert.alert(
         'Save Contact',
-        'Which borrower do you want to save?',
+        'Which contact do you want to save?',
         [
           ...candidates.map((c) => ({
             text: c.label,
             onPress: () => {
-              void saveBorrowerContact(c);
+              void saveSelectedContact(c);
             },
           })),
           { text: 'Cancel', style: 'cancel' as const },
