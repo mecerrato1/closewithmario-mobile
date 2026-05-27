@@ -5444,153 +5444,6 @@ export function LeadDetailView({
               );
             })()}
           
-          {/* LO & Realtor Assignment */}
-          <View style={styles.statusLORow}>
-            {/* LO Assignment (Super Admin & Realtor) */}
-            {(propUserRole === 'super_admin' || propUserRole === 'realtor') && (
-              <TouchableOpacity
-                style={styles.loDropdownButton}
-                onPress={() => setShowLOPicker(true)}
-                disabled={updatingLO}
-              >
-                <Ionicons name="person-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
-                <Text style={styles.loDropdownLabel}>LO:</Text>
-                <Text style={styles.loDropdownValue} numberOfLines={1}>
-                  {record.lo_id 
-                    ? loanOfficers.find(lo => lo.id === record.lo_id)?.name || 'Unknown'
-                    : 'Unassigned'
-                  }
-                </Text>
-                <Text style={styles.statusDropdownArrow}>▼</Text>
-              </TouchableOpacity>
-            )}
-
-            {/* Realtor Assignment (hide for realtors - they ARE the realtor) */}
-            {propUserRole !== 'realtor' && (
-              <TouchableOpacity
-                style={styles.loDropdownButton}
-                onPress={() => {
-                  fetchRealtorsForPicker();
-                  setShowRealtorPicker(true);
-                }}
-                disabled={updatingRealtor}
-              >
-                <Ionicons name="home-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
-                <Text style={styles.loDropdownLabel}>Realtor:</Text>
-                <Text style={styles.loDropdownValue} numberOfLines={1}>
-                  {currentRealtorName || 'None'}
-                </Text>
-                <Text style={styles.statusDropdownArrow}>▼</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Tracking Section */}
-          <View style={trackingStyles.container}>
-            <View style={trackingStyles.headerRow}>
-              <TouchableOpacity 
-                style={[
-                  trackingStyles.trackButton,
-                  isTracked && trackingStyles.trackButtonActive
-                ]}
-                onPress={handleToggleTracking}
-                disabled={updatingTracking}
-              >
-                {updatingTracking ? (
-                  <ActivityIndicator size="small" color={isTracked ? '#FFFFFF' : PLUM} />
-                ) : (
-                  <>
-                    <Ionicons 
-                      name={isTracked ? 'pin' : 'pin-outline'} 
-                      size={16} 
-                      color={isTracked ? '#FFFFFF' : PLUM}
-                    />
-                    <Text style={[
-                      trackingStyles.trackButtonText,
-                      isTracked && trackingStyles.trackButtonTextActive
-                    ]}>
-                      {isTracked ? 'Tracked' : 'Track'}
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={trackingStyles.infoButton}
-                onPress={() => setShowTrackingInfo(true)}
-              >
-                <Ionicons name="information-circle-outline" size={18} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-            {isTracked && trackingReason && (
-              <Text style={trackingStyles.reasonText}>
-                {getTrackingReasonLabel(trackingReason)}
-              </Text>
-            )}
-            {isTracked && (
-              <View style={trackingStyles.noteContainer}>
-                <TextInput
-                  style={[trackingStyles.noteInput, { color: colors.textPrimary, borderColor: colors.border }]}
-                  placeholder="Add a tracking note..."
-                  placeholderTextColor="#94A3B8"
-                  value={trackingNote}
-                  onChangeText={setTrackingNote}
-                  multiline
-                  numberOfLines={2}
-                />
-                <TouchableOpacity 
-                  style={[
-                    trackingStyles.saveNoteButton,
-                    savingTrackingNote && trackingStyles.saveNoteButtonDisabled
-                  ]}
-                  onPress={handleSaveTrackingNote}
-                  disabled={savingTrackingNote}
-                >
-                  {savingTrackingNote ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text style={trackingStyles.saveNoteButtonText}>Save</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-
-          {/* Partner Update Section */}
-          {hasPartnerEmail && (
-            <View style={partnerUpdateStyles.container}>
-              <View style={partnerUpdateStyles.headerRow}>
-                <View style={partnerUpdateStyles.labelRow}>
-                  <Ionicons name="people-outline" size={16} color={PLUM} />
-                  <Text style={[partnerUpdateStyles.label, { color: colors.textPrimary }]}>
-                    Partner: {partnerName}
-                  </Text>
-                </View>
-                <TouchableOpacity 
-                  style={partnerUpdateStyles.sendButton}
-                  onPress={() => setShowPartnerUpdateModal(true)}
-                >
-                  <Ionicons name="mail-outline" size={16} color="#FFFFFF" />
-                  <Text style={partnerUpdateStyles.sendButtonText}>Send Update</Text>
-                </TouchableOpacity>
-              </View>
-              {record?.last_referral_update_at && (
-                <Text style={[partnerUpdateStyles.lastUpdate, { color: colors.textSecondary }]}>
-                  Last update: {new Date(record.last_referral_update_at).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit'
-                  })}
-                </Text>
-              )}
-            </View>
-          )}
-
-          {renderIncomeAnalysisSection()}
-
-          {renderScenarioSharingSection()}
-
           {/* Status Picker Modal */}
           <Modal
             visible={showStatusPicker}
@@ -6369,6 +6222,154 @@ export function LeadDetailView({
               )}
             </>
           )}
+
+          {/* LO & Realtor Assignment */}
+          <View style={styles.statusLORow}>
+            {/* LO Assignment (Super Admin & Realtor) */}
+            {(propUserRole === 'super_admin' || propUserRole === 'realtor') && (
+              <TouchableOpacity
+                style={styles.loDropdownButton}
+                onPress={() => setShowLOPicker(true)}
+                disabled={updatingLO}
+              >
+                <Ionicons name="person-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
+                <Text style={styles.loDropdownLabel}>LO:</Text>
+                <Text style={styles.loDropdownValue} numberOfLines={1}>
+                  {record.lo_id 
+                    ? loanOfficers.find(lo => lo.id === record.lo_id)?.name || 'Unknown'
+                    : 'Unassigned'
+                  }
+                </Text>
+                <Text style={styles.statusDropdownArrow}>▼</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Realtor Assignment (hide for realtors - they ARE the realtor) */}
+            {propUserRole !== 'realtor' && (
+              <TouchableOpacity
+                style={styles.loDropdownButton}
+                onPress={() => {
+                  fetchRealtorsForPicker();
+                  setShowRealtorPicker(true);
+                }}
+                disabled={updatingRealtor}
+              >
+                <Ionicons name="home-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
+                <Text style={styles.loDropdownLabel}>Realtor:</Text>
+                <Text style={styles.loDropdownValue} numberOfLines={1}>
+                  {currentRealtorName || 'None'}
+                </Text>
+                <Text style={styles.statusDropdownArrow}>▼</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Tracking Section */}
+          <View style={trackingStyles.container}>
+            <View style={trackingStyles.headerRow}>
+              <TouchableOpacity 
+                style={[
+                  trackingStyles.trackButton,
+                  isTracked && trackingStyles.trackButtonActive
+                ]}
+                onPress={handleToggleTracking}
+                disabled={updatingTracking}
+              >
+                {updatingTracking ? (
+                  <ActivityIndicator size="small" color={isTracked ? '#FFFFFF' : PLUM} />
+                ) : (
+                  <>
+                    <Ionicons 
+                      name={isTracked ? 'pin' : 'pin-outline'} 
+                      size={16} 
+                      color={isTracked ? '#FFFFFF' : PLUM}
+                    />
+                    <Text style={[
+                      trackingStyles.trackButtonText,
+                      isTracked && trackingStyles.trackButtonTextActive
+                    ]}>
+                      {isTracked ? 'Tracked' : 'Track'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={trackingStyles.infoButton}
+                onPress={() => setShowTrackingInfo(true)}
+              >
+                <Ionicons name="information-circle-outline" size={18} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+            {isTracked && trackingReason && (
+              <Text style={trackingStyles.reasonText}>
+                {getTrackingReasonLabel(trackingReason)}
+              </Text>
+            )}
+            {isTracked && (
+              <View style={trackingStyles.noteContainer}>
+                <TextInput
+                  style={[trackingStyles.noteInput, { color: colors.textPrimary, borderColor: colors.border }]}
+                  placeholder="Add a tracking note..."
+                  placeholderTextColor="#94A3B8"
+                  value={trackingNote}
+                  onChangeText={setTrackingNote}
+                  multiline
+                  numberOfLines={2}
+                />
+                <TouchableOpacity 
+                  style={[
+                    trackingStyles.saveNoteButton,
+                    savingTrackingNote && trackingStyles.saveNoteButtonDisabled
+                  ]}
+                  onPress={handleSaveTrackingNote}
+                  disabled={savingTrackingNote}
+                >
+                  {savingTrackingNote ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={trackingStyles.saveNoteButtonText}>Save</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+
+          {/* Partner Update Section */}
+          {hasPartnerEmail && (
+            <View style={partnerUpdateStyles.container}>
+              <View style={partnerUpdateStyles.headerRow}>
+                <View style={partnerUpdateStyles.labelRow}>
+                  <Ionicons name="people-outline" size={16} color={PLUM} />
+                  <Text style={[partnerUpdateStyles.label, { color: colors.textPrimary }]}>
+                    Partner: {partnerName}
+                  </Text>
+                </View>
+                <TouchableOpacity 
+                  style={partnerUpdateStyles.sendButton}
+                  onPress={() => setShowPartnerUpdateModal(true)}
+                >
+                  <Ionicons name="mail-outline" size={16} color="#FFFFFF" />
+                  <Text style={partnerUpdateStyles.sendButtonText}>Send Update</Text>
+                </TouchableOpacity>
+              </View>
+              {record?.last_referral_update_at && (
+                <Text style={[partnerUpdateStyles.lastUpdate, { color: colors.textSecondary }]}>
+                  Last update: {new Date(record.last_referral_update_at).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit'
+                  })}
+                </Text>
+              )}
+            </View>
+          )}
+
+          {renderScenarioSharingSection()}
+
+          {renderIncomeAnalysisSection()}
+
 
           {/* Referral Agreements Section (read-only, gated by is_licensed_realtor) */}
           {isLicensedRealtor && record && (
