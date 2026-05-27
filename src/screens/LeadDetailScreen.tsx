@@ -49,6 +49,7 @@ import { toggleLeadTracking, updateTrackingNote, getTrackingReasonLabel } from '
 import { AiRewriteToolbar, AiRewriteToolbarRef } from '../components/AiRewriteToolbar';
 import { ReferralAgreementsSection } from '../components/ReferralAgreementsSection';
 import { MetaAdPreviewModal } from '../components/MetaAdPreviewModal';
+import { ApprovalRecipeSection } from '../components/ApprovalRecipeSection';
 
 const PLUM = '#4C1D95';
 const CRM_API_BASE_URL = 'https://www.closewithmario.com';
@@ -6222,6 +6223,12 @@ export function LeadDetailView({
               )}
             </>
           )}
+
+          <View style={styles.sectionDivider} />
+          <ApprovalRecipeSection
+            leadId={record.id}
+            leadSource={isMeta ? 'meta' : 'organic'}
+          />
 
           {/* LO & Realtor Assignment */}
           <View style={styles.statusLORow}>
