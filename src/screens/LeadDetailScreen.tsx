@@ -40,6 +40,7 @@ import { scheduleLeadCallback } from '../lib/callbacks';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { styles } from '../styles/appStyles';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useThemeColors } from '../styles/theme';
 import { parseRecordingUrl } from '../utils/parseRecordingUrl';
 import { saveContact } from '../utils/vcard';
@@ -203,6 +204,148 @@ type DetailThemeColors = {
   border: string;
   textPrimary: string;
   textSecondary: string;
+};
+
+type CurrentRealtorContact = { name: string; phone: string; email: string };
+
+type LeadContactRole = 'primary' | 'coBorrower' | 'realtor';
+
+type LeadContactCandidate = {
+  key: string;
+  label: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+  company?: string;
+  extraNotes?: string;
+};
+
+const SAVED_CONTACTS_STORAGE_PREFIX = 'leadDetailSavedContacts';
+
+const normalizeContactStoragePart = (value?: string | null) =>
+  (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+const normalizeContactPhoneKey = (value?: string | null) => {
+  const digits = (value || '').replace(/\D/g, '');
+  return digits.length > 10 ? digits.slice(-10) : digits;
+};
+
+const getSavedContactsStorageKey = (source: SelectedLeadRef['source'], leadId: string) =>
+  `${SAVED_CONTACTS_STORAGE_PREFIX}:${source}:${leadId}`;
+
+const buildContactCandidateKey = (
+  role: LeadContactRole,
+  roleId: string,
+  firstName: string,
+  lastName: string,
+  phone: string,
+  email: string
+) => [
+  role,
+  normalizeContactStoragePart(roleId),
+  normalizeContactPhoneKey(phone),
+  normalizeContactStoragePart(email),
+  normalizeContactStoragePart(firstName),
+  normalizeContactStoragePart(lastName),
+].join('|');
+
+const splitContactName = (name: string, fallbackFirstName: string) => {
+  const nameParts = name.trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: nameParts[0] || fallbackFirstName,
+    lastName: nameParts.slice(1).join(' '),
+  };
+};
+
+const buildLeadContactCandidates = ({
+  record,
+  isMeta,
+  phone,
+  email,
+  currentRealtorName,
+  currentRealtorContact,
+}: {
+  record: Lead | MetaLead | null | undefined;
+  isMeta: boolean;
+  phone: string;
+  email: string;
+  currentRealtorName: string | null;
+  currentRealtorContact: CurrentRealtorContact | null;
+}): LeadContactCandidate[] => {
+  if (!record) return [];
+
+  const candidates: LeadContactCandidate[] = [];
+  const primaryFirstName = record.first_name || 'Lead';
+  const primaryLastName = record.last_name || '';
+  const primaryName = `${primaryFirstName} ${primaryLastName}`.trim();
+
+  if (phone || email) {
+    candidates.push({
+      key: buildContactCandidateKey('primary', record.id, primaryFirstName, primaryLastName, phone || '', email || ''),
+      label: `${primaryName} (Primary)`,
+      firstName: primaryFirstName,
+      lastName: primaryLastName,
+      phone: phone || '',
+      email: email || '',
+    });
+  }
+
+  const coBorrowers = !isMeta ? (record as Lead).metadata?.co_borrowers : undefined;
+  if (Array.isArray(coBorrowers) && coBorrowers.length > 0) {
+    const primaryFullName = `${record.first_name || ''} ${record.last_name || ''}`.trim() || 'Primary Borrower';
+
+    coBorrowers.forEach((cb, index) => {
+      const cbPhone = (cb.phone || '').trim();
+      const cbEmail = (cb.email || '').trim();
+      if (!cbPhone && !cbEmail) return;
+
+      const cbFirstName = cb.first_name || 'Co-Borrower';
+      const cbLastName = cb.last_name || '';
+      const name = `${cbFirstName} ${cbLastName}`.trim() || 'Co-Borrower';
+
+      candidates.push({
+        key: buildContactCandidateKey('coBorrower', String(index), cbFirstName, cbLastName, cbPhone, cbEmail),
+        label: `${name} (Co-Borrower)`,
+        firstName: cbFirstName,
+        lastName: cbLastName,
+        phone: cbPhone,
+        email: cbEmail,
+        extraNotes: `Co-Borrower of ${primaryFullName}`,
+      });
+    });
+  }
+
+  const realtorName = currentRealtorContact?.name || currentRealtorName || record.referral_source_name || '';
+  const realtorPhone = (currentRealtorContact?.phone || '').trim();
+  const realtorEmail = (currentRealtorContact?.email || record.referral_source_email || '').trim();
+  if ((realtorPhone || realtorEmail) && (record.realtor_id || realtorName)) {
+    const primaryFullName = `${record.first_name || ''} ${record.last_name || ''}`.trim() || 'Primary Borrower';
+    const { firstName: realtorFirstName, lastName: realtorLastName } = splitContactName(
+      realtorName || 'Realtor',
+      'Realtor'
+    );
+
+    candidates.push({
+      key: buildContactCandidateKey(
+        'realtor',
+        record.realtor_id || realtorName || 'realtor',
+        realtorFirstName,
+        realtorLastName,
+        realtorPhone,
+        realtorEmail
+      ),
+      label: `${realtorName || 'Realtor'} (Realtor)`,
+      firstName: realtorFirstName,
+      lastName: realtorLastName,
+      phone: realtorPhone,
+      email: realtorEmail,
+      company: 'Realtor',
+      extraNotes: `Realtor for ${primaryFullName}`,
+    });
+  }
+
+  return candidates;
 };
 
 type SavedMetaAdCreative = {
@@ -1877,7 +2020,8 @@ export function LeadDetailView({
   const [availableRealtors, setAvailableRealtors] = useState<Array<{ id: string; first_name: string; last_name: string; brokerage?: string }>>([]);
   const [loadingRealtors, setLoadingRealtors] = useState(false);
   const [currentRealtorName, setCurrentRealtorName] = useState<string | null>(null);
-  const [currentRealtorContact, setCurrentRealtorContact] = useState<{ name: string; phone: string; email: string } | null>(null);
+  const [currentRealtorContact, setCurrentRealtorContact] = useState<CurrentRealtorContact | null>(null);
+  const [savedContactKeys, setSavedContactKeys] = useState<string[]>([]);
   const [showAdImage, setShowAdImage] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [currentLOInfo, setCurrentLOInfo] = useState<{ firstName: string; lastName: string; phone: string; email: string; aiDraftAccess?: boolean; company?: string } | null>(null);
@@ -3198,6 +3342,17 @@ export function LeadDetailView({
   const status = record?.status || 'No status';
   const email = record?.email || '';
   const phone = record?.phone || '';
+  const contactCandidates = buildLeadContactCandidates({
+    record,
+    isMeta,
+    phone,
+    email,
+    currentRealtorName,
+    currentRealtorContact,
+  });
+  const callableContactCandidates = contactCandidates.filter((contact) => !!contact.phone.trim());
+  const hasCallableContacts = callableContactCandidates.length > 0;
+  const hasSavableContacts = contactCandidates.length > 0;
   const metaPlatform = isMeta ? (record as MetaLead | undefined)?.platform ?? null : null;
   const metaDmTabIcon = getMetaDmTabIcon(metaPlatform);
   const showMessagesTab = !!phone;
@@ -3265,6 +3420,40 @@ export function LeadDetailView({
       cancelled = true;
     };
   }, [loadDetailMessageIndicators]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSavedContactKeys = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(getSavedContactsStorageKey(selected.source, selected.id));
+        if (cancelled) return;
+
+        if (!stored) {
+          setSavedContactKeys([]);
+          return;
+        }
+
+        const parsed = JSON.parse(stored);
+        setSavedContactKeys(
+          Array.isArray(parsed)
+            ? parsed.filter((entry): entry is string => typeof entry === 'string')
+            : []
+        );
+      } catch (error) {
+        console.error('[Contacts] Failed to load saved contact selections:', error);
+        if (!cancelled) {
+          setSavedContactKeys([]);
+        }
+      }
+    };
+
+    void loadSavedContactKeys();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selected.id, selected.source]);
 
   // Open to the notification tab when a lead is opened from a message push.
   useEffect(() => {
@@ -3438,13 +3627,11 @@ export function LeadDetailView({
     return false;
   };
 
-  const handleCall = async () => {
-    if (!phone) return;
-
-    const rawPhone = String(phone).trim();
+  const callSelectedContact = async (contact: LeadContactCandidate) => {
+    const rawPhone = String(contact.phone || '').trim();
     const sanitizedPhone = rawPhone.replace(/[^\d+]/g, '');
     if (!sanitizedPhone || sanitizedPhone === '+') {
-      Alert.alert('Invalid phone number', 'This lead does not have a valid phone number to call.');
+      Alert.alert('Invalid phone number', 'This contact does not have a valid phone number to call.');
       return;
     }
 
@@ -3460,7 +3647,7 @@ export function LeadDetailView({
       const activityData = {
         [foreignKeyColumn]: record!.id,
         activity_type: 'call',
-        notes: `Called ${rawPhone}`,
+        notes: `Called ${contact.label} at ${rawPhone}`,
         created_by: session?.user?.id || null,
         user_email: session?.user?.email || 'Mobile App User',
       };
@@ -3516,6 +3703,51 @@ export function LeadDetailView({
     } catch (e) {
       console.log('Error opening dialer:', e);
       Alert.alert('Unable to place call', 'There was a problem opening the phone dialer.');
+    }
+  };
+
+  const handleCall = async () => {
+    if (callableContactCandidates.length === 0) return;
+
+    if (callableContactCandidates.length === 1) {
+      await callSelectedContact(callableContactCandidates[0]);
+      return;
+    }
+
+    const getCallOptionLabel = (contact: LeadContactCandidate) =>
+      `${contact.label} - ${formatPhoneNumber(contact.phone)}`;
+
+    if (Platform.OS === 'ios') {
+      const options = [...callableContactCandidates.map(getCallOptionLabel), 'Cancel'];
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: 'Call Contact',
+          message: 'Which contact do you want to call?',
+          options,
+          cancelButtonIndex: options.length - 1,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === options.length - 1) return;
+          const chosen = callableContactCandidates[buttonIndex];
+          if (chosen) {
+            void callSelectedContact(chosen);
+          }
+        }
+      );
+    } else {
+      Alert.alert(
+        'Call Contact',
+        'Which contact do you want to call?',
+        [
+          ...callableContactCandidates.map((contact) => ({
+            text: getCallOptionLabel(contact),
+            onPress: () => {
+              void callSelectedContact(contact);
+            },
+          })),
+          { text: 'Cancel', style: 'cancel' as const },
+        ]
+      );
     }
   };
 
@@ -4811,14 +5043,23 @@ export function LeadDetailView({
       return notesLines.join('\n');
   };
 
-  const saveSelectedContact = async (contact: {
-    firstName: string;
-    lastName: string;
-    phone: string;
-    email: string;
-    company?: string;
-    extraNotes?: string;
-  }) => {
+  const markContactAsSaved = async (contact: LeadContactCandidate) => {
+    if (savedContactKeys.includes(contact.key)) return;
+
+    const nextKeys = [...savedContactKeys, contact.key];
+    setSavedContactKeys(nextKeys);
+
+    try {
+      await AsyncStorage.setItem(getSavedContactsStorageKey(selected.source, selected.id), JSON.stringify(nextKeys));
+    } catch (error) {
+      console.error('[Contacts] Failed to remember saved contact:', error);
+    }
+  };
+
+  const getSaveOptionLabel = (contact: LeadContactCandidate) =>
+    savedContactKeys.includes(contact.key) ? `${contact.label} (Saved)` : contact.label;
+
+  const saveSelectedContact = async (contact: LeadContactCandidate) => {
     if (!record) return;
     if (!contact.phone && !contact.email) {
       Alert.alert('Missing Info', 'This contact has no phone or email to save.');
@@ -4843,9 +5084,12 @@ export function LeadDetailView({
 
       console.log('[Contacts] Calling saveContact with payload:', payload);
 
-      await saveContact(payload);
+      const saved = await saveContact(payload);
+      if (saved) {
+        await markContactAsSaved(contact);
+      }
 
-      console.log('[Contacts] saveContact completed successfully');
+      console.log('[Contacts] saveContact completed successfully', { saved });
     } catch (error) {
       console.error('[Contacts] Failed to save contact:', error);
       Alert.alert('Error', 'Could not save contact. Please try again.');
@@ -4858,68 +5102,7 @@ export function LeadDetailView({
       return;
     }
 
-    const r = record;
-
-    // Build candidate list: primary borrower, co-borrowers, and assigned realtor.
-    type ContactCandidate = {
-      label: string;
-      firstName: string;
-      lastName: string;
-      phone: string;
-      email: string;
-      company?: string;
-      extraNotes?: string;
-    };
-
-    const candidates: ContactCandidate[] = [];
-
-    if (phone || email) {
-      candidates.push({
-        label: `${(r.first_name || 'Lead')} ${(r.last_name || '')}`.trim() + ' (Primary)',
-        firstName: r.first_name || 'Lead',
-        lastName: r.last_name || '',
-        phone: phone || '',
-        email: email || '',
-      });
-    }
-
-    const coBorrowers = !isMeta ? (r as Lead).metadata?.co_borrowers : undefined;
-    if (coBorrowers && coBorrowers.length > 0) {
-      const primaryFullName = `${r.first_name || ''} ${r.last_name || ''}`.trim() || 'Primary Borrower';
-      coBorrowers.forEach((cb) => {
-        const cbPhone = (cb.phone || '').trim();
-        const cbEmail = (cb.email || '').trim();
-        if (!cbPhone && !cbEmail) return;
-        const name = `${cb.first_name || ''} ${cb.last_name || ''}`.trim() || 'Co-Borrower';
-        candidates.push({
-          label: `${name} (Co-Borrower)`,
-          firstName: cb.first_name || 'Co-Borrower',
-          lastName: cb.last_name || '',
-          phone: cbPhone,
-          email: cbEmail,
-          extraNotes: `Co-Borrower of ${primaryFullName}`,
-        });
-      });
-    }
-
-    const realtorName = currentRealtorContact?.name || currentRealtorName || r.referral_source_name || '';
-    const realtorPhone = (currentRealtorContact?.phone || '').trim();
-    const realtorEmail = (currentRealtorContact?.email || r.referral_source_email || '').trim();
-    if ((realtorPhone || realtorEmail) && (record.realtor_id || realtorName)) {
-      const primaryFullName = `${r.first_name || ''} ${r.last_name || ''}`.trim() || 'Primary Borrower';
-      const realtorNameParts = (realtorName || 'Realtor').trim().split(/\s+/);
-      const realtorFirstName = realtorNameParts[0] || 'Realtor';
-      const realtorLastName = realtorNameParts.slice(1).join(' ');
-      candidates.push({
-        label: `${realtorName || 'Realtor'} (Realtor)`,
-        firstName: realtorFirstName,
-        lastName: realtorLastName,
-        phone: realtorPhone,
-        email: realtorEmail,
-        company: 'Realtor',
-        extraNotes: `Realtor for ${primaryFullName}`,
-      });
-    }
+    const candidates = contactCandidates;
 
     if (candidates.length === 0) {
       console.log('[Contacts] No savable contacts (no phone/email)');
@@ -4935,7 +5118,7 @@ export function LeadDetailView({
 
     // Multiple contacts - ask which one to save.
     if (Platform.OS === 'ios') {
-      const options = [...candidates.map((c) => c.label), 'Cancel'];
+      const options = [...candidates.map(getSaveOptionLabel), 'Cancel'];
       ActionSheetIOS.showActionSheetWithOptions(
         {
           title: 'Save Contact',
@@ -4957,7 +5140,7 @@ export function LeadDetailView({
         'Which contact do you want to save?',
         [
           ...candidates.map((c) => ({
-            text: c.label,
+            text: getSaveOptionLabel(c),
             onPress: () => {
               void saveSelectedContact(c);
             },
@@ -5170,15 +5353,15 @@ export function LeadDetailView({
       {/* Fixed Action Bar — always visible */}
       <View style={[styles.actionBar, { backgroundColor: colors.cardBackground, borderBottomWidth: 1, borderBottomColor: colors.border }]}>
         <TouchableOpacity
-          style={[styles.actionBarItem, !phone && styles.actionBarItemDisabled]}
+          style={[styles.actionBarItem, !hasCallableContacts && styles.actionBarItemDisabled]}
           onPress={handleCall}
-          disabled={!phone}
+          disabled={!hasCallableContacts}
           activeOpacity={0.7}
         >
-          <View style={[styles.actionBarIcon, !phone && styles.actionBarIconDisabled]}>
-            <Ionicons name="call-outline" size={20} color={phone ? PLUM : '#94A3B8'} />
+          <View style={[styles.actionBarIcon, !hasCallableContacts && styles.actionBarIconDisabled]}>
+            <Ionicons name="call-outline" size={20} color={hasCallableContacts ? PLUM : '#94A3B8'} />
           </View>
-          <Text style={[styles.actionBarLabel, !phone && styles.actionBarLabelDisabled]}>Call</Text>
+          <Text style={[styles.actionBarLabel, !hasCallableContacts && styles.actionBarLabelDisabled]}>Call</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionBarItem, !phone && styles.actionBarItemDisabled]}
@@ -5213,15 +5396,15 @@ export function LeadDetailView({
           <Text style={[styles.actionBarLabel, !email && styles.actionBarLabelDisabled]}>Email</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.actionBarItem, (!phone && !email) && styles.actionBarItemDisabled]}
+          style={[styles.actionBarItem, !hasSavableContacts && styles.actionBarItemDisabled]}
           onPress={handleSaveContact}
-          disabled={!phone && !email}
+          disabled={!hasSavableContacts}
           activeOpacity={0.7}
         >
-          <View style={[styles.actionBarIcon, (!phone && !email) && styles.actionBarIconDisabled]}>
-            <Ionicons name="person-add-outline" size={20} color={(phone || email) ? PLUM : '#94A3B8'} />
+          <View style={[styles.actionBarIcon, !hasSavableContacts && styles.actionBarIconDisabled]}>
+            <Ionicons name="person-add-outline" size={20} color={hasSavableContacts ? PLUM : '#94A3B8'} />
           </View>
-          <Text style={[styles.actionBarLabel, (!phone && !email) && styles.actionBarLabelDisabled]}>Save</Text>
+          <Text style={[styles.actionBarLabel, !hasSavableContacts && styles.actionBarLabelDisabled]}>Save</Text>
         </TouchableOpacity>
       </View>
 

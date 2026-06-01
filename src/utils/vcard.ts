@@ -20,6 +20,75 @@ export interface PickedContact {
   imageUri?: string;
 }
 
+const CONTACT_LOOKUP_FIELDS: Contacts.FieldType[] = [
+  Contacts.Fields.Name,
+  Contacts.Fields.FirstName,
+  Contacts.Fields.LastName,
+  Contacts.Fields.PhoneNumbers,
+  Contacts.Fields.Emails,
+];
+
+const normalizePhoneForLookup = (phone?: string | null) => {
+  const digits = (phone || '').replace(/\D/g, '');
+  return digits.length > 10 ? digits.slice(-10) : digits;
+};
+
+const normalizeEmailForLookup = (email?: string | null) => (email || '').trim().toLowerCase();
+
+const deviceContactMatches = (
+  contact: Contacts.ExistingContact,
+  phoneDigits: string,
+  email: string
+) => {
+  if (phoneDigits) {
+    const hasPhone = contact.phoneNumbers?.some((entry) => {
+      const contactDigits = normalizePhoneForLookup(entry.number);
+      return contactDigits === phoneDigits;
+    });
+    if (hasPhone) return true;
+  }
+
+  if (email) {
+    const hasEmail = contact.emails?.some((entry) => normalizeEmailForLookup(entry.email) === email);
+    if (hasEmail) return true;
+  }
+
+  return false;
+};
+
+async function hasMatchingDeviceContact(info: ContactInfo): Promise<boolean> {
+  const phoneDigits = normalizePhoneForLookup(info.phone);
+  const email = normalizeEmailForLookup(info.email);
+
+  if (!phoneDigits && !email) {
+    return false;
+  }
+
+  const name = [info.firstName, info.lastName].filter(Boolean).join(' ').trim();
+  const queries: Contacts.ContactQuery[] = name
+    ? [{ fields: CONTACT_LOOKUP_FIELDS, name }]
+    : [];
+
+  queries.push({ fields: CONTACT_LOOKUP_FIELDS });
+
+  const seenContactIds = new Set<string>();
+
+  for (const query of queries) {
+    const { data } = await Contacts.getContactsAsync(query);
+
+    for (const contact of data) {
+      if (seenContactIds.has(contact.id)) continue;
+      seenContactIds.add(contact.id);
+
+      if (deviceContactMatches(contact, phoneDigits, email)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 /**
  * Fetch all device contacts for display in a searchable picker.
  * Returns an array of PickedContact or null on failure.
@@ -76,7 +145,7 @@ export async function getDeviceContacts(): Promise<PickedContact[] | null> {
  * Save contact to phone's contacts with native UI.
  * iOS & Android: Opens native contact form for user to review and save.
  */
-export async function saveContact(info: ContactInfo): Promise<void> {
+export async function saveContact(info: ContactInfo): Promise<boolean> {
   // Guard against platforms that don't support native contacts
   if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
     console.log('[Contacts] saveContact called on unsupported platform:', Platform.OS);
@@ -84,7 +153,7 @@ export async function saveContact(info: ContactInfo): Promise<void> {
       'Not supported',
       'Saving contacts is only available on iOS and Android devices.'
     );
-    return;
+    return false;
   }
 
   try {
@@ -97,7 +166,7 @@ export async function saveContact(info: ContactInfo): Promise<void> {
         'Permission required',
         'Please allow access to your contacts to save this lead.'
       );
-      return;
+      return false;
     }
 
     // Normalize all incoming fields so we never pass undefined / null
@@ -114,7 +183,7 @@ export async function saveContact(info: ContactInfo): Promise<void> {
         'Missing contact info',
         'This lead has no phone number or email to save.'
       );
-      return;
+      return false;
     }
 
     // Build the Contacts.Contact object in a very defensive way
@@ -162,8 +231,16 @@ export async function saveContact(info: ContactInfo): Promise<void> {
     // Present native contact form for user to review and save
     const result = await Contacts.presentFormAsync(null, contact as Contacts.Contact);
 
-    // presentFormAsync returns the contactId if the user saved it, or undefined if canceled
     console.log('[Contacts] presentFormAsync result:', result);
+    const saved = await hasMatchingDeviceContact({
+      ...info,
+      firstName,
+      lastName,
+      phone,
+      email,
+    });
+    console.log('[Contacts] Matching device contact found after form:', saved);
+    return saved;
   } catch (error: any) {
     console.error('[Contacts] Error presenting contact form:', error);
     Alert.alert(
@@ -172,5 +249,6 @@ export async function saveContact(info: ContactInfo): Promise<void> {
       [{ text: 'OK' }]
     );
     // Do not rethrow – we want a soft failure, not a fatal crash
+    return false;
   }
 }
