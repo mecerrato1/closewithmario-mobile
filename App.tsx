@@ -24,7 +24,7 @@ import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler'
 import { Ionicons } from '@expo/vector-icons';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './src/lib/supabase';
-import { getUserRole, getUserTeamMemberId, canSeeAllLeads, type UserRole } from './src/lib/roles';
+import { getUserRole, getUserTeamMemberId, canSeeAllLeads, canManageTeam, canViewAdsLibrary, type UserRole } from './src/lib/roles';
 import { TEXT_TEMPLATES, fillTemplate, getTemplateText, getTemplateName, type TemplateVariables } from './src/lib/textTemplates';
 import type { Lead, MetaLead, SelectedLeadRef, LoanOfficer, Realtor, Activity, AttentionBadge } from './src/lib/types/leads';
 import { STATUSES, STATUS_DISPLAY_MAP, STATUS_COLOR_MAP, getLeadAlert, formatStatus, getLeadLastTouchedValue, getTimeAgo, sortLeadsByLastTouchedDesc } from './src/lib/leadsHelpers';
@@ -35,6 +35,7 @@ import { scheduleLeadCallback } from './src/lib/callbacks';
 import AuthScreen from './src/screens/AuthScreen';
 import { LeadDetailView } from './src/screens/LeadDetailScreen';
 import TeamManagementScreen from './src/screens/TeamManagementScreen';
+import AdsLibraryScreen from './src/screens/AdsLibraryScreen';
 import MortgageCalculatorScreen from './src/screens/MortgageCalculatorScreen';
 import ProfileSettingsScreen from './src/screens/ProfileSettingsScreen';
 import { AppLockProvider, useAppLock } from './src/contexts/AppLockContext';
@@ -170,6 +171,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [userRole, setUserRole] = useState<UserRole>('buyer');
   const [searchQuery, setSearchQuery] = useState('');
   const [showTeamManagement, setShowTeamManagement] = useState(false);
+  const [showAdsLibrary, setShowAdsLibrary] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [teamMemberId, setTeamMemberId] = useState<string | null>(null);
@@ -1859,6 +1861,16 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     );
   }
 
+  if (showAdsLibrary) {
+    return (
+      <AdsLibraryScreen
+        session={session}
+        userRole={userRole}
+        onBack={() => setShowAdsLibrary(false)}
+      />
+    );
+  }
+
 
   if (showProfileSettings) {
     return (
@@ -2218,20 +2230,36 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             onPress={() => setShowProfileMenu(false)}
           >
             <View style={[styles.profileMenuContent, { backgroundColor: colors.cardBackground }]}>
-              {userRole === 'super_admin' && (
+              {(canManageTeam(userRole) || canViewAdsLibrary(userRole)) && (
                 <>
-                  <TouchableOpacity
-                    style={styles.profileMenuItem}
-                    onPress={() => {
-                      setShowProfileMenu(false);
-                      setShowTeamManagement(true);
-                    }}
-                  >
-                    <View style={styles.profileMenuIconContainer}>
-                      <Ionicons name="people" size={20} color="#7C3AED" />
-                    </View>
-                    <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Team Management</Text>
-                  </TouchableOpacity>
+                  {canManageTeam(userRole) && (
+                    <TouchableOpacity
+                      style={styles.profileMenuItem}
+                      onPress={() => {
+                        setShowProfileMenu(false);
+                        setShowTeamManagement(true);
+                      }}
+                    >
+                      <View style={styles.profileMenuIconContainer}>
+                        <Ionicons name="people" size={20} color="#7C3AED" />
+                      </View>
+                      <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Team Management</Text>
+                    </TouchableOpacity>
+                  )}
+                  {canViewAdsLibrary(userRole) && (
+                    <TouchableOpacity
+                      style={styles.profileMenuItem}
+                      onPress={() => {
+                        setShowProfileMenu(false);
+                        setShowAdsLibrary(true);
+                      }}
+                    >
+                      <View style={styles.profileMenuIconContainer}>
+                        <Ionicons name="images-outline" size={20} color="#7C3AED" />
+                      </View>
+                      <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Ads Library</Text>
+                    </TouchableOpacity>
+                  )}
                   <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
                 </>
               )}
@@ -2848,20 +2876,36 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           onPress={() => setShowProfileMenu(false)}
         >
           <View style={[styles.profileMenuContent, { backgroundColor: colors.cardBackground }]}>
-            {userRole === 'super_admin' && (
+            {(canManageTeam(userRole) || canViewAdsLibrary(userRole)) && (
               <>
-                <TouchableOpacity
-                  style={styles.profileMenuItem}
-                  onPress={() => {
-                    setShowProfileMenu(false);
-                    setShowTeamManagement(true);
-                  }}
-                >
-                  <View style={styles.profileMenuIconContainer}>
-                    <Ionicons name="people" size={20} color="#7C3AED" />
-                  </View>
-                  <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Team Management</Text>
-                </TouchableOpacity>
+                {canManageTeam(userRole) && (
+                  <TouchableOpacity
+                    style={styles.profileMenuItem}
+                    onPress={() => {
+                      setShowProfileMenu(false);
+                      setShowTeamManagement(true);
+                    }}
+                  >
+                    <View style={styles.profileMenuIconContainer}>
+                      <Ionicons name="people" size={20} color="#7C3AED" />
+                    </View>
+                    <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Team Management</Text>
+                  </TouchableOpacity>
+                )}
+                {canViewAdsLibrary(userRole) && (
+                  <TouchableOpacity
+                    style={styles.profileMenuItem}
+                    onPress={() => {
+                      setShowProfileMenu(false);
+                      setShowAdsLibrary(true);
+                    }}
+                  >
+                    <View style={styles.profileMenuIconContainer}>
+                      <Ionicons name="images-outline" size={20} color="#7C3AED" />
+                    </View>
+                    <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Ads Library</Text>
+                  </TouchableOpacity>
+                )}
                 <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
               </>
             )}

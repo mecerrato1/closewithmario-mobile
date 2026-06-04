@@ -114,6 +114,56 @@ type Props = {
   fallbackBody?: string | null;
 };
 
+const HOSTED_PREVIEW_SCALE = 1.55;
+
+function escapeHtmlAttribute(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function buildHostedPreviewHtml(iframeSrc: string) {
+  const frameWidth = 100 / HOSTED_PREVIEW_SCALE;
+  const escapedSrc = escapeHtmlAttribute(iframeSrc);
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #ffffff;
+      }
+      iframe {
+        position: absolute;
+        top: 0;
+        left: 50%;
+        width: ${frameWidth}%;
+        height: ${frameWidth}%;
+        border: 0;
+        transform: translateX(-50%) scale(${HOSTED_PREVIEW_SCALE});
+        transform-origin: top center;
+        background: #ffffff;
+      }
+    </style>
+  </head>
+  <body>
+    <iframe
+      src="${escapedSrc}"
+      allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+      allowfullscreen
+    ></iframe>
+  </body>
+</html>`;
+}
+
 function getPlatformLabel(platform?: string | null) {
   if (!platform) return 'Meta';
   const normalized = platform.toLowerCase();
@@ -154,7 +204,7 @@ export function MetaAdPreviewModal({
   fallbackBody,
 }: Props) {
   const { colors, isDark } = useThemeColors();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const [data, setData] = useState<MetaAdPreviewResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -170,6 +220,10 @@ export function MetaAdPreviewModal({
   const formAvailable = Boolean(leadForm);
   const fallbackAvailable = Boolean(fallbackImage);
   const metaVideoUrl = normalizeMetaUrl(data?.creative.video_permalink_url);
+  const hostedPreviewHtml = useMemo(
+    () => data?.preview?.iframe_src ? buildHostedPreviewHtml(data.preview.iframe_src) : null,
+    [data?.preview?.iframe_src]
+  );
 
   const tabs = useMemo(
     () =>
@@ -363,6 +417,7 @@ export function MetaAdPreviewModal({
       ? `Meta returned the ad, but the instant form could not be loaded right now. ${data.form_error}`
       : null;
   const creativeImageHeight = Math.min(520, Math.max(220, (windowWidth - 60) / Math.max(creativeAspectRatio, 0.1)));
+  const hostedPreviewHeight = Math.min(720, Math.max(480, windowHeight - 280));
 
   const handlePlayVideo = async () => {
     try {
@@ -519,10 +574,12 @@ export function MetaAdPreviewModal({
                   <Text style={[modalStyles.sectionHint, { color: colors.textSecondary }]}>
                     Exact Meta-hosted preview. Audio may still be muted here.
                   </Text>
-                  <View style={modalStyles.webViewWrap}>
+                  <View style={[modalStyles.webViewWrap, { height: hostedPreviewHeight }]}>
                     <WebView
-                      source={{ uri: data?.preview?.iframe_src || '' }}
+                      source={hostedPreviewHtml ? { html: hostedPreviewHtml } : { uri: data?.preview?.iframe_src || '' }}
                       style={modalStyles.webView}
+                      originWhitelist={['*']}
+                      scrollEnabled={false}
                       mediaPlaybackRequiresUserAction={false}
                       allowsInlineMediaPlayback
                       javaScriptEnabled

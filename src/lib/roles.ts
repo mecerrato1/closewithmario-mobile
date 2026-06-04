@@ -139,6 +139,10 @@ export function canManageTeam(role: UserRole): boolean {
   return role === 'super_admin';
 }
 
+export function canViewAdsLibrary(role: UserRole): boolean {
+  return role === 'super_admin';
+}
+
 export function canSeeAllLeads(role: UserRole): boolean {
   return ['super_admin', 'admin'].includes(role);
 }
@@ -160,4 +164,3 @@ export function canAddLeadNotes(role: UserRole): boolean {
   // Everyone can add notes
   return ['super_admin', 'admin', 'loan_officer', 'realtor'].includes(role);
 }
-
