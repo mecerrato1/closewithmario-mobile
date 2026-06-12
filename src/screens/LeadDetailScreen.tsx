@@ -208,17 +208,29 @@ type DetailThemeColors = {
 
 type CurrentRealtorContact = { name: string; phone: string; email: string };
 
-type LeadContactRole = 'primary' | 'coBorrower' | 'realtor';
+type LeadContactRole = 'primary' | 'coBorrower' | 'realtor' | 'related';
 
 type LeadContactCandidate = {
   key: string;
   label: string;
+  saveLabel: string;
   firstName: string;
   lastName: string;
   phone: string;
   email: string;
   company?: string;
   extraNotes?: string;
+};
+
+type MetadataContactInfo = {
+  key: string;
+  name: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+  roleLabel: string;
+  isPrimary: boolean;
 };
 
 const SAVED_CONTACTS_STORAGE_PREFIX = 'leadDetailSavedContacts';
@@ -284,6 +296,7 @@ const buildLeadContactCandidates = ({
     candidates.push({
       key: buildContactCandidateKey('primary', record.id, primaryFirstName, primaryLastName, phone || '', email || ''),
       label: `${primaryName} (Primary)`,
+      saveLabel: `Save Borrower: ${primaryName}`,
       firstName: primaryFirstName,
       lastName: primaryLastName,
       phone: phone || '',
@@ -307,6 +320,7 @@ const buildLeadContactCandidates = ({
       candidates.push({
         key: buildContactCandidateKey('coBorrower', String(index), cbFirstName, cbLastName, cbPhone, cbEmail),
         label: `${name} (Co-Borrower)`,
+        saveLabel: `Save Co-Borrower: ${name}`,
         firstName: cbFirstName,
         lastName: cbLastName,
         phone: cbPhone,
@@ -315,6 +329,24 @@ const buildLeadContactCandidates = ({
       });
     });
   }
+
+  const relatedContacts = isPlainObject(record.metadata)
+    ? buildMetadataContactInfos(record.metadata)
+    : [];
+  relatedContacts.forEach((contact) => {
+    const saveRoleLabel = contact.isPrimary ? 'Primary Contact' : contact.roleLabel;
+    candidates.push({
+      key: contact.key,
+      label: `${contact.name} (${contact.roleLabel})`,
+      saveLabel: `Save ${saveRoleLabel}: ${contact.name}`,
+      firstName: contact.firstName,
+      lastName: contact.lastName,
+      phone: contact.phone,
+      email: contact.email,
+      company: contact.roleLabel,
+      extraNotes: `${contact.roleLabel} for ${primaryName || 'lead'}`,
+    });
+  });
 
   const realtorName = currentRealtorContact?.name || currentRealtorName || record.referral_source_name || '';
   const realtorPhone = (currentRealtorContact?.phone || '').trim();
@@ -336,6 +368,7 @@ const buildLeadContactCandidates = ({
         realtorEmail
       ),
       label: `${realtorName || 'Realtor'} (Realtor)`,
+      saveLabel: `Save Realtor: ${realtorName || 'Realtor'}`,
       firstName: realtorFirstName,
       lastName: realtorLastName,
       phone: realtorPhone,
@@ -512,9 +545,31 @@ const EXCLUDED_LEAD_METADATA_KEYS = new Set([
 const HIDDEN_METADATA_FIELD_KEYS = new Set([
   'accountIdentifier',
   'qualificationField',
+  'key_contact',
+  'keyContact',
+  'contact_id',
+  'contactId',
+  'uuid',
+]);
+
+const METADATA_CONTACT_COLLECTION_KEYS = new Set([
+  'additional_contacts',
+  'contacts',
+  'key_contacts',
+  'related_contacts',
+]);
+
+const METADATA_CONTACT_OBJECT_KEYS = new Set([
+  'key_contact',
+  'primary_communicator',
+  'primary_contact',
+  'primary_key_contact',
 ]);
 
 const METADATA_SECTION_ORDER = [
+  'employment_records',
+  'primary_communicator',
+  'related_contacts',
   'income_breakdown',
   'housing_expense_summary',
   'liability_summary',
@@ -548,6 +603,16 @@ const METADATA_LABEL_MAP: Record<string, string> = {
   payoffLiabilityCount: 'Payoff Liabilities',
   amount: 'Amount',
   description: 'Description',
+  employer_name: 'Employer',
+  employment_start_date: 'Start Date',
+  employment_status: 'Status',
+  is_primary: 'Primary',
+  is_self_employed: 'Self Employed',
+  job_title: 'Job Title',
+  monthly_income: 'Monthly Income',
+  role: 'Role',
+  type: 'Type',
+  updated_at: 'Updated',
 };
 
 const LANDING_METADATA_SECTION_LABEL_MAP: Record<string, string> = {
@@ -1475,6 +1540,302 @@ const buildLandingMetadataSummarySections = (lead?: Lead | null): LandingSummary
     .filter((section): section is LandingSummarySection => section !== null);
 };
 
+const getMetadataValueByAliases = (objectValue: Record<string, unknown>, aliases: string[]) => {
+  const aliasSet = new Set(aliases.map(normalizeMetadataLookupKey));
+
+  for (const [key, value] of Object.entries(objectValue)) {
+    if (aliasSet.has(normalizeMetadataLookupKey(key)) && hasRenderableMetadataValue(value)) {
+      return value;
+    }
+  }
+
+  return null;
+};
+
+const getMetadataStringByAliases = (objectValue: Record<string, unknown>, aliases: string[]) => {
+  const value = getMetadataValueByAliases(objectValue, aliases);
+  if (value == null) return null;
+  const trimmed = String(value).trim();
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const getMetadataBooleanByAliases = (objectValue: Record<string, unknown>, aliases: string[]) => {
+  const value = getMetadataValueByAliases(objectValue, aliases);
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (['true', 'yes', '1'].includes(normalized)) return true;
+    if (['false', 'no', '0'].includes(normalized)) return false;
+  }
+  return false;
+};
+
+const formatMetadataDateTimeValue = (value: unknown) => {
+  const text = getTrimmedString(value);
+  if (!text) return null;
+  return formatScenarioDateTime(text) || text;
+};
+
+const getMetadataContactName = (contact: Record<string, unknown>) => {
+  const explicitName = getMetadataStringByAliases(contact, [
+    'name',
+    'full_name',
+    'label',
+    'contact_name',
+    'borrower_name',
+  ]);
+  if (explicitName) return explicitName;
+
+  const firstName = getMetadataStringByAliases(contact, ['first_name', 'firstName', 'given_name']);
+  const lastName = getMetadataStringByAliases(contact, ['last_name', 'lastName', 'family_name']);
+  return [firstName, lastName].filter(Boolean).join(' ').trim() || null;
+};
+
+const getMetadataContactInfo = (
+  contact: Record<string, unknown>,
+  sourceKey: string,
+  index: number
+): MetadataContactInfo | null => {
+  const name = getMetadataContactName(contact);
+  const phone = getMetadataStringByAliases(contact, [
+    'phone',
+    'phone_number',
+    'phoneNumber',
+    'mobile',
+    'mobile_phone',
+    'cell',
+    'cell_phone',
+  ]) || '';
+  const email = getMetadataStringByAliases(contact, ['email', 'email_address', 'emailAddress']) || '';
+  if (!name && !phone && !email) return null;
+
+  const fallbackName = name || email || phone || 'Contact';
+  const { firstName, lastName } = splitContactName(fallbackName, 'Contact');
+  const rawRole = getMetadataStringByAliases(contact, [
+    'role',
+    'relationship',
+    'type',
+    'contact_type',
+    'contactType',
+  ]);
+  const normalizedRole = normalizeMetadataLookupKey(rawRole || sourceKey);
+  const isPrimary =
+    getMetadataBooleanByAliases(contact, ['is_primary', 'isPrimary', 'primary']) ||
+    normalizedRole.includes('primary') ||
+    normalizeMetadataLookupKey(sourceKey).includes('primary');
+  const roleLabel = isPrimary
+    ? 'Primary Contact'
+    : rawRole
+      ? humanizeMetadataString(rawRole)
+      : 'Related Contact';
+  const contactId = getMetadataStringByAliases(contact, [
+    'id',
+    'contact_id',
+    'contactId',
+    'key',
+    'key_contact',
+    'keyContact',
+    'recipient_key',
+  ]);
+
+  return {
+    key: buildContactCandidateKey(
+      'related',
+      `${sourceKey}-${contactId || index}`,
+      firstName,
+      lastName,
+      phone,
+      email
+    ),
+    name: fallbackName,
+    firstName,
+    lastName,
+    phone,
+    email,
+    roleLabel,
+    isPrimary,
+  };
+};
+
+const isMetadataContactCollectionKey = (key: string) =>
+  METADATA_CONTACT_COLLECTION_KEYS.has(normalizeMetadataLookupKey(key));
+
+const isMetadataContactObjectKey = (key: string) =>
+  METADATA_CONTACT_OBJECT_KEYS.has(normalizeMetadataLookupKey(key));
+
+const buildMetadataContactInfos = (metadata: Record<string, unknown>): MetadataContactInfo[] => {
+  const contacts: MetadataContactInfo[] = [];
+  const contactIndexByKey = new Map<string, number>();
+
+  const getDedupeKey = (contact: MetadataContactInfo) => {
+    const nameKey = normalizeContactStoragePart(contact.name);
+    const roleKey = normalizeContactStoragePart(contact.roleLabel);
+    if (nameKey && roleKey) return `name:${nameKey}|${roleKey}`;
+
+    const phoneKey = normalizeContactPhoneKey(contact.phone);
+    if (phoneKey) return `phone:${phoneKey}`;
+
+    const emailKey = normalizeContactStoragePart(contact.email);
+    if (emailKey) return `email:${emailKey}`;
+
+    return `key:${contact.key}`;
+  };
+
+  const addContact = (contact: MetadataContactInfo | null) => {
+    if (!contact) return;
+
+    const dedupeKey = getDedupeKey(contact);
+    const existingIndex = contactIndexByKey.get(dedupeKey);
+    if (existingIndex != null) {
+      const existing = contacts[existingIndex];
+      contacts[existingIndex] = {
+        ...existing,
+        phone: existing.phone || contact.phone,
+        email: existing.email || contact.email,
+        firstName: existing.firstName || contact.firstName,
+        lastName: existing.lastName || contact.lastName,
+        isPrimary: existing.isPrimary || contact.isPrimary,
+      };
+      return;
+    }
+
+    contactIndexByKey.set(dedupeKey, contacts.length);
+    contacts.push(contact);
+  };
+
+  Object.entries(metadata).forEach(([key, value]) => {
+    if (isMetadataContactCollectionKey(key) && Array.isArray(value)) {
+      value.forEach((entry, index) => {
+        if (isPlainObject(entry)) {
+          addContact(getMetadataContactInfo(entry, key, index));
+        }
+      });
+    }
+
+    if (isMetadataContactObjectKey(key) && isPlainObject(value)) {
+      addContact(getMetadataContactInfo(value, key, 0));
+    }
+  });
+
+  return contacts;
+};
+
+const buildMetadataContactRows = (
+  contact: Record<string, unknown>,
+  info: MetadataContactInfo,
+  options?: { includeName?: boolean }
+): DetailSummaryRow[] => {
+  const rows: DetailSummaryRow[] = [];
+  const updatedAt = formatMetadataDateTimeValue(getMetadataValueByAliases(contact, ['updated_at', 'updatedAt']));
+
+  if (options?.includeName) rows.push({ label: 'Name', value: info.name });
+  rows.push({ label: 'Role', value: info.roleLabel });
+  if (info.phone) rows.push({ label: 'Phone', value: formatPhoneNumber(info.phone) });
+  if (info.email) rows.push({ label: 'Email', value: info.email });
+  if (info.isPrimary) rows.push({ label: 'Primary', value: 'Yes' });
+  if (updatedAt) rows.push({ label: 'Updated', value: updatedAt });
+
+  return rows;
+};
+
+const buildContactMetadataSection = (key: string, value: unknown): MetadataSection | null => {
+  const normalizedKey = normalizeMetadataLookupKey(key);
+  const sectionTitle = normalizedKey.includes('primary') ? 'Primary Contact' : formatMetadataKeyLabel(key);
+
+  if (Array.isArray(value)) {
+    const items = value
+      .map((entry, index) => {
+        if (!isPlainObject(entry)) return null;
+        const info = getMetadataContactInfo(entry, key, index);
+        if (!info) return null;
+        const rows = buildMetadataContactRows(entry, info);
+        return rows.length > 0 ? { title: info.name, rows } as MetadataItemCard : null;
+      })
+      .filter((item): item is MetadataItemCard => item !== null);
+
+    return items.length > 0 ? { key, title: sectionTitle, kind: 'items', items } : null;
+  }
+
+  if (isPlainObject(value)) {
+    const info = getMetadataContactInfo(value, key, 0);
+    if (!info) return null;
+    const rows = buildMetadataContactRows(value, info, { includeName: true });
+    return rows.length > 0 ? { key, title: sectionTitle, kind: 'rows', rows } : null;
+  }
+
+  return null;
+};
+
+const buildEmploymentIncomeRows = (incomeItems: unknown, monthlyIncome?: number | null): DetailSummaryRow[] => {
+  if (!Array.isArray(incomeItems)) return [];
+
+  const rows: Array<DetailSummaryRow & { rawType: string; amount: number }> = incomeItems
+    .map((item, index): (DetailSummaryRow & { rawType: string; amount: number }) | null => {
+      if (!isPlainObject(item)) return null;
+      const amount = getPositiveNumberValue(getMetadataValueByAliases(item, ['amount', 'monthly_income', 'income']));
+      if (amount == null) return null;
+      const formattedAmount = formatCurrencyValue(amount);
+      if (!formattedAmount) return null;
+
+      const type = getMetadataStringByAliases(item, ['type', 'income_type']) || `Income ${index + 1}`;
+      const description = getMetadataStringByAliases(item, ['description']);
+      const labelBase = description || humanizeMetadataString(type);
+      return {
+        label: labelBase,
+        value: formattedAmount,
+        rawType: normalizeMetadataLookupKey(type),
+        amount,
+      };
+    })
+    .filter((row): row is DetailSummaryRow & { rawType: string; amount: number } => row !== null);
+
+  if (
+    rows.length === 1 &&
+    monthlyIncome != null &&
+    rows[0].rawType === 'base' &&
+    rows[0].amount === monthlyIncome
+  ) {
+    return [];
+  }
+
+  return rows.map(({ rawType, amount, ...row }) => row);
+};
+
+const buildEmploymentMetadataItems = (value: unknown): MetadataItemCard[] => {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((entry, index) => {
+      if (!isPlainObject(entry)) return null;
+
+      const rows: DetailSummaryRow[] = [];
+      const employerName = getMetadataStringByAliases(entry, ['employer_name', 'employerName']);
+      const jobTitle = getMetadataStringByAliases(entry, ['job_title', 'jobTitle', 'title']);
+      const monthlyIncome = getPositiveNumberValue(getMetadataValueByAliases(entry, ['monthly_income', 'monthlyIncome']));
+      const status = getMetadataStringByAliases(entry, ['employment_status', 'employmentStatus', 'status']);
+      const startDate = getMetadataStringByAliases(entry, ['employment_start_date', 'employmentStartDate', 'start_date']);
+      const isSelfEmployed = getMetadataValueByAliases(entry, ['is_self_employed', 'isSelfEmployed', 'self_employed']);
+
+      if (employerName) rows.push({ label: 'Employer', value: employerName });
+      if (jobTitle) rows.push({ label: 'Job Title', value: jobTitle });
+      if (monthlyIncome != null) rows.push({ label: 'Monthly Income', value: formatCurrencyValue(monthlyIncome) });
+      rows.push(...buildEmploymentIncomeRows(entry.income_items, monthlyIncome));
+      if (status) rows.push({ label: 'Status', value: humanizeMetadataString(status) });
+      if (startDate) rows.push({ label: 'Start Date', value: startDate });
+      if (typeof isSelfEmployed === 'boolean') {
+        rows.push({ label: 'Self Employed', value: isSelfEmployed ? 'Yes' : 'No' });
+      }
+
+      return rows.length > 0
+        ? {
+            title: `Employment Record ${index + 1}`,
+            rows,
+          } as MetadataItemCard
+        : null;
+    })
+    .filter((item): item is MetadataItemCard => item !== null);
+};
+
 const buildMetadataRowsFromObject = (
   objectValue: Record<string, unknown>,
   options?: { omitKeys?: string[] }
@@ -1483,7 +1844,16 @@ const buildMetadataRowsFromObject = (
   const rows: DetailSummaryRow[] = [];
 
   for (const [key, value] of Object.entries(objectValue)) {
-    if (omitKeys.has(key) || HIDDEN_METADATA_FIELD_KEYS.has(key) || isLandingMetadataDisplayNoiseKey(key)) continue;
+    const normalizedKey = normalizeMetadataLookupKey(key);
+    if (
+      omitKeys.has(key) ||
+      omitKeys.has(normalizedKey) ||
+      HIDDEN_METADATA_FIELD_KEYS.has(key) ||
+      HIDDEN_METADATA_FIELD_KEYS.has(normalizedKey) ||
+      isLandingMetadataDisplayNoiseKey(key)
+    ) continue;
+    if (typeof value === 'string' && UUID_PATTERN.test(value.trim())) continue;
+    if (Array.isArray(value) || isPlainObject(value)) continue;
     if (key === 'liabilityType' && hasRenderableMetadataValue(objectValue.liabilityTypeDescription)) continue;
     if ((key === 'excluded' || key === 'payoff') && value === false) continue;
     if (key === 'exclusionReason' && (!value || value === 'excluded')) continue;
@@ -1554,6 +1924,11 @@ const buildImportedAccountItems = (liabilities: Array<Record<string, unknown>>):
 const buildMetadataSections = (metadata?: Record<string, unknown> | null): MetadataSection[] => {
   if (!metadata) return [];
 
+  const hasContactCollection = Object.entries(metadata).some(
+    ([key, value]) => isMetadataContactCollectionKey(key) && Array.isArray(value) && value.length > 0
+  );
+  const hasEmploymentRecords = Array.isArray(metadata.employment_records) && metadata.employment_records.length > 0;
+
   const entries = Object.entries(metadata)
     .filter(([key, value]) => (
       !EXCLUDED_LEAD_METADATA_KEYS.has(key) &&
@@ -1573,6 +1948,25 @@ const buildMetadataSections = (metadata?: Record<string, unknown> | null): Metad
   return entries
     .map(([key, value]) => {
       const title = formatMetadataKeyLabel(key);
+      const normalizedKey = normalizeMetadataLookupKey(key);
+
+      if (normalizedKey === 'employment_records') {
+        const items = buildEmploymentMetadataItems(value);
+        return items.length > 0 ? { key, title: 'Employment Records', kind: 'items', items } as MetadataSection : null;
+      }
+
+      if (normalizedKey === 'income_breakdown' && hasEmploymentRecords) {
+        return null;
+      }
+
+      if (isMetadataContactCollectionKey(key)) {
+        return buildContactMetadataSection(key, value);
+      }
+
+      if (isMetadataContactObjectKey(key)) {
+        if (hasContactCollection) return null;
+        return buildContactMetadataSection(key, value);
+      }
 
       if (key === 'liability_summary' && value && typeof value === 'object' && !Array.isArray(value)) {
         const rows = buildLiabilitySummaryRows(value as Record<string, unknown>);
@@ -1684,16 +2078,18 @@ const LeadSummaryCard = ({
 const LeadMetadataCard = ({
   sections,
   colors,
+  title = 'ADDITIONAL FORM DATA',
 }: {
   sections: MetadataSection[];
   colors: DetailThemeColors;
+  title?: string;
 }) => {
   if (sections.length === 0) return null;
 
   return (
     <View style={[styles.leadSummaryCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
       <Text style={[styles.leadSummaryHeader, { color: colors.textSecondary }]}>
-        ADDITIONAL FORM DATA
+        {title}
       </Text>
       {sections.map((section) => {
         if (section.kind === 'rows') {
@@ -3564,6 +3960,12 @@ export function LeadDetailView({
   ] : [];
   const recordMetadata = record?.metadata || null;
   const metadataSections = buildMetadataSections(recordMetadata as Record<string, unknown> | null);
+  const employmentMetadataSections = metadataSections.filter(
+    (section) => normalizeMetadataLookupKey(section.key) === 'employment_records'
+  );
+  const additionalMetadataSections = metadataSections.filter(
+    (section) => normalizeMetadataLookupKey(section.key) !== 'employment_records'
+  );
   const metaRecord = isMeta ? (record as MetaLead | undefined) : undefined;
   const hasLiveMetaPreview = Boolean(previewAdId);
   const landingSummarySections = buildLandingMetadataSummarySections(leadRecord);
@@ -5057,12 +5459,12 @@ export function LeadDetailView({
   };
 
   const getSaveOptionLabel = (contact: LeadContactCandidate) =>
-    savedContactKeys.includes(contact.key) ? `${contact.label} (Saved)` : contact.label;
+    savedContactKeys.includes(contact.key) ? `${contact.saveLabel} (Saved)` : contact.saveLabel;
 
   const saveSelectedContact = async (contact: LeadContactCandidate) => {
     if (!record) return;
-    if (!contact.phone && !contact.email) {
-      Alert.alert('Missing Info', 'This contact has no phone or email to save.');
+    if (!contact.firstName && !contact.lastName && !contact.phone && !contact.email) {
+      Alert.alert('Missing Info', 'This contact has no name, phone, or email to save.');
       return;
     }
 
@@ -5110,13 +5512,7 @@ export function LeadDetailView({
       return;
     }
 
-    // Single contact - save directly with no prompt.
-    if (candidates.length === 1) {
-      await saveSelectedContact(candidates[0]);
-      return;
-    }
-
-    // Multiple contacts - ask which one to save.
+    // Always ask which contact to save so the primary contact is explicit.
     if (Platform.OS === 'ios') {
       const options = [...candidates.map(getSaveOptionLabel), 'Cancel'];
       ActionSheetIOS.showActionSheetWithOptions(
@@ -6054,11 +6450,19 @@ export function LeadDetailView({
                 rows={leadLoanSpecificRows}
                 colors={leadSummaryColors}
               />
-              <LeadSummaryCard
-                title="EMPLOYMENT & INCOME"
-                rows={leadEmploymentRows}
-                colors={leadSummaryColors}
-              />
+              {employmentMetadataSections.length > 0 ? (
+                <LeadMetadataCard
+                  title="EMPLOYMENT & INCOME"
+                  sections={employmentMetadataSections}
+                  colors={leadSummaryColors}
+                />
+              ) : (
+                <LeadSummaryCard
+                  title="EMPLOYMENT & INCOME"
+                  rows={leadEmploymentRows}
+                  colors={leadSummaryColors}
+                />
+              )}
               <LeadSummaryCard
                 title="DEMOGRAPHICS"
                 rows={leadDemographicRows}
@@ -6154,7 +6558,7 @@ export function LeadDetailView({
               />
               {!shouldShowSavedAdCreativeCard && (
                 <LeadMetadataCard
-                  sections={metadataSections}
+                  sections={additionalMetadataSections}
                   colors={leadSummaryColors}
                 />
               )}
@@ -6400,7 +6804,7 @@ export function LeadDetailView({
               })()}
               {!shouldHideImportedMetaMetadata && (
                 <LeadMetadataCard
-                  sections={metadataSections}
+                  sections={additionalMetadataSections}
                   colors={leadSummaryColors}
                 />
               )}

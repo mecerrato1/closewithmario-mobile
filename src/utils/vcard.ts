@@ -35,10 +35,17 @@ const normalizePhoneForLookup = (phone?: string | null) => {
 
 const normalizeEmailForLookup = (email?: string | null) => (email || '').trim().toLowerCase();
 
+const normalizeContactNameForLookup = (firstName?: string | null, lastName?: string | null, name?: string | null) =>
+  (name || [firstName, lastName].filter(Boolean).join(' '))
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+
 const deviceContactMatches = (
   contact: Contacts.ExistingContact,
   phoneDigits: string,
-  email: string
+  email: string,
+  name: string
 ) => {
   if (phoneDigits) {
     const hasPhone = contact.phoneNumbers?.some((entry) => {
@@ -53,14 +60,20 @@ const deviceContactMatches = (
     if (hasEmail) return true;
   }
 
+  if (name && !phoneDigits && !email) {
+    const contactName = normalizeContactNameForLookup(contact.firstName, contact.lastName, contact.name);
+    if (contactName === name) return true;
+  }
+
   return false;
 };
 
 async function hasMatchingDeviceContact(info: ContactInfo): Promise<boolean> {
   const phoneDigits = normalizePhoneForLookup(info.phone);
   const email = normalizeEmailForLookup(info.email);
+  const normalizedName = normalizeContactNameForLookup(info.firstName, info.lastName);
 
-  if (!phoneDigits && !email) {
+  if (!phoneDigits && !email && !normalizedName) {
     return false;
   }
 
@@ -80,7 +93,7 @@ async function hasMatchingDeviceContact(info: ContactInfo): Promise<boolean> {
       if (seenContactIds.has(contact.id)) continue;
       seenContactIds.add(contact.id);
 
-      if (deviceContactMatches(contact, phoneDigits, email)) {
+      if (deviceContactMatches(contact, phoneDigits, email, normalizedName)) {
         return true;
       }
     }
@@ -170,18 +183,20 @@ export async function saveContact(info: ContactInfo): Promise<boolean> {
     }
 
     // Normalize all incoming fields so we never pass undefined / null
-    const firstName = (info.firstName || '').trim() || 'Lead';
-    const lastName = (info.lastName || '').trim();
+    const rawFirstName = (info.firstName || '').trim();
+    const rawLastName = (info.lastName || '').trim();
+    const firstName = rawFirstName || 'Lead';
+    const lastName = rawLastName;
     const phone = (info.phone || '').trim();
     const email = (info.email || '').trim();
     const company = (info.company || '').trim();
     const notes = (info.notes || '').trim();
 
-    if (!phone && !email) {
-      console.warn('[Contacts] No phone or email provided, skipping save');
+    if (!phone && !email && !rawFirstName && !rawLastName) {
+      console.warn('[Contacts] No name, phone, or email provided, skipping save');
       Alert.alert(
         'Missing contact info',
-        'This lead has no phone number or email to save.'
+        'This lead has no name, phone number, or email to save.'
       );
       return false;
     }
