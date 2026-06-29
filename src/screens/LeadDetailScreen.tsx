@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Platform,
   RefreshControl,
+  KeyboardAvoidingView,
   AppState,
   Animated,
   LayoutAnimation,
@@ -7453,27 +7454,47 @@ export function LeadDetailView({
       >
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback onPress={() => {}}>
-              <View style={styles.templateModalContent}>
-                <View style={styles.templateModalHeader}>
-                  <Text style={styles.templateModalTitle}>
-                    {showCustomMessage
-                      ? 'Write Custom Message'
-                      : templateMode === 'text'
-                        ? (useSpanishTemplates ? 'Elegir Plantilla de Texto' : 'Choose a Text Template')
-                        : (useSpanishTemplates ? 'Elegir Plantilla de Correo' : 'Choose an Email Template')}
-                  </Text>
-                  <TouchableOpacity 
-                    onPress={() => {
-                      setShowTemplateModal(false);
-                      setShowCustomMessage(false);
-                      setCustomMessageText('');
-                    }}
-                    style={styles.templateModalClose}
-                  >
-                    <Text style={styles.templateModalCloseText}>✕</Text>
-                  </TouchableOpacity>
-                </View>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}
+              style={styles.templateKeyboardAvoidingView}
+            >
+              <TouchableWithoutFeedback onPress={() => {}}>
+                <View style={styles.templateModalContent}>
+                  <View style={styles.templateModalHeader}>
+                    <Text style={styles.templateModalTitle}>
+                      {showCustomMessage
+                        ? 'Write Custom Message'
+                        : templateMode === 'text'
+                          ? (useSpanishTemplates ? 'Elegir Plantilla de Texto' : 'Choose a Text Template')
+                          : (useSpanishTemplates ? 'Elegir Plantilla de Correo' : 'Choose an Email Template')}
+                    </Text>
+                    <View style={styles.templateHeaderActions}>
+                      {showCustomMessage ? (
+                        <TouchableOpacity
+                          style={[
+                            styles.templateSendAction,
+                            !customMessageText.trim() && styles.templateSendActionDisabled
+                          ]}
+                          onPress={handleCustomMessageSend}
+                          disabled={!customMessageText.trim()}
+                        >
+                          <Ionicons name="send" size={15} color="#FFFFFF" />
+                          <Text style={styles.templateSendActionText}>Send</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                      <TouchableOpacity
+                        onPress={() => {
+                          setShowTemplateModal(false);
+                          setShowCustomMessage(false);
+                          setCustomMessageText('');
+                        }}
+                        style={styles.templateModalClose}
+                      >
+                        <Text style={styles.templateModalCloseText}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
 
             {!showCustomMessage ? (
               <>
@@ -7557,7 +7578,12 @@ export function LeadDetailView({
                 </ScrollView>
               </>
             ) : (
-              <ScrollView style={{ maxHeight: 600 }} contentContainerStyle={{ paddingBottom: 30 }} showsVerticalScrollIndicator={true}>
+              <ScrollView
+                style={styles.customMessageScroll}
+                contentContainerStyle={styles.customMessageScrollContent}
+                showsVerticalScrollIndicator={true}
+                keyboardShouldPersistTaps="handled"
+              >
                 <TouchableOpacity
                   style={styles.backToTemplatesButton}
                   onPress={() => {
@@ -7582,6 +7608,7 @@ export function LeadDetailView({
                     customMsgAiRef.current?.resetBadge();
                   }}
                   multiline
+                  scrollEnabled
                   autoFocus
                 />
 
@@ -7599,20 +7626,11 @@ export function LeadDetailView({
                   📧 {currentLOInfo?.email || '[Email]'}
                 </Text>
 
-                <TouchableOpacity
-                  style={[
-                    styles.sendCustomMessageButton,
-                    !customMessageText.trim() && styles.sendCustomMessageButtonDisabled
-                  ]}
-                  onPress={handleCustomMessageSend}
-                  disabled={!customMessageText.trim()}
-                >
-                  <Text style={styles.sendCustomMessageButtonText}>Send</Text>
-                </TouchableOpacity>
               </ScrollView>
             )}
-              </View>
-            </TouchableWithoutFeedback>
+                </View>
+              </TouchableWithoutFeedback>
+            </KeyboardAvoidingView>
           </View>
         </TouchableWithoutFeedback>
       </Modal>

@@ -2739,6 +2739,12 @@ export const styles = StyleSheet.create({
     padding: 0,
   },
   // Template Modal Styles
+  templateKeyboardAvoidingView: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   templateModalContent: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
@@ -2753,9 +2759,33 @@ export const styles = StyleSheet.create({
     marginBottom: 20,
   },
   templateModalTitle: {
+    flex: 1,
+    marginRight: 12,
     fontSize: 20,
     fontWeight: '700',
     color: '#1E293B',
+  },
+  templateHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  templateSendAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#10B981',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  templateSendActionDisabled: {
+    backgroundColor: '#D1D5DB',
+  },
+  templateSendActionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   templateModalClose: {
     width: 32,
@@ -2839,6 +2869,12 @@ export const styles = StyleSheet.create({
   customMessageContainer: {
     flex: 1,
   },
+  customMessageScroll: {
+    flexShrink: 1,
+  },
+  customMessageScrollContent: {
+    paddingBottom: 30,
+  },
   backToTemplatesButton: {
     paddingVertical: 10,
     paddingHorizontal: 12,
@@ -2856,6 +2892,7 @@ export const styles = StyleSheet.create({
   },
   customMessageInput: {
     minHeight: 180,
+    maxHeight: 240,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: '#E5E7EB',
@@ -2865,21 +2902,6 @@ export const styles = StyleSheet.create({
     textAlignVertical: 'top',
     color: '#111827',
     backgroundColor: '#F9FAFB',
-  },
-  sendCustomMessageButton: {
-    backgroundColor: '#10B981',
-    paddingVertical: 14,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  sendCustomMessageButtonDisabled: {
-    backgroundColor: '#D1D5DB',
-  },
-  sendCustomMessageButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
   },
   scheduleCallbackButton: {
     flexDirection: 'row',
