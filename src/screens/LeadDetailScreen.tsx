@@ -52,6 +52,7 @@ import { AiRewriteToolbar, AiRewriteToolbarRef } from '../components/AiRewriteTo
 import { ReferralAgreementsSection } from '../components/ReferralAgreementsSection';
 import { MetaAdPreviewModal } from '../components/MetaAdPreviewModal';
 import { ApprovalRecipeSection } from '../components/ApprovalRecipeSection';
+import { LeadRealtorRolesSection } from '../components/LeadRealtorRolesSection';
 
 const PLUM = '#4C1D95';
 const CRM_API_BASE_URL = 'https://www.closewithmario.com';
@@ -6818,10 +6819,9 @@ export function LeadDetailView({
             leadSource={isMeta ? 'meta' : 'organic'}
           />
 
-          {/* LO & Realtor Assignment */}
-          <View style={styles.statusLORow}>
-            {/* LO Assignment (Super Admin & Realtor) */}
-            {(propUserRole === 'super_admin' || propUserRole === 'realtor') && (
+          {/* LO Assignment */}
+          {(propUserRole === 'super_admin' || propUserRole === 'realtor') && (
+            <View style={styles.statusLORow}>
               <TouchableOpacity
                 style={styles.loDropdownButton}
                 onPress={() => setShowLOPicker(true)}
@@ -6837,27 +6837,20 @@ export function LeadDetailView({
                 </Text>
                 <Text style={styles.statusDropdownArrow}>▼</Text>
               </TouchableOpacity>
-            )}
+            </View>
+          )}
 
-            {/* Realtor Assignment (hide for realtors - they ARE the realtor) */}
-            {propUserRole !== 'realtor' && (
-              <TouchableOpacity
-                style={styles.loDropdownButton}
-                onPress={() => {
-                  fetchRealtorsForPicker();
-                  setShowRealtorPicker(true);
-                }}
-                disabled={updatingRealtor}
-              >
-                <Ionicons name="home-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
-                <Text style={styles.loDropdownLabel}>Realtor:</Text>
-                <Text style={styles.loDropdownValue} numberOfLines={1}>
-                  {currentRealtorName || 'None'}
-                </Text>
-                <Text style={styles.statusDropdownArrow}>▼</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          {propUserRole !== 'realtor' && (
+            <LeadRealtorRolesSection
+              leadId={record.id}
+              leadSource={crmLeadSource}
+              onBuyerAgentUpdated={(updatedRecord) => {
+                if (updatedRecord) {
+                  onLeadUpdate(updatedRecord as Lead | MetaLead, isMeta ? 'meta' : 'lead');
+                }
+              }}
+            />
+          )}
 
           {/* Tracking Section */}
           <View style={trackingStyles.container}>
