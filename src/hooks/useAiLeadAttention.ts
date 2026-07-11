@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
+import { authenticatedFetch } from '../lib/authenticatedFetch';
 
 // ============================================================================
 // Types
@@ -170,25 +171,19 @@ export function useAiLeadAttention(): UseAiLeadAttentionResult {
 
     // Call the API with force=true to trigger fresh AI re-analysis
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.access_token) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
-        
-        const response = await fetch(
-          `https://www.closewithmario.com/api/get-lead-attention?lead_id=${leadId}&force=true`,
-          {
-            headers: { 'Authorization': `Bearer ${session.access_token}` },
-            signal: controller.signal,
-          }
-        );
-        clearTimeout(timeoutId);
-        
-        if (response.ok) {
-          console.log('[useAiLeadAttention] Force-refreshed AI analysis for lead:', leadId);
-        } else {
-          console.warn('[useAiLeadAttention] API force-refresh returned status:', response.status);
-        }
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      const response = await authenticatedFetch(
+        `https://www.closewithmario.com/api/get-lead-attention?lead_id=${leadId}&force=true`,
+        { signal: controller.signal },
+      );
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        console.log('[useAiLeadAttention] Force-refreshed AI analysis for lead:', leadId);
+      } else {
+        console.warn('[useAiLeadAttention] API force-refresh returned status:', response.status);
       }
     } catch (e: any) {
       if (e.name === 'AbortError') {

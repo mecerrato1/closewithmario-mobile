@@ -11,8 +11,9 @@ import * as WebBrowser from 'expo-web-browser';
 import { useThemeColors } from '../styles/theme';
 import { useReferralAgreements } from '../hooks/useReferralAgreements';
 import type { ReferralAgreement, SignerStatus } from '../lib/types/referralAgreement';
+import { authenticatedFetch } from '../lib/authenticatedFetch';
 
-const SUPABASE_STORAGE_BASE = 'https://hxpvcaspgdgsehrehbhl.supabase.co/storage/v1/object/public/referral-agreements';
+const API_BASE_URL = 'https://www.closewithmario.com';
 
 const STATUS_CONFIG: Record<ReferralAgreement['status'], { bg: string; text: string; label: string }> = {
   generated: { bg: '#F1F5F9', text: '#64748B', label: 'Generated' },
@@ -63,10 +64,45 @@ export function ReferralAgreementsSection({ leadId, leadSource }: Props) {
   } = useReferralAgreements({ leadId, leadSource });
 
   const [expanded, setExpanded] = useState(true);
+  const [openingPdfKey, setOpeningPdfKey] = useState<string | null>(null);
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
-  const handleOpenPdf = async (path: string) => {
-    const url = `${SUPABASE_STORAGE_BASE}/${path}?t=${Date.now()}`;
-    await WebBrowser.openBrowserAsync(url);
+  const handleOpenPdf = async (
+    agreement: ReferralAgreement,
+    documentType: 'generated' | 'signed',
+  ) => {
+    const requestKey = `${agreement.id}:${documentType}`;
+    setOpeningPdfKey(requestKey);
+    setPdfError(null);
+
+    try {
+      const needsSignedPdfFetch = documentType === 'signed' && !agreement.signed_pdf_path;
+      const response = needsSignedPdfFetch
+        ? await authenticatedFetch(`${API_BASE_URL}/api/referral-agreement/fetch-signed`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ referralAgreementId: agreement.id }),
+          })
+        : await authenticatedFetch(
+            `${API_BASE_URL}/api/referral-agreement/document-url?${new URLSearchParams({
+              referralAgreementId: agreement.id,
+              documentType,
+            }).toString()}`,
+          );
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok || typeof payload?.url !== 'string') {
+        throw new Error(payload?.error || 'Could not open the referral agreement PDF.');
+      }
+
+      await WebBrowser.openBrowserAsync(payload.url);
+      if (needsSignedPdfFetch) await refresh();
+    } catch (err: any) {
+      console.error('Failed to open referral agreement PDF:', err);
+      setPdfError(err?.message || 'Could not open the referral agreement PDF.');
+    } finally {
+      setOpeningPdfKey(null);
+    }
   };
 
   if (loading) {
@@ -129,10 +165,15 @@ export function ReferralAgreementsSection({ leadId, leadSource }: Props) {
           onRefreshSigners={() => refreshSignerStatus(agreement.id)}
           loadingSigners={loadingSignerStatus[agreement.id] || false}
           onOpenPdf={handleOpenPdf}
+          openingPdfKey={openingPdfKey}
           colors={colors}
           isDark={isDark}
         />
       ))}
+
+      {expanded && pdfError && (
+        <Text style={localStyles.pdfErrorText}>{pdfError}</Text>
+      )}
 
       {expanded && (
         <TouchableOpacity
@@ -154,7 +195,8 @@ interface AgreementCardProps {
   isLatest: boolean;
   onRefreshSigners: () => void;
   loadingSigners: boolean;
-  onOpenPdf: (path: string) => void;
+  onOpenPdf: (agreement: ReferralAgreement, documentType: 'generated' | 'signed') => void;
+  openingPdfKey: string | null;
   colors: ReturnType<typeof useThemeColors>['colors'];
   isDark: boolean;
 }
@@ -166,6 +208,7 @@ function AgreementCard({
   onRefreshSigners,
   loadingSigners,
   onOpenPdf,
+  openingPdfKey,
   colors,
   isDark,
 }: AgreementCardProps) {
@@ -176,6 +219,13 @@ function AgreementCard({
 
   const showGeneratedPdf = agreement.generated_pdf_path && agreement.status !== 'signed';
   const showSignedPdf = agreement.status === 'signed';
+  const hasSignatureRequest = Boolean(
+    agreement.signature_request_id ||
+      agreement.signature_request_external_id ||
+      agreement.eversign_document_hash,
+  );
+  const openingGeneratedPdf = openingPdfKey === `${agreement.id}:generated`;
+  const openingSignedPdf = openingPdfKey === `${agreement.id}:signed`;
 
   return (
     <View style={[localStyles.card, { backgroundColor: cardBg, borderColor: colors.border }]}>
@@ -218,7 +268,7 @@ function AgreementCard({
       </View>
 
       {/* Signer Status */}
-      {agreement.eversign_document_hash && (
+      {hasSignatureRequest && (
         <View style={localStyles.signerSection}>
           <View style={localStyles.signerHeaderRow}>
             <Text style={[localStyles.signerHeader, { color: colors.textSecondary }]}>SIGNER STATUS</Text>
@@ -265,29 +315,52 @@ function AgreementCard({
         {showGeneratedPdf && (
           <TouchableOpacity
             style={localStyles.pdfButton}
-            onPress={() => onOpenPdf(agreement.generated_pdf_path!)}
+            onPress={() => onOpenPdf(agreement, 'generated')}
+            disabled={openingGeneratedPdf}
             activeOpacity={0.7}
           >
-            <Ionicons name="document-text-outline" size={16} color="#7C3AED" />
-            <Text style={localStyles.pdfButtonText}>View Generated PDF</Text>
+            {openingGeneratedPdf ? (
+              <ActivityIndicator size="small" color="#7C3AED" />
+            ) : (
+              <Ionicons name="document-text-outline" size={16} color="#7C3AED" />
+            )}
+            <Text style={localStyles.pdfButtonText}>
+              {openingGeneratedPdf ? 'Opening PDF...' : 'View Generated PDF'}
+            </Text>
           </TouchableOpacity>
         )}
         {showSignedPdf && (
-          agreement.signed_pdf_path ? (
-            <TouchableOpacity
-              style={[localStyles.pdfButton, { backgroundColor: '#DCFCE7', borderColor: '#86EFAC' }]}
-              onPress={() => onOpenPdf(agreement.signed_pdf_path!)}
-              activeOpacity={0.7}
-            >
+          <TouchableOpacity
+            style={[
+              localStyles.pdfButton,
+              agreement.signed_pdf_path
+                ? { backgroundColor: '#DCFCE7', borderColor: '#86EFAC' }
+                : { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' },
+            ]}
+            onPress={() => onOpenPdf(agreement, 'signed')}
+            disabled={openingSignedPdf}
+            activeOpacity={0.7}
+          >
+            {openingSignedPdf ? (
+              <ActivityIndicator size="small" color={agreement.signed_pdf_path ? '#16A34A' : '#D97706'} />
+            ) : agreement.signed_pdf_path ? (
               <Ionicons name="checkmark-circle-outline" size={16} color="#16A34A" />
-              <Text style={[localStyles.pdfButtonText, { color: '#16A34A' }]}>View Signed PDF</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={[localStyles.pdfButton, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }]}>
+            ) : (
               <Ionicons name="time-outline" size={16} color="#D97706" />
-              <Text style={[localStyles.pdfButtonText, { color: '#D97706' }]}>Signed PDF processing...</Text>
-            </View>
-          )
+            )}
+            <Text
+              style={[
+                localStyles.pdfButtonText,
+                { color: agreement.signed_pdf_path ? '#16A34A' : '#D97706' },
+              ]}
+            >
+              {openingSignedPdf
+                ? 'Fetching signed PDF...'
+                : agreement.signed_pdf_path
+                  ? 'View Signed PDF'
+                  : 'Retrieve Signed PDF'}
+            </Text>
+          </TouchableOpacity>
         )}
       </View>
 
@@ -456,6 +529,11 @@ const localStyles = StyleSheet.create({
     fontSize: 12,
     color: '#DC2626',
     flex: 1,
+  },
+  pdfErrorText: {
+    color: '#DC2626',
+    fontSize: 12,
+    marginTop: 8,
   },
   refreshAllButton: {
     flexDirection: 'row',

@@ -10,6 +10,10 @@ export interface ReferralAgreement {
   additional_terms: string | null;
   generated_pdf_path: string | null;
   signed_pdf_path: string | null;
+  signature_provider: 'signwell' | 'eversign' | string | null;
+  signature_request_id: string | null;
+  signature_request_external_id: string | null;
+  // Retained for agreements created before the generic signature columns.
   eversign_document_hash: string | null;
   last_error: string | null;
   sent_at: string | null;
@@ -34,7 +38,8 @@ export interface SignerStatus {
 
 export interface SignerStatusResponse {
   success: boolean;
-  document_hash: string;
+  document_id?: string;
+  document_hash?: string;
   is_completed: boolean;
   is_cancelled: boolean;
   signers: SignerStatus[];

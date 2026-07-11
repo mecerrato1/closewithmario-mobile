@@ -33,6 +33,7 @@ import RenderHTML from 'react-native-render-html';
 import { WebView } from 'react-native-webview';
 import type { Lead, MetaLead, SelectedLeadRef, Activity, LoanOfficer, Realtor, TrackingReason, CoBorrowerInfo, LoanOriginatorInfo } from '../lib/types/leads';
 import type { UserRole } from '../lib/roles';
+import { authenticatedFetch } from '../lib/authenticatedFetch';
 import { supabase } from '../lib/supabase';
 import { getUserRole, getUserTeamMemberId, canSeeAllLeads } from '../lib/roles';
 import { TEXT_TEMPLATES, fetchLeadTemplates, fillTemplate, getTemplateText, getTemplateName, getTemplateSubject, formatPhoneNumber, type TemplateVariables, type TextTemplate } from '../lib/textTemplates';
@@ -2771,7 +2772,7 @@ export function LeadDetailView({
         messageLength: partnerUpdateMessage.trim().length
       });
       
-      const response = await fetch(url, {
+      const response = await authenticatedFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -2831,17 +2832,11 @@ export function LeadDetailView({
     path: string,
     init: { method?: string; body?: string; headers?: Record<string, string> } = {}
   ) => {
-    const token = session?.access_token;
-    if (!token) {
-      throw new Error('Sign in again to manage scenario links.');
-    }
-
-    const response = await fetch(`${CRM_API_BASE_URL}${path}`, {
+    const response = await authenticatedFetch(`${CRM_API_BASE_URL}${path}`, {
       method: init.method || 'GET',
       headers: {
         Accept: 'application/json',
         ...(init.body ? { 'Content-Type': 'application/json' } : {}),
-        Authorization: `Bearer ${token}`,
         ...(init.headers || {}),
       },
       body: init.body,
@@ -2862,7 +2857,7 @@ export function LeadDetailView({
     }
 
     return payload;
-  }, [session?.access_token]);
+  }, []);
 
   const loadLeadScenarios = useCallback(async () => {
     if (!record) {
@@ -5086,7 +5081,7 @@ export function LeadDetailView({
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-      const response = await fetch(`${API_BASE_URL}/api/send-docs-received-sms`, {
+      const response = await authenticatedFetch(`${API_BASE_URL}/api/send-docs-received-sms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

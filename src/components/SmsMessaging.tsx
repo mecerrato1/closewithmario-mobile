@@ -21,6 +21,7 @@ import { Audio, InterruptionModeIOS } from 'expo-av';
 import { File as FSFile, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { supabase } from '../lib/supabase';
+import { authenticatedFetch } from '../lib/authenticatedFetch';
 import {
   getSmsVoiceTranscript,
   getSmsVoiceTranscriptionStatus,
@@ -255,7 +256,7 @@ export function SmsMessaging({
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
       
-      const response = await fetch(url, {
+      const response = await authenticatedFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { ReferralAgreement, SignerStatus, SignerStatusResponse } from '../lib/types/referralAgreement';
+import { authenticatedFetch } from '../lib/authenticatedFetch';
 
 const API_BASE_URL = 'https://www.closewithmario.com';
 
@@ -33,7 +34,7 @@ export function useReferralAgreements({
   const fetchSignerStatus = useCallback(async (agreementId: string): Promise<SignerStatus[] | null> => {
     try {
       const url = `${API_BASE_URL}/api/referral-agreement/signer-status?referralAgreementId=${agreementId}`;
-      const response = await fetch(url);
+      const response = await authenticatedFetch(url);
       if (!response.ok) return null;
       const data: SignerStatusResponse = await response.json();
       if (data.success && data.signers) {
@@ -53,7 +54,7 @@ export function useReferralAgreements({
 
     try {
       const url = `${API_BASE_URL}/api/referral-agreement/by-lead?leadId=${leadId}&leadSource=${leadSource}`;
-      const response = await fetch(url);
+      const response = await authenticatedFetch(url);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch agreements (${response.status})`);
@@ -63,10 +64,17 @@ export function useReferralAgreements({
       const fetchedAgreements: ReferralAgreement[] = data.agreements || [];
       setAgreements(fetchedAgreements);
 
-      // Fetch signer status for each agreement that has an eversign hash
+      // Fetch signer status for agreements created with either the current
+      // provider fields or the legacy Eversign identifier.
       const statusMap: Record<string, SignerStatus[]> = {};
       const signerPromises = fetchedAgreements
-        .filter((a) => a.eversign_document_hash)
+        .filter((a) =>
+          Boolean(
+            a.signature_request_id ||
+              a.signature_request_external_id ||
+              a.eversign_document_hash,
+          ),
+        )
         .map(async (a) => {
           const signers = await fetchSignerStatus(a.id);
           if (signers) {
