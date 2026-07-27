@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -24,7 +24,7 @@ import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler'
 import { Ionicons } from '@expo/vector-icons';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './src/lib/supabase';
-import { getUserRole, getUserTeamMemberId, canSeeAllLeads, canManageTeam, canViewAdsLibrary, type UserRole } from './src/lib/roles';
+import { getUserRole, getUserTeamMemberId, canManageTeam, canViewAdsLibrary, type UserRole } from './src/lib/roles';
 import { TEXT_TEMPLATES, fillTemplate, getTemplateText, getTemplateName, type TemplateVariables } from './src/lib/textTemplates';
 import type { Lead, MetaLead, SelectedLeadRef, LoanOfficer, Realtor, Activity, AttentionBadge } from './src/lib/types/leads';
 import { STATUSES, STATUS_DISPLAY_MAP, STATUS_COLOR_MAP, getLeadAlert, formatStatus, getLeadLastTouchedValue, getTimeAgo, sortLeadsByLastTouchedDesc } from './src/lib/leadsHelpers';
@@ -49,6 +49,12 @@ import AuthenticatedRoot from './src/screens/AuthenticatedRoot';
 
 import * as WebBrowser from 'expo-web-browser';
 import QuickCaptureTab from './src/features/quickCapture/QuickCaptureTab';
+import { usePaginatedLeads } from './src/features/leads/usePaginatedLeads';
+import {
+  toMobileLead,
+  toCrmLeadSummary,
+  type CrmLeadListQuery,
+} from './src/features/leads/crmLeadApi';
 
 // Enable LayoutAnimation on Android
 if (
@@ -123,38 +129,12 @@ function resolveNotificationOpenTab(
   return undefined;
 }
 
-const LEAD_SELECT_FIELDS =
-  'id, created_at, first_name, last_name, email, phone, status, last_contact_date, last_touched_at, loan_purpose, price, loan_amount, down_payment, credit_score, ltv, interest_rate, message, lo_id, realtor_id, source, source_detail, subject_address, subject_city, subject_state, subject_county, subject_zipcode, xml_property_type, occupancy_type, mortgage_type, amortization_type, loan_term_months, lender_loan_number, estimated_closing_costs, employer_name, employment_title, employment_start_date, employment_monthly_income, self_employed, marital_status, dependent_count, citizenship_status, current_housing_type, current_housing_payment, originator_name, originator_company, originator_license, originator_email, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary, metadata';
-const CRM_API_BASE_URL = 'https://www.closewithmario.com';
-const SCENARIO_VIEWING_NOW_WINDOW_MS = 3 * 60 * 1000;
-
-type ScenarioShareLinkStatus = {
-  recipientType: 'borrower' | 'co_borrower' | 'realtor' | 'key_contact';
-  status: 'active' | 'revoked' | 'expired' | 'completed';
-  lastActivityAt: string | null;
-};
-
-type ScenarioShareStatus = {
-  borrower?: ScenarioShareLinkStatus | null;
-  realtor?: ScenarioShareLinkStatus | null;
-};
-
-const getScenarioShareStatusKey = (source: 'organic' | 'meta', id: string) => `${source}:${id}`;
-
-const isScenarioShareViewingNow = (link?: ScenarioShareLinkStatus | null, now = Date.now()) => {
-  if (!link || link.status !== 'active' || !link.lastActivityAt) return false;
-  const activityAt = new Date(link.lastActivityAt).getTime();
-  return Number.isFinite(activityAt) && now - activityAt <= SCENARIO_VIEWING_NOW_WINDOW_MS;
-};
-
 function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandled, defaultToMyLeads, skipDashboard, onNavigateToCapture }: LeadsScreenProps) {
   const { colors, isDark } = useThemeColors();
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [metaLeads, setMetaLeads] = useState<MetaLead[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<string>('');
+  const [initializing, setInitializing] = useState(true);
+  const [initialError, setInitialError] = useState<string | null>(null);
+  const [roleReady, setRoleReady] = useState(false);
+  const [initializationAttempt, setInitializationAttempt] = useState(0);
   const [selectedLead, setSelectedLead] = useState<SelectedLeadRef | null>(
     null
   );
@@ -183,39 +163,22 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [todayCallbacks, setTodayCallbacks] = useState<any[]>([]);
   const [showCallbackHistory, setShowCallbackHistory] = useState(false);
   const [callbackHistory, setCallbackHistory] = useState<any[]>([]);
-  const [unreadMessageCounts, setUnreadMessageCounts] = useState<Record<string, number>>({});
-  const [scenarioShareStatuses, setScenarioShareStatuses] = useState<Record<string, ScenarioShareStatus>>({});
-  const [scenarioActivityClock, setScenarioActivityClock] = useState(Date.now());
   const [showAiRecommendationModal, setShowAiRecommendationModal] = useState(false);
   const [selectedAiAttention, setSelectedAiAttention] = useState<{ reason: string; suggestedAction: string; badge: string; leadId: string; source: 'lead' | 'meta'; phone: string; firstName: string } | null>(null);
   const [realtorProfilePicUrl, setRealtorProfilePicUrl] = useState<string | null>(null);
   
   // AI Lead Attention - fetch from cache/API
-  const { fetchBatchAttention, getAttention, invalidateAttention, attentionMap } = useAiLeadAttention();
-  const [aiDataLoaded, setAiDataLoaded] = useState(0); // Counter to force re-render when AI data loads
+  const { invalidateAttention, attentionMap } = useAiLeadAttention();
   
   // Quick Capture state
   const [showQuickCaptures, setShowQuickCaptures] = useState(false);
   const [quickCaptureStartOnAdd, setQuickCaptureStartOnAdd] = useState(false);
   const [showFabActionSheet, setShowFabActionSheet] = useState(false);
-  const scenarioShareStatusCount = Object.keys(scenarioShareStatuses).length;
-
   // Add Lead Modal state
   const [showAddLeadModal, setShowAddLeadModal] = useState(false);
   const [returnToDashboardAfterAddLead, setReturnToDashboardAfterAddLead] = useState(false);
   const [savingNewLead, setSavingNewLead] = useState(false);
 
-  useEffect(() => {
-    if (scenarioShareStatusCount === 0) {
-      return;
-    }
-
-    const interval = setInterval(() => {
-      setScenarioActivityClock(Date.now());
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [scenarioShareStatusCount]);
   const [addLeadError, setAddLeadError] = useState<string | null>(null);
   const [newLead, setNewLead] = useState({
     first_name: '',
@@ -229,13 +192,116 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [showLoanPurposePicker, setShowLoanPurposePicker] = useState(false);
   const LOAN_PURPOSES = ['Home Buying', 'Home Selling', 'Mortgage Refinance', 'Investment Property', 'General Real Estate'];
 
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 250);
+    return () => clearTimeout(timeout);
+  }, [searchQuery]);
+
+  const leadListQuery = useMemo<CrmLeadListQuery>(() => {
+    const scope =
+      userRole === 'super_admin' || userRole === 'admin'
+        ? 'all'
+        : userRole === 'loan_officer'
+          ? 'loan_officer'
+          : 'realtor';
+    const serverStatus = attentionFilter
+      ? 'needs_attention'
+      : unreadFilter
+        ? 'unread_sms'
+        : trackedFilter
+          ? 'tracked'
+          : selectedStatusFilter;
+    return {
+      scope,
+      limit: 50,
+      search: debouncedSearch.length >= 2 ? debouncedSearch : '',
+      status: serverStatus || 'all',
+      platform:
+        activeTab === 'leads' ? 'organic' : activeTab === 'meta' ? 'meta' : 'all',
+      ownerLoId:
+        selectedLOFilter && selectedLOFilter !== 'unassigned' ? selectedLOFilter : null,
+      ad:
+        activeTab === 'meta' && selectedSourceFilter !== 'all'
+          ? selectedSourceFilter
+          : undefined,
+      importSource: 'all',
+      sort: 'last_contact',
+      direction: 'desc',
+    };
+  }, [
+    activeTab,
+    attentionFilter,
+    debouncedSearch,
+    selectedLOFilter,
+    selectedSourceFilter,
+    selectedStatusFilter,
+    trackedFilter,
+    unreadFilter,
+    userRole,
+  ]);
+
+  const leadDirectory = usePaginatedLeads(
+    leadListQuery,
+    roleReady && userRole !== 'buyer'
+  );
+  const {
+    loadMore: loadMoreDirectoryLeads,
+    refresh: refreshLeadDirectory,
+    removeItem: removeDirectoryLead,
+    retry: retryLeadDirectory,
+    updateItem: updateLeadDirectoryItem,
+    upsertItem: upsertLeadDirectoryItem,
+  } = leadDirectory;
+  const leads = useMemo(
+    () =>
+      leadDirectory.items
+        .filter((lead) => lead.source === 'organic')
+        .map((lead) => toMobileLead(lead) as Lead),
+    [leadDirectory.items]
+  );
+  const metaLeads = useMemo(
+    () =>
+      leadDirectory.items
+        .filter((lead) => lead.source === 'meta')
+        .map((lead) => toMobileLead(lead) as MetaLead),
+    [leadDirectory.items]
+  );
+  const unreadConversationCount =
+    leadDirectory.facets?.unreadSms
+    ?? leadDirectory.items.filter(
+      (lead) => (Number(lead.unread_sms_count) || 0) > 0
+    ).length;
+  const leadDirectoryItemsRef = useRef(leadDirectory.items);
+  leadDirectoryItemsRef.current = leadDirectory.items;
+  const loading = initializing || leadDirectory.loading;
+  const refreshing = leadDirectory.refreshing;
+  const errorMessage = initialError || leadDirectory.error;
+  const debugInfo = `loaded: ${leadDirectory.items.length} · total: ${leadDirectory.totalCount}`;
+
+  const updateDirectoryLead = useCallback(
+    (source: 'lead' | 'meta', id: string, patch: Record<string, unknown>) => {
+      updateLeadDirectoryItem(source === 'lead' ? 'organic' : 'meta', id, patch);
+    },
+    [updateLeadDirectoryItem]
+  );
+
+  const upsertDirectoryLead = useCallback(
+    (source: 'lead' | 'meta', record: Lead | MetaLead) => {
+      upsertLeadDirectoryItem(toCrmLeadSummary(source, record));
+    },
+    [upsertLeadDirectoryItem]
+  );
+
   // Micro animations for the lead list
   const listOpacity = useRef(new Animated.Value(1)).current;
   const listScale = useRef(new Animated.Value(1)).current;
 
   // Calculate unique sources for the filter
   const uniqueSources = React.useMemo(() => {
-    const sources = new Set<string>();
+    const sources = new Set<string>(
+      Object.keys(leadDirectory.facets?.ads || {})
+    );
     
     // Add sources from meta leads (ad_name)
     metaLeads.forEach(l => {
@@ -249,7 +315,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     });
     
     return Array.from(sources).sort();
-  }, [leads, metaLeads]);
+  }, [leadDirectory.facets?.ads, leads, metaLeads]);
 
   // Collapsing header animation for leads view
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -383,18 +449,21 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   useEffect(() => {
     const init = async () => {
       if (!session?.user?.id || !session?.user?.email) {
-        setErrorMessage('No user session found');
-        setLoading(false);
+        setInitialError('No user session found');
+        setInitializing(false);
         return;
       }
 
       try {
-        setLoading(true);
+        setInitializing(true);
+        setInitialError(null);
+        setRoleReady(false);
 
         // Get user's role using the role system
         const role = await getUserRole(session.user.id, session.user.email);
         console.log('User role:', role);
         setUserRole(role);
+        setRoleReady(true);
 
         // Fetch team member ID and lead_eligible status for loan officers
         if (role === 'loan_officer') {
@@ -446,87 +515,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           }
         }
 
-        // Build queries
-        let leadsQuery = supabase
-          .from('leads')
-          .select(LEAD_SELECT_FIELDS)
-          .order('created_at', { ascending: false });
-
-        let metaQuery = supabase
-          .from('meta_ads')
-          .select(
-            'id, created_at, first_name, last_name, email, phone, status, last_contact_date, last_touched_at, ad_id, adset_name, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, source_detail, loan_purpose, county_interest, monthly_income, meta_ad_notes, form_data, metadata, raw, lo_id, realtor_id, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary'
-          )
-          .order('created_at', { ascending: false });
-
-        // Apply filters based on role
-        if (!canSeeAllLeads(role)) {
-          // LOs and Realtors only see their assigned leads
-          if (role === 'loan_officer') {
-            const teamMemberId = await getUserTeamMemberId(session.user.id, 'loan_officer');
-            if (teamMemberId) {
-              leadsQuery = leadsQuery.eq('lo_id', teamMemberId);
-              metaQuery = metaQuery.eq('lo_id', teamMemberId);
-            } else {
-              // LO not linked to any team member - show no leads
-              leadsQuery = leadsQuery.eq('id', '00000000-0000-0000-0000-000000000000');
-              metaQuery = metaQuery.eq('id', '00000000-0000-0000-0000-000000000000');
-            }
-          } else if (role === 'realtor') {
-            const teamMemberId = await getUserTeamMemberId(session.user.id, 'realtor');
-            if (teamMemberId) {
-              leadsQuery = leadsQuery.eq('realtor_id', teamMemberId);
-              metaQuery = metaQuery.eq('realtor_id', teamMemberId);
-            } else {
-              // Realtor not linked to any team member - show no leads
-              leadsQuery = leadsQuery.eq('id', '00000000-0000-0000-0000-000000000000');
-              metaQuery = metaQuery.eq('id', '00000000-0000-0000-0000-000000000000');
-            }
-          } else {
-            // Buyers and other roles see no leads - use impossible filter
-            leadsQuery = leadsQuery.eq('id', '00000000-0000-0000-0000-000000000000');
-            metaQuery = metaQuery.eq('id', '00000000-0000-0000-0000-000000000000');
-          }
-        }
-        // Admins and Super Admins see all leads (no filter)
-
-        const { data: leadsData, error: leadsError } = await leadsQuery;
-        const { data: metaData, error: metaError } = await metaQuery;
-
-        if (leadsError) {
-          console.error('Supabase leads error:', leadsError);
-        }
-
-        if (metaError) {
-          console.error('Supabase meta_ads error:', metaError);
-        }
-
-        const safeLeads = (leadsData || []) as Lead[];
-        const safeMeta = (metaData || []) as MetaLead[];
-
-        setLeads(safeLeads);
-        setMetaLeads(safeMeta);
-        loadScenarioShareStatuses(safeLeads, safeMeta).catch(() => undefined);
-
-        // Fetch AI attention data for all leads
-        const allLeadIds = [...safeLeads.map(l => l.id), ...safeMeta.map(l => l.id)];
-        if (allLeadIds.length > 0) {
-          console.log('[App] Fetching AI attention for', allLeadIds.length, 'leads');
-          fetchBatchAttention(allLeadIds)
-            .then(() => {
-              console.log('[App] AI attention fetch completed successfully');
-              // Force re-render after AI data loads
-              setAiDataLoaded(prev => prev + 1);
-            })
-            .catch((err) => {
-              console.error('[App] AI attention fetch error:', err);
-            });
-        }
-
-        setDebugInfo(
-          `leads: ${safeLeads.length} · meta: ${safeMeta.length}`
-        );
-
         // Fetch today's callbacks for the current user (only incomplete)
         if (session?.user?.id) {
           const todayStart = new Date();
@@ -550,47 +538,16 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           }
         }
 
-        // Fetch unread message counts for meta leads
-        if (safeMeta.length > 0) {
-          const leadIds = safeMeta.map(l => l.id);
-          const { data: unreadData, error: unreadError } = await supabase
-            .from('sms_messages')
-            .select('lead_id')
-            .in('lead_id', leadIds)
-            .eq('direction', 'inbound')
-            .is('read_at', null);
-          
-          console.log('📬 Unread messages query:', { unreadData, unreadError, leadIds: leadIds.length });
-          
-          if (!unreadError && unreadData) {
-            const counts: Record<string, number> = {};
-            unreadData.forEach(msg => {
-              if (msg.lead_id) {
-                counts[msg.lead_id] = (counts[msg.lead_id] || 0) + 1;
-              }
-            });
-            console.log('📬 Unread counts:', counts);
-            setUnreadMessageCounts(counts);
-          } else if (unreadError) {
-            console.error('📬 Unread messages error:', unreadError);
-          }
-        }
-
-        if (leadsError && metaError) {
-          setErrorMessage(
-            `Error reading both tables: leads(${leadsError.message}), meta_ads(${metaError.message})`
-          );
-        }
       } catch (e: any) {
         console.error('Unexpected error:', e);
-        setErrorMessage(e?.message || 'Unexpected error');
+        setInitialError(e?.message || 'Unexpected error');
       } finally {
-        setLoading(false);
+        setInitializing(false);
       }
     };
 
     init();
-  }, [session?.user?.id]);
+  }, [initializationAttempt, session?.user?.id]);
 
   // Subscribe to loan_officers table changes to update lead_eligible status in real-time
   useEffect(() => {
@@ -677,7 +634,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   // Subscribe to new SMS messages to refresh attention, while only inbound
   // unread messages update the unread counters.
   useEffect(() => {
-    if (metaLeads.length === 0) return;
+    if (!roleReady || userRole === 'buyer') return;
 
     const subscription = supabase
       .channel('sms_messages_realtime')
@@ -692,10 +649,14 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
           if (newMessage.lead_id && newMessage.direction === 'inbound' && !newMessage.read_at) {
             console.log('📬 New inbound SMS received for lead:', newMessage.lead_id);
-            setUnreadMessageCounts(prev => ({
-              ...prev,
-              [newMessage.lead_id!]: (prev[newMessage.lead_id!] || 0) + 1
-            }));
+            const current = leadDirectoryItemsRef.current.find(
+              (lead) => lead.id === newMessage.lead_id
+            );
+            if (current) {
+              updateLeadDirectoryItem(current.source, current.id, {
+                unread_sms_count: (Number(current.unread_sms_count) || 0) + 1,
+              });
+            }
           }
         }
       )
@@ -704,7 +665,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     return () => {
       subscription.unsubscribe();
     };
-  }, [metaLeads.length > 0, invalidateAttention]);
+  }, [
+    invalidateAttention,
+    roleReady,
+    updateLeadDirectoryItem,
+    userRole,
+  ]);
 
   // Handle notification tap to navigate to lead
   useEffect(() => {
@@ -730,33 +696,41 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   // If defaultToMyLeads is true, prefer 'leads' tab (My Leads / Website leads)
   useEffect(() => {
     if (!loading && !hasManuallySelectedTab) {
+      const organicCount = leadDirectory.facets?.organic ?? leads.length;
+      const metaCount = leadDirectory.facets?.meta ?? metaLeads.length;
       if (defaultToMyLeads) {
         // Default to My Leads (website/organic leads) when coming from bottom tab
         setActiveTab('leads');
-      } else if (metaLeads.length === 0 && leads.length > 0) {
+      } else if (metaCount === 0 && organicCount > 0) {
         setActiveTab('leads');
-      } else if (metaLeads.length > 0 && leads.length === 0) {
+      } else if (metaCount > 0 && organicCount === 0) {
         setActiveTab('meta');
-      } else if (metaLeads.length > 0 || leads.length > 0) {
+      } else if (metaCount > 0 || organicCount > 0) {
         // Both have leads or only meta has leads, default to 'all'
         setActiveTab('all');
       }
     }
-  }, [loading, leads.length, metaLeads.length, hasManuallySelectedTab, defaultToMyLeads]);
+  }, [
+    defaultToMyLeads,
+    hasManuallySelectedTab,
+    leadDirectory.facets?.meta,
+    leadDirectory.facets?.organic,
+    leads.length,
+    loading,
+    metaLeads.length,
+  ]);
 
   // Pull-to-refresh handler
   const onRefresh = async () => {
-    setRefreshing(true);
     if (!session?.user?.id || !session?.user?.email) {
-      setRefreshing(false);
       return;
     }
 
     try {
-      const userRole = await getUserRole(session.user.id, session.user.email);
-      
+      const currentRole = await getUserRole(session.user.id, session.user.email);
+
       // Refresh lead_eligible status for loan officers
-      if (userRole === 'loan_officer' && teamMemberId) {
+      if (currentRole === 'loan_officer' && teamMemberId) {
         const { data: loData } = await supabase
           .from('loan_officers')
           .select('lead_eligible')
@@ -768,90 +742,31 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           setLeadEligible(loData.lead_eligible ?? true);
         }
       }
-      
-      let leadsQuery = supabase
-        .from('leads')
-        .select(LEAD_SELECT_FIELDS)
-        .order('created_at', { ascending: false });
-
-      let metaQuery = supabase
-        .from('meta_ads')
-        .select('id, created_at, first_name, last_name, email, phone, status, last_contact_date, last_touched_at, ad_id, adset_name, platform, campaign_name, ad_name, subject_address, preferred_language, credit_range, income_type, purchase_timeline, price_range, down_payment_saved, has_realtor, additional_notes, source_detail, loan_purpose, county_interest, monthly_income, meta_ad_notes, form_data, metadata, raw, lo_id, realtor_id, is_tracked, tracking_reason, tracking_note, tracking_note_updated_at, referral_source_name, referral_source_email, last_referral_update_at, last_referral_update_summary')
-        .order('created_at', { ascending: false});
-
-      if (!canSeeAllLeads(userRole)) {
-        if (userRole === 'loan_officer') {
-          const teamMemberId = await getUserTeamMemberId(session.user.id, 'loan_officer');
-          if (teamMemberId) {
-            leadsQuery = leadsQuery.eq('lo_id', teamMemberId);
-            metaQuery = metaQuery.eq('lo_id', teamMemberId);
-          }
-        } else if (userRole === 'realtor') {
-          const teamMemberId = await getUserTeamMemberId(session.user.id, 'realtor');
-          if (teamMemberId) {
-            leadsQuery = leadsQuery.eq('realtor_id', teamMemberId);
-            metaQuery = metaQuery.eq('realtor_id', teamMemberId);
-          }
-        }
-      }
-
-      const { data: leadsData } = await leadsQuery;
-      const { data: metaData } = await metaQuery;
-
-      const safeLeads = (leadsData || []) as Lead[];
-      const safeMeta = (metaData || []) as MetaLead[];
-
-      setLeads(safeLeads);
-      setMetaLeads(safeMeta);
-      loadScenarioShareStatuses(safeLeads, safeMeta).catch(() => undefined);
-      setDebugInfo(`leads rows: ${safeLeads.length} · meta_ads rows: ${safeMeta.length}`);
-
-      // Refresh unread message counts
-      if (safeMeta.length > 0) {
-        const leadIds = safeMeta.map(l => l.id);
-        const { data: unreadData, error: unreadError } = await supabase
-          .from('sms_messages')
-          .select('lead_id')
-          .in('lead_id', leadIds)
-          .eq('direction', 'inbound')
-          .is('read_at', null);
-        
-        if (!unreadError && unreadData) {
-          const counts: Record<string, number> = {};
-          unreadData.forEach(msg => {
-            if (msg.lead_id) {
-              counts[msg.lead_id] = (counts[msg.lead_id] || 0) + 1;
-            }
-          });
-          setUnreadMessageCounts(counts);
-        }
-      }
 
       // Refresh today's callbacks as well
-      if (session?.user?.id) {
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        const todayEnd = new Date();
-        todayEnd.setHours(23, 59, 59, 999);
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+      const callbacksPromise = supabase
+        .from('lead_callbacks')
+        .select('id, scheduled_for, title, notes, lead_id, meta_ad_id')
+        .gte('scheduled_for', todayStart.toISOString())
+        .lte('scheduled_for', todayEnd.toISOString())
+        .eq('created_by', session.user.id)
+        .order('scheduled_for', { ascending: true });
 
-        const { data: callbacksData, error: callbacksError } = await supabase
-          .from('lead_callbacks')
-          .select('id, scheduled_for, title, notes, lead_id, meta_ad_id')
-          .gte('scheduled_for', todayStart.toISOString())
-          .lte('scheduled_for', todayEnd.toISOString())
-          .eq('created_by', session.user.id)
-          .order('scheduled_for', { ascending: true });
-
-        if (callbacksError) {
-          console.error('Error refreshing today callbacks:', callbacksError);
-        } else {
-          setTodayCallbacks(callbacksData || []);
-        }
+      const [, callbacksResult] = await Promise.all([
+        refreshLeadDirectory(),
+        callbacksPromise,
+      ]);
+      if (callbacksResult.error) {
+        console.error('Error refreshing today callbacks:', callbacksResult.error);
+      } else {
+        setTodayCallbacks(callbacksResult.data || []);
       }
     } catch (e) {
       console.error('Refresh error:', e);
-    } finally {
-      setRefreshing(false);
     }
   };
 
@@ -921,11 +836,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           return;
         }
 
-        setLeads((prev) =>
-          prev.map((l) =>
-            l.id === id ? { ...l, ...updateData } : l
-          )
-        );
+        updateDirectoryLead('lead', id, updateData);
         // Invalidate AI attention cache after status change
         invalidateAttention(id);
       } else {
@@ -957,11 +868,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           return;
         }
 
-        setMetaLeads((prev) =>
-          prev.map((m) =>
-            m.id === id ? { ...m, ...updateData } : m
-          )
-        );
+        updateDirectoryLead('meta', id, updateData);
         // Invalidate AI attention cache after status change
         invalidateAttention(id);
       }
@@ -983,12 +890,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     
     if (!error) {
       console.log('📬 Messages marked as read successfully');
-      // Update local state to remove unread count
-      setUnreadMessageCounts(prev => {
-        const updated = { ...prev };
-        delete updated[leadId];
-        return updated;
-      });
+      const current = leadDirectory.items.find((lead) => lead.id === leadId);
+      if (current) {
+        updateLeadDirectoryItem(current.source, leadId, { unread_sms_count: 0 });
+      }
     } else {
       console.error('📬 Error marking messages as read:', error);
     }
@@ -1047,10 +952,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     triggerListAnimation();
     setActiveTab(tab);
     setHasManuallySelectedTab(true);
-
-    if (tab !== 'meta' && unreadFilter) {
-      setUnreadFilter(false);
-    }
   };
 
   // Save new lead function
@@ -1146,7 +1047,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           source_detail: newLead.referral_source.trim() || null,
         };
         console.log('✅ Adding to state with source:', savedLead.source);
-        setLeads(prev => [savedLead, ...prev]);
+        upsertDirectoryLead('lead', savedLead);
         
         // Reset form and close modal
         setNewLead({
@@ -1190,7 +1091,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               if (error) throw error;
 
               // Remove from local state
-              setLeads(prev => prev.filter(l => l.id !== leadId));
+              removeDirectoryLead('organic', leadId);
               Alert.alert('Success', 'Lead deleted successfully.');
             } catch (e: any) {
               console.error('Unexpected error deleting lead:', e);
@@ -1310,9 +1211,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         
         // Update local state
         if (source === 'meta') {
-          setMetaLeads(prev => prev.map(l => l.id === leadId ? { ...l, last_contact_date: now } : l));
+          updateDirectoryLead('meta', leadId, { last_contact_date: now });
         } else {
-          setLeads(prev => prev.map(l => l.id === leadId ? { ...l, last_contact_date: now } : l));
+          updateDirectoryLead('lead', leadId, { last_contact_date: now });
         }
         
         // Invalidate AI attention cache
@@ -1333,27 +1234,22 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   // Search filter function
   const matchesSearch = (lead: Lead | MetaLead) => {
-    if (!searchQuery.trim()) return true;
-    
-    const query = searchQuery.toLowerCase();
-    const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(' ').toLowerCase();
-    const email = lead.email?.toLowerCase() || '';
-    const phone = lead.phone?.toLowerCase() || '';
-    
-    if (fullName.includes(query) || email.includes(query) || phone.includes(query)) return true;
+    const query = searchQuery.trim().toLowerCase();
+    if (!query || query.length >= 2) return true;
 
-    // Also search co-borrower names and phones (regular leads only)
-    const coBorrowers = (lead as Lead).metadata?.co_borrowers;
-    if (coBorrowers && coBorrowers.length > 0) {
-      for (const cb of coBorrowers) {
-        const cbName = [cb.first_name, cb.last_name].filter(Boolean).join(' ').toLowerCase();
-        const cbPhone = cb.phone?.toLowerCase() || '';
-        const cbEmail = cb.email?.toLowerCase() || '';
-        if (cbName.includes(query) || cbPhone.includes(query) || cbEmail.includes(query)) return true;
-      }
-    }
-
-    return false;
+    // The endpoint intentionally ignores one-character searches. Preserve the
+    // existing quick filter for the currently loaded page without issuing a
+    // wider read; two-character and longer searches remain server-owned so
+    // related-contact and co-borrower matches are not discarded locally.
+    const fullName = [lead.first_name, lead.last_name]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return (
+      fullName.includes(query) ||
+      (lead.email?.toLowerCase() || '').includes(query) ||
+      (lead.phone?.toLowerCase() || '').includes(query)
+    );
   };
 
   // LO filter function (for super admins only)
@@ -1376,10 +1272,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   // Attention filter: when enabled, only show leads with an attention badge
   const matchesAttentionFilter = (lead: Lead | MetaLead) => {
     if (!attentionFilter) return true;
-    // Use AI attention if available, fallback to rule-based
-    const aiAttention = attentionMap.get(lead.id);
-    if (aiAttention) return aiAttention.needsAttention;
-    return getLeadAlert(lead) !== null;
+    return lead.needs_attention === true;
   };
 
   // Tracked filter: when enabled, only show tracked leads
@@ -1391,7 +1284,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   // Unread messages filter: when enabled, only show leads with unread messages
   const matchesUnreadFilter = (lead: Lead | MetaLead) => {
     if (!unreadFilter) return true;
-    return (unreadMessageCounts[lead.id] || 0) > 0;
+    return (Number(lead.unread_sms_count) || 0) > 0;
   };
 
   // Source filter (for super admins only)
@@ -1416,12 +1309,19 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const attentionMatch = matchesAttentionFilter(lead);
     const sourceMatch = matchesSourceFilter(lead);
     const trackedMatch = matchesTrackedFilter(lead);
+    const unreadMatch = matchesUnreadFilter(lead);
 
-    return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch && trackedMatch;
+    return statusMatch
+      && searchMatch
+      && loMatch
+      && attentionMatch
+      && sourceMatch
+      && trackedMatch
+      && unreadMatch;
   };
 
   const matchesMetaLeadList = (lead: MetaLead) => {
-    return matchesLeadListBase(lead) && matchesUnreadFilter(lead);
+    return matchesLeadListBase(lead);
   };
 
   const formatLeadListTimestamp = (lead: Lead | MetaLead) => {
@@ -1438,53 +1338,29 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     });
   };
 
-  const loadScenarioShareStatuses = async (leadRows: Lead[], metaRows: MetaLead[]) => {
-    if (!session?.access_token) {
-      setScenarioShareStatuses({});
-      return;
-    }
-
-    const requestedLeads = [
-      ...leadRows.map((lead) => ({ id: lead.id, source: 'organic' as const, status: lead.status || null })),
-      ...metaRows.map((lead) => ({ id: lead.id, source: 'meta' as const, status: lead.status || null })),
-    ];
-
-    if (requestedLeads.length === 0) {
-      setScenarioShareStatuses({});
-      return;
-    }
-
-    try {
-      const response = await fetch(`${CRM_API_BASE_URL}/api/leads/shared-scenarios`, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ leads: requestedLeads }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload?.error || `Shared scenario request failed (${response.status})`);
-      }
-      setScenarioShareStatuses(payload?.statuses && typeof payload.statuses === 'object' ? payload.statuses : {});
-      setScenarioActivityClock(Date.now());
-    } catch (error) {
-      console.warn('[App] Failed to load shared scenario statuses:', error);
-    }
-  };
-
-  const getScenarioViewingLabel = (source: 'organic' | 'meta', id: string) => {
-    const status = scenarioShareStatuses[getScenarioShareStatusKey(source, id)];
-    const buyerViewing = isScenarioShareViewingNow(status?.borrower || null, scenarioActivityClock);
-    const partnerViewing = isScenarioShareViewingNow(status?.realtor || null, scenarioActivityClock);
-
-    if (buyerViewing && partnerViewing) return 'Buyer + partner viewing';
-    if (buyerViewing) return 'Buyer viewing now';
-    if (partnerViewing) return 'Partner viewing now';
+  const getScenarioViewingLabel = (lead: Lead | MetaLead) => {
+    const buyerActive = lead.has_active_borrower_scenario === true;
+    const partnerActive = lead.has_active_realtor_scenario === true;
+    if (buyerActive && partnerActive) return 'Buyer + partner scenarios active';
+    if (buyerActive) return 'Buyer scenario active';
+    if (partnerActive) return 'Partner scenario active';
     return null;
   };
+
+  const getLeadAttention = (lead: Lead | MetaLead) =>
+    attentionMap.get(lead.id)
+    || (lead.attention_badge || lead.needs_attention
+      ? {
+          leadId: lead.id,
+          needsAttention: lead.needs_attention === true,
+          priority: Number(lead.attention_priority) || 5,
+          badge: lead.attention_badge || '',
+          reason: lead.attention_reason || '',
+          suggestedAction: lead.attention_suggested_action || '',
+          fromCache: true,
+          loading: false,
+        }
+      : null);
 
   const renderLeadItem = ({ item }: { item: Lead }) => {
     const fullName =
@@ -1495,13 +1371,14 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const statusColors = STATUS_COLOR_MAP[status] || STATUS_COLOR_MAP['new'];
     const emailOrPhone = item.email || item.phone || 'No contact info';
     // Use AI attention if available, fallback to rule-based
-    const aiAttention = attentionMap.get(item.id);
+    const aiAttention = getLeadAttention(item);
     const alert = aiAttention?.badge 
       ? { label: aiAttention.badge, color: aiAttention.priority <= 2 ? '#EF4444' : aiAttention.priority <= 4 ? '#F59E0B' : '#22C55E' }
       : getLeadAlert(item);
     const borderColor = alert ? alert.color : '#7C3AED';
-    const isUnread = (unreadMessageCounts[item.id] || 0) > 0;
-    const scenarioViewingLabel = getScenarioViewingLabel('organic', item.id);
+    const unreadCount = Number(item.unread_sms_count) || 0;
+    const isUnread = unreadCount > 0;
+    const scenarioViewingLabel = getScenarioViewingLabel(item);
     // Priority dot color for lead list (green for priority 5 = "On Track")
     const getPriorityDotColor = () => {
       if (aiAttention?.badge) {
@@ -1580,8 +1457,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               {isUnread && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, marginLeft: 8 }}>
                   <Ionicons name="chatbubble-ellipses" size={12} color="#2563EB" />
-                  {(unreadMessageCounts[item.id] || 0) > 1 && (
-                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#2563EB', marginLeft: 3 }}>{unreadMessageCounts[item.id]}</Text>
+                  {unreadCount > 1 && (
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#2563EB', marginLeft: 3 }}>{unreadCount}</Text>
                   )}
                 </View>
               )}
@@ -1655,16 +1532,17 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const platform = item.platform || 'Facebook';
     const campaign = item.campaign_name || '';
     // Use AI attention if available, fallback to rule-based
-    const aiAttention = attentionMap.get(item.id);
+    const aiAttention = getLeadAttention(item);
     const alert = aiAttention?.badge 
       ? { label: aiAttention.badge, color: aiAttention.priority <= 2 ? '#EF4444' : aiAttention.priority <= 4 ? '#F59E0B' : '#22C55E' }
       : getLeadAlert(item);
     const borderColor = alert ? alert.color : '#7C3AED';
     const statusColors =
       STATUS_COLOR_MAP[item.status || 'new'] || STATUS_COLOR_MAP['new'];
-    const hasUnreadMessages = (unreadMessageCounts[item.id] || 0) > 0;
+    const unreadCount = Number(item.unread_sms_count) || 0;
+    const hasUnreadMessages = unreadCount > 0;
     const isUnread = hasUnreadMessages;
-    const scenarioViewingLabel = getScenarioViewingLabel('meta', item.id);
+    const scenarioViewingLabel = getScenarioViewingLabel(item);
     // Priority dot color for lead list (green for priority 5 = "On Track")
     const getPriorityDotColor = () => {
       if (aiAttention?.badge) {
@@ -1769,8 +1647,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               {isUnread && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, marginLeft: 8 }}>
                   <Ionicons name="chatbubble-ellipses" size={12} color="#2563EB" />
-                  {(unreadMessageCounts[item.id] || 0) > 1 && (
-                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#2563EB', marginLeft: 3 }}>{unreadMessageCounts[item.id]}</Text>
+                  {unreadCount > 1 && (
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#2563EB', marginLeft: 3 }}>{unreadCount}</Text>
                   )}
                 </View>
               )}
@@ -1939,28 +1817,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         selected={selectedLead}
         leads={filteredLeads}
         metaLeads={filteredMetaLeads}
-        onBack={async () => {
+        onBack={() => {
           setSelectedLead(null);
           setNotificationTargetTab(null); // Reset notification target
           setNotificationTargetLead(null);
           refreshTodayCallbacks(); // Refresh callbacks when returning to dashboard
-          // Refresh unread counts
-          if (metaLeads.length > 0) {
-            const leadIds = metaLeads.map(l => l.id);
-            const { data: unreadData } = await supabase
-              .from('sms_messages')
-              .select('lead_id')
-              .in('lead_id', leadIds)
-              .eq('direction', 'inbound')
-              .is('read_at', null);
-            if (unreadData) {
-              const counts: Record<string, number> = {};
-              unreadData.forEach(msg => {
-                if (msg.lead_id) counts[msg.lead_id] = (counts[msg.lead_id] || 0) + 1;
-              });
-              setUnreadMessageCounts(counts);
-            }
-          }
+          void refreshLeadDirectory();
         }}
         onNavigate={(leadRef) => openLeadFromSelection(leadRef)}
         onStatusChange={handleStatusChange}
@@ -1978,7 +1840,14 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         }}
         onMarkMessagesRead={markMessagesAsRead}
         onInvalidateAttention={invalidateAttention}
-        aiAttention={attentionMap.get(selectedLead.id) || null}
+        aiAttention={
+          getLeadAttention(
+            (selectedLead.source === 'lead'
+              ? leads.find((lead) => lead.id === selectedLead.id)
+              : metaLeads.find((lead) => lead.id === selectedLead.id))
+              ?? ({ id: selectedLead.id } as Lead)
+          )
+        }
         onNavigateToCapture={onNavigateToCapture}
         onDeleteLead={async (leadId: string) => {
           // Clear any quick_captures referencing this lead before deleting
@@ -2001,39 +1870,15 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           
           // Remove from local state
           LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-          setLeads(prev => prev.filter(lead => lead.id !== leadId));
+          removeDirectoryLead('organic', leadId);
         }}
         onLeadUpdate={(updatedLead, source) => {
           console.log('🔄 onLeadUpdate called:', { source, leadId: updatedLead.id, last_contact_date: updatedLead.last_contact_date });
-          if (source === 'lead') {
-            setLeads(prevLeads => {
-              console.log('📝 Updating leads array, previous count:', prevLeads.length);
-              const updated = prevLeads.map(l => {
-                if (l.id === updatedLead.id) {
-                  console.log('✅ Found matching lead, updating:', l.id);
-                  console.log('   Old last_contact_date:', l.last_contact_date);
-                  console.log('   New last_contact_date:', updatedLead.last_contact_date);
-                  return { ...l, ...updatedLead } as Lead;
-                }
-                return l;
-              });
-              return updated;
-            });
-          } else {
-            setMetaLeads(prevMetaLeads => {
-              console.log('📝 Updating metaLeads array, previous count:', prevMetaLeads.length);
-              const updated = prevMetaLeads.map(l => {
-                if (l.id === updatedLead.id) {
-                  console.log('✅ Found matching meta lead, updating:', l.id);
-                  console.log('   Old last_contact_date:', l.last_contact_date);
-                  console.log('   New last_contact_date:', updatedLead.last_contact_date);
-                  return { ...l, ...updatedLead } as MetaLead;
-                }
-                return l;
-              });
-              return updated;
-            });
-          }
+          updateDirectoryLead(
+            source,
+            updatedLead.id,
+            toCrmLeadSummary(source, updatedLead)
+          );
         }}
       />
     );
@@ -2049,27 +1894,39 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const activeFilteredLeads = filteredLeads.filter(l => l.status !== 'unqualified');
     const activeFilteredMetaLeads = filteredMetaLeads.filter(l => l.status !== 'unqualified');
     
-    const totalLeads = activeFilteredLeads.length + activeFilteredMetaLeads.length;
-    const metaLeadsCount = activeFilteredMetaLeads.length;
-    const organicLeadsCount = activeFilteredLeads.length;
-    const newLeads = [...activeFilteredLeads, ...activeFilteredMetaLeads].filter(l => l.status === 'new').length;
-    const qualifiedLeads = [...activeFilteredLeads, ...activeFilteredMetaLeads].filter(l => l.status === 'qualified').length;
-    const closedLeads = [...activeFilteredLeads, ...activeFilteredMetaLeads].filter(l => l.status === 'closed').length;
+    const facets = leadDirectory.facets;
+    const totalLeads = facets
+      ? Math.max(0, facets.total - (facets.statuses.unqualified || 0))
+      : activeFilteredLeads.length + activeFilteredMetaLeads.length;
+    const metaLeadsCount = facets?.meta ?? activeFilteredMetaLeads.length;
+    const organicLeadsCount = facets?.organic ?? activeFilteredLeads.length;
+    const newLeads =
+      facets?.statuses.new
+      ?? [...activeFilteredLeads, ...activeFilteredMetaLeads].filter(l => l.status === 'new').length;
+    const qualifiedLeads =
+      facets?.statuses.qualified
+      ?? [...activeFilteredLeads, ...activeFilteredMetaLeads].filter(l => l.status === 'qualified').length;
+    const closedLeads =
+      facets?.statuses.closed
+      ?? [...activeFilteredLeads, ...activeFilteredMetaLeads].filter(l => l.status === 'closed').length;
     
     // Separate count for unqualified leads
-    const unqualifiedLeads = [...filteredLeads, ...filteredMetaLeads].filter(l => l.status === 'unqualified').length;
-    const unreadMessagesCount = Object.values(unreadMessageCounts).reduce((a, b) => a + b, 0);
-    const trackedLeadsCount = [...leads, ...metaLeads].filter(l => l.is_tracked).length;
+    const unqualifiedLeads =
+      facets?.statuses.unqualified
+      ?? [...filteredLeads, ...filteredMetaLeads].filter(l => l.status === 'unqualified').length;
+    const unreadMessagesCount =
+      unreadConversationCount;
+    const trackedLeadsCount =
+      facets?.tracked
+      ?? [...leads, ...metaLeads].filter(l => l.is_tracked).length;
     const callbacksDueToday = todayCallbacks.length;
 
     // Leads that currently have an attention badge (AI-powered with fallback)
-    const attentionLeadsCount = [...activeFilteredLeads, ...activeFilteredMetaLeads]
-      .filter(l => {
-        const aiAttention = attentionMap.get(l.id);
-        if (aiAttention) return aiAttention.needsAttention;
-        return !!getLeadAlert(l);
-      })
-      .length;
+    const attentionLeadsCount =
+      facets?.needsAttention
+      ?? [...activeFilteredLeads, ...activeFilteredMetaLeads]
+        .filter((lead) => getLeadAttention(lead)?.needsAttention || !!getLeadAlert(lead))
+        .length;
     
     // Get recent leads (last 5) - exclude unqualified
     // Use _tableType to distinguish between leads/meta_ads without overwriting the source field
@@ -2134,7 +1991,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               value: unreadMessagesCount,
               label: 'Unread',
               tone: styles.dashboardHeroCardBlue,
-              onPress: () => openDashboardList({ tab: 'meta', unread: true }),
+              onPress: () => openDashboardList({ tab: 'all', unread: true }),
             }
           : {
               key: 'new',
@@ -2327,13 +2184,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   onPress={() => {
                     setShowDashboard(false);
                     setSelectedStatusFilter('all');
-                    setActiveTab('meta'); // Unread messages are only for meta leads
+                    setActiveTab('all');
                     setUnreadFilter(true);
                   }}
                   style={{ position: 'relative' }}
                 >
                   <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
-                  {Object.values(unreadMessageCounts).reduce((a, b) => a + b, 0) > 0 && (
+                  {unreadConversationCount > 0 && (
                     <View style={{
                       position: 'absolute',
                       top: -4,
@@ -2347,9 +2204,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                       paddingHorizontal: 4,
                     }}>
                       <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
-                        {Object.values(unreadMessageCounts).reduce((a, b) => a + b, 0) > 99 
+                        {unreadConversationCount > 99
                           ? '99+' 
-                          : Object.values(unreadMessageCounts).reduce((a, b) => a + b, 0)}
+                          : unreadConversationCount}
                       </Text>
                     </View>
                   )}
@@ -2847,8 +2704,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     );
   }
 
-  const hasLeads = leads.length > 0;
-  const hasMetaLeads = metaLeads.length > 0;
+  const hasLeads = (leadDirectory.facets?.organic ?? 0) > 0 || leads.length > 0;
+  const hasMetaLeads = (leadDirectory.facets?.meta ?? 0) > 0 || metaLeads.length > 0;
   const filteredWebsiteLeads = sortLeadsByLastTouchedDesc(
     leads.filter(matchesLeadListBase)
   );
@@ -2859,7 +2716,33 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     ...filteredMetaListLeads.map((lead) => ({ ...lead, _tableType: 'meta' as const })),
     ...filteredWebsiteLeads.map((lead) => ({ ...lead, _tableType: 'lead' as const })),
   ]);
-  const totalVisibleLeadCount = filteredWebsiteLeads.length + filteredMetaListLeads.length;
+  const totalVisibleLeadCount = leadDirectory.totalCount;
+  const renderLeadListFooter = () => {
+    if (leadDirectory.loadingMore) {
+      return <ActivityIndicator style={{ padding: 20 }} />;
+    }
+    if (leadDirectory.error && leadDirectory.items.length > 0) {
+      return (
+        <TouchableOpacity
+          style={{ alignSelf: 'center', paddingHorizontal: 18, paddingVertical: 14 }}
+          onPress={() => void retryLeadDirectory()}
+        >
+          <Text style={{ color: '#7C3AED', fontWeight: '700' }}>
+            Could not update leads. Retry
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+    return null;
+  };
+  const renderLeadListEmpty = () => (
+    <View style={{ alignItems: 'center', paddingHorizontal: 24, paddingVertical: 48 }}>
+      <Ionicons name="search-outline" size={36} color="#94A3B8" />
+      <Text style={{ marginTop: 10, color: '#64748B', textAlign: 'center' }}>
+        No leads match the current search and filters.
+      </Text>
+    </View>
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -2976,13 +2859,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             <TouchableOpacity 
               onPress={() => {
                 setSelectedStatusFilter('all');
-                setActiveTab('meta'); // Unread messages are only for meta leads
+                setActiveTab('all');
                 setUnreadFilter(true);
               }}
               style={{ position: 'relative' }}
             >
               <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
-              {Object.values(unreadMessageCounts).reduce((a, b) => a + b, 0) > 0 && (
+              {unreadConversationCount > 0 && (
                 <View style={{
                   position: 'absolute',
                   top: -4,
@@ -2996,9 +2879,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   paddingHorizontal: 4,
                 }}>
                   <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
-                    {Object.values(unreadMessageCounts).reduce((a, b) => a + b, 0) > 99 
+                    {unreadConversationCount > 99
                       ? '99+' 
-                      : Object.values(unreadMessageCounts).reduce((a, b) => a + b, 0)}
+                      : unreadConversationCount}
                   </Text>
                 </View>
               )}
@@ -3028,32 +2911,39 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       {loading && (
         <View style={styles.centerContent}>
           <ActivityIndicator />
-          <Text style={styles.subtitle}>Loading data from Supabase…</Text>
+          <Text style={styles.subtitle}>Loading leads…</Text>
         </View>
       )}
 
-      {!loading && errorMessage && (
+      {!loading && errorMessage && leadDirectory.items.length === 0 && (
         <View style={styles.centerContent}>
           <Text style={styles.errorText}>Error: {errorMessage}</Text>
+          <TouchableOpacity
+            style={{ marginTop: 14, borderRadius: 10, backgroundColor: '#7C3AED', paddingHorizontal: 18, paddingVertical: 10 }}
+            onPress={() => {
+              if (initialError) {
+                setInitializationAttempt((attempt) => attempt + 1);
+              } else {
+                void retryLeadDirectory();
+              }
+            }}
+          >
+            <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Retry</Text>
+          </TouchableOpacity>
         </View>
       )}
 
-      {!loading && !errorMessage && !hasLeads && !hasMetaLeads && (
-        <View style={styles.centerContent}>
-          <Text style={styles.subtitle}>
-            No rows found in "leads" or "meta_ads".
-          </Text>
-        </View>
-      )}
-
-      {!loading && !errorMessage && (hasLeads || hasMetaLeads) && (
+      {!loading
+        && (leadDirectory.items.length > 0 || !errorMessage)
+        && roleReady
+        && userRole !== 'buyer' && (
         <>
           <View style={styles.listUtilityPanel}>
             <View style={styles.listTabBar}>
               {[
                 { key: 'all' as const, label: 'All', count: totalVisibleLeadCount },
-                { key: 'leads' as const, label: 'My Leads', count: filteredWebsiteLeads.length },
-                { key: 'meta' as const, label: 'Meta Ads', count: filteredMetaListLeads.length },
+                { key: 'leads' as const, label: 'My Leads', count: leadDirectory.facets?.organic ?? filteredWebsiteLeads.length },
+                { key: 'meta' as const, label: 'Meta Ads', count: leadDirectory.facets?.meta ?? filteredMetaListLeads.length },
               ].map((tab) => {
                 const isActive = activeTab === tab.key;
                 return (
@@ -3145,7 +3035,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   const nextUnreadFilter = !unreadFilter;
                   setUnreadFilter(nextUnreadFilter);
                   if (nextUnreadFilter) {
-                    handleSelectLeadListTab('meta');
+                    handleSelectLeadListTab('all');
                   }
                 }}
               >
@@ -3238,7 +3128,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           )}
 
           {/* No Unread Messages State */}
-          {unreadFilter && Object.values(unreadMessageCounts).reduce((a, b) => a + b, 0) === 0 && (
+          {unreadFilter && unreadConversationCount === 0 && (
             <View style={{ 
               alignItems: 'center', 
               paddingVertical: 40,
@@ -3318,14 +3208,32 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                       <Text style={[
                         styles.statusPickerItemCount,
                         selectedStatusFilter === 'all' && styles.statusPickerItemCountActive,
-                      ]}>({[...leads, ...metaLeads].filter(l => matchesLOFilter(l) && l.status !== 'unqualified').length})</Text>
+                      ]}>({
+                        selectedLOFilter === null && leadDirectory.facets
+                          ? Math.max(
+                              0,
+                              leadDirectory.facets.total
+                                - (leadDirectory.facets.statuses.unqualified || 0)
+                            )
+                          : [...leads, ...metaLeads].filter(
+                              (lead) => matchesLOFilter(lead) && lead.status !== 'unqualified'
+                            ).length
+                      })</Text>
                     </View>
                     {selectedStatusFilter === 'all' && (
                       <Text style={styles.statusPickerCheck}>✓</Text>
                     )}
                   </TouchableOpacity>
                   {STATUSES.map((status) => {
-                    const count = [...leads, ...metaLeads].filter(l => l.status === status && matchesLOFilter(l)).length;
+                    const count =
+                      selectedLOFilter === null
+                        ? leadDirectory.facets?.statuses[status]
+                          ?? [...leads, ...metaLeads].filter(
+                            (lead) => lead.status === status && matchesLOFilter(lead)
+                          ).length
+                        : [...leads, ...metaLeads].filter(
+                          (lead) => lead.status === status && matchesLOFilter(lead)
+                        ).length;
                     return (
                       <TouchableOpacity
                         key={status}
@@ -3523,7 +3431,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                         <Text style={[
                           styles.statusPickerItemCount,
                           selectedSourceFilter === 'all' && styles.statusPickerItemCountActive,
-                        ]}>({metaLeads.length + leads.length})</Text>
+                        ]}>({leadDirectory.searchTotal || metaLeads.length + leads.length})</Text>
                       </View>
                       {selectedSourceFilter === 'all' && (
                         <Text style={styles.statusPickerCheck}>✓</Text>
@@ -3533,7 +3441,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                     {/* Individual Sources */}
                     {uniqueSources.map((source) => {
                       // Calculate count for this source
-                      const count = [...metaLeads, ...leads].filter(l => {
+                      const loadedCount = [...metaLeads, ...leads].filter(l => {
                          // Check if lead matches current status and LO filters
                          const statusMatch = selectedStatusFilter === 'all' ? l.status !== 'unqualified' : l.status === selectedStatusFilter;
                          const loMatch = matchesLOFilter(l);
@@ -3546,6 +3454,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                                      (l as Lead).source;
                          return src === source;
                       }).length;
+                      const count = leadDirectory.facets?.ads[source] ?? loadedCount;
                       
                       return (
                         <TouchableOpacity
@@ -3595,13 +3504,18 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       )}
 
       {/* Lead Content - FlatLists for each tab */}
-      {activeTab === 'leads' && hasLeads && (
+      {!loading
+        && (leadDirectory.items.length > 0 || !errorMessage)
+        && roleReady
+        && userRole !== 'buyer'
+        && activeTab === 'leads' && (
         <Animated.View style={animatedListStyle}>
           <Animated.FlatList
             data={filteredWebsiteLeads}
             renderItem={renderLeadItem}
             keyExtractor={(item) => item.id}
-            extraData={aiDataLoaded}
+            extraData={attentionMap}
+            ListEmptyComponent={renderLeadListEmpty}
             contentContainerStyle={styles.listContent}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -3612,17 +3526,25 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               { useNativeDriver: false }
             )}
             scrollEventThrottle={16}
+            onEndReached={() => void loadMoreDirectoryLeads()}
+            onEndReachedThreshold={0.4}
+            ListFooterComponent={renderLeadListFooter}
           />
         </Animated.View>
       )}
 
-      {activeTab === 'meta' && hasMetaLeads && (
+      {!loading
+        && (leadDirectory.items.length > 0 || !errorMessage)
+        && roleReady
+        && userRole !== 'buyer'
+        && activeTab === 'meta' && (
         <Animated.View style={animatedListStyle}>
           <Animated.FlatList
             data={filteredMetaListLeads}
             renderItem={renderMetaLeadItem}
             keyExtractor={(item) => item.id}
-            extraData={aiDataLoaded}
+            extraData={attentionMap}
+            ListEmptyComponent={renderLeadListEmpty}
             contentContainerStyle={styles.listContent}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -3633,11 +3555,18 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               { useNativeDriver: false }
             )}
             scrollEventThrottle={16}
+            onEndReached={() => void loadMoreDirectoryLeads()}
+            onEndReachedThreshold={0.4}
+            ListFooterComponent={renderLeadListFooter}
           />
         </Animated.View>
       )}
 
-      {activeTab === 'all' && (hasLeads || hasMetaLeads) && (
+      {!loading
+        && (leadDirectory.items.length > 0 || !errorMessage)
+        && roleReady
+        && userRole !== 'buyer'
+        && activeTab === 'all' && (
         <Animated.View style={animatedListStyle}>
           <Animated.FlatList
             data={allVisibleLeads}
@@ -3648,7 +3577,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               return renderLeadItem({ item });
             }}
             keyExtractor={(item) => `${item._tableType}-${item.id}`}
-            extraData={aiDataLoaded}
+            extraData={attentionMap}
+            ListEmptyComponent={renderLeadListEmpty}
             contentContainerStyle={styles.listContent}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
@@ -3659,6 +3589,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               { useNativeDriver: false }
             )}
             scrollEventThrottle={16}
+            onEndReached={() => void loadMoreDirectoryLeads()}
+            onEndReachedThreshold={0.4}
+            ListFooterComponent={renderLeadListFooter}
           />
         </Animated.View>
       )}

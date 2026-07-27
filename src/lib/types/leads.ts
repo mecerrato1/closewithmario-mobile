@@ -107,6 +107,14 @@ export type Lead = {
   // Metadata (JSONB) — contains co-borrowers from XML imports
   metadata?: LeadMetadata | null;
   raw?: Record<string, unknown> | null;
+  unread_sms_count?: number | null;
+  needs_attention?: boolean | null;
+  attention_badge?: string | null;
+  attention_priority?: number | null;
+  attention_reason?: string | null;
+  attention_suggested_action?: string | null;
+  has_active_borrower_scenario?: boolean | null;
+  has_active_realtor_scenario?: boolean | null;
 };
 
 export type MetaLead = {
@@ -155,6 +163,14 @@ export type MetaLead = {
   referral_source_email?: string | null;
   last_referral_update_at?: string | null;
   last_referral_update_summary?: string | null;
+  unread_sms_count?: number | null;
+  needs_attention?: boolean | null;
+  attention_badge?: string | null;
+  attention_priority?: number | null;
+  attention_reason?: string | null;
+  attention_suggested_action?: string | null;
+  has_active_borrower_scenario?: boolean | null;
+  has_active_realtor_scenario?: boolean | null;
 };
 
 export type SelectedLeadRef =
@@ -203,6 +219,7 @@ export type Activity = {
   created_by?: string;
   user_email?: string;
   audio_url?: string | null; // 👈 NEW - for voice notes
+  has_audio?: boolean;
   body?: string | null; // Email body from inbound emails
   subject?: string | null;
   from_email?: string | null;

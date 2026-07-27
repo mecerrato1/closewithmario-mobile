@@ -40,12 +40,17 @@ export default function RealtorsListScreen({
   const {
     realtors,
     loading,
+    loadingMore,
     refreshing,
+    hasMore,
+    loadedCount,
     error,
     searchQuery,
     setSearchQuery,
     stageFilter,
     setStageFilter,
+    loadMore,
+    retry,
     onRefresh,
   } = useRealtors({ userId, userRole });
 
@@ -70,20 +75,26 @@ export default function RealtorsListScreen({
               style={[styles.filterTab, isSelected && styles.filterTabActive]}
               onPress={() => setStageFilter(option.key)}
             >
-              <Text style={[
-                styles.filterTabText,
-                { color: isSelected ? PLUM : colors.textSecondary },
-              ]}>
+              <Text
+                style={[
+                  styles.filterTabText,
+                  { color: isSelected ? PLUM : colors.textSecondary },
+                ]}
+              >
                 {option.label}
               </Text>
             </TouchableOpacity>
           );
         })}
-        <TouchableOpacity 
-          style={styles.infoButton} 
+        <TouchableOpacity
+          style={styles.infoButton}
           onPress={() => setShowStageInfo(true)}
         >
-          <Ionicons name="information-circle-outline" size={20} color={colors.textSecondary} />
+          <Ionicons
+            name="information-circle-outline"
+            size={20}
+            color={colors.textSecondary}
+          />
         </TouchableOpacity>
       </View>
     </View>
@@ -119,13 +130,20 @@ export default function RealtorsListScreen({
     <RealtorCard realtor={item} onPress={() => onRealtorPress(item)} />
   );
 
+  const displayedCount =
+    searchQuery || stageFilter !== 'all' ? realtors.length : loadedCount;
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: PLUM }]}>
         <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Realtors{' '}
-            <Text style={styles.headerCount}>({realtors.length})</Text>
+          <Text style={styles.headerTitle}>
+            Realtors{' '}
+            <Text style={styles.headerCount}>
+              ({displayedCount}
+              {hasMore ? '+' : ''})
+            </Text>
           </Text>
           <View style={styles.headerActions}>
             <TouchableOpacity style={styles.addButton} onPress={onAddPress}>
@@ -140,7 +158,12 @@ export default function RealtorsListScreen({
         </View>
 
         {/* Search Bar */}
-        <View style={[styles.searchContainer, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
+        <View
+          style={[
+            styles.searchContainer,
+            { backgroundColor: 'rgba(255,255,255,0.15)' },
+          ]}
+        >
           <Ionicons name="search" size={18} color="rgba(255,255,255,0.7)" />
           <TextInput
             style={styles.searchInput}
@@ -155,7 +178,11 @@ export default function RealtorsListScreen({
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={18} color="rgba(255,255,255,0.7)" />
+              <Ionicons
+                name="close-circle"
+                size={18}
+                color="rgba(255,255,255,0.7)"
+              />
             </TouchableOpacity>
           )}
         </View>
@@ -163,10 +190,14 @@ export default function RealtorsListScreen({
 
       {/* Error State */}
       {error && (
-        <View style={[styles.errorBanner, { backgroundColor: '#FEE2E2' }]}>
+        <TouchableOpacity
+          style={[styles.errorBanner, { backgroundColor: '#FEE2E2' }]}
+          onPress={() => void retry()}
+        >
           <Ionicons name="alert-circle" size={18} color="#DC2626" />
           <Text style={styles.errorText}>{error}</Text>
-        </View>
+          <Text style={styles.retryText}>Retry</Text>
+        </TouchableOpacity>
       )}
 
       {/* Loading State */}
@@ -184,7 +215,25 @@ export default function RealtorsListScreen({
           renderItem={renderItem}
           ListHeaderComponent={renderHeader}
           ListEmptyComponent={renderEmptyState}
-          contentContainerStyle={realtors.length === 0 ? styles.emptyList : styles.list}
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.footerLoading}>
+                <ActivityIndicator size="small" color={PLUM} />
+              </View>
+            ) : hasMore && !error ? (
+              <TouchableOpacity
+                style={styles.footerLoading}
+                onPress={() => void loadMore()}
+              >
+                <Text style={styles.loadMoreText}>Load more realtors</Text>
+              </TouchableOpacity>
+            ) : null
+          }
+          contentContainerStyle={
+            realtors.length === 0 ? styles.emptyList : styles.list
+          }
+          onEndReached={() => void loadMore()}
+          onEndReachedThreshold={0.4}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -199,48 +248,85 @@ export default function RealtorsListScreen({
 
       {/* Stage Info Modal */}
       <Modal visible={showStageInfo} transparent animationType="fade">
-        <TouchableOpacity 
-          style={styles.modalOverlay} 
+        <TouchableOpacity
+          style={styles.modalOverlay}
           activeOpacity={1}
           onPress={() => setShowStageInfo(false)}
         >
-          <View style={[styles.modalContent, { backgroundColor: colors.cardBackground }]}>
-            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>Relationship Stages</Text>
-            <Text style={[styles.modalSubtitle, { color: colors.textSecondary }]}>
-              Stages are automatically updated based on lead assignments, but can be manually overridden in the realtor detail screen.
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: colors.cardBackground },
+            ]}
+          >
+            <Text style={[styles.modalTitle, { color: colors.textPrimary }]}>
+              Relationship Stages
             </Text>
-            
+            <Text
+              style={[styles.modalSubtitle, { color: colors.textSecondary }]}
+            >
+              Stages are automatically updated based on lead assignments, but
+              can be manually overridden in the realtor detail screen.
+            </Text>
+
             <View style={styles.stageExplanation}>
               <View style={[styles.stageDot, { backgroundColor: '#DC2626' }]} />
               <View style={styles.stageTextContainer}>
-                <Text style={[styles.stageLabel, { color: colors.textPrimary }]}>Hot</Text>
-                <Text style={[styles.stageDescription, { color: colors.textSecondary }]}>
+                <Text
+                  style={[styles.stageLabel, { color: colors.textPrimary }]}
+                >
+                  Hot
+                </Text>
+                <Text
+                  style={[
+                    styles.stageDescription,
+                    { color: colors.textSecondary },
+                  ]}
+                >
                   2 or more leads assigned
                 </Text>
               </View>
             </View>
-            
+
             <View style={styles.stageExplanation}>
               <View style={[styles.stageDot, { backgroundColor: '#D97706' }]} />
               <View style={styles.stageTextContainer}>
-                <Text style={[styles.stageLabel, { color: colors.textPrimary }]}>Warm</Text>
-                <Text style={[styles.stageDescription, { color: colors.textSecondary }]}>
+                <Text
+                  style={[styles.stageLabel, { color: colors.textPrimary }]}
+                >
+                  Warm
+                </Text>
+                <Text
+                  style={[
+                    styles.stageDescription,
+                    { color: colors.textSecondary },
+                  ]}
+                >
                   1 lead assigned
                 </Text>
               </View>
             </View>
-            
+
             <View style={styles.stageExplanation}>
               <View style={[styles.stageDot, { backgroundColor: '#2563EB' }]} />
               <View style={styles.stageTextContainer}>
-                <Text style={[styles.stageLabel, { color: colors.textPrimary }]}>Cold</Text>
-                <Text style={[styles.stageDescription, { color: colors.textSecondary }]}>
+                <Text
+                  style={[styles.stageLabel, { color: colors.textPrimary }]}
+                >
+                  Cold
+                </Text>
+                <Text
+                  style={[
+                    styles.stageDescription,
+                    { color: colors.textSecondary },
+                  ]}
+                >
                   No leads assigned
                 </Text>
               </View>
             </View>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.modalCloseButton}
               onPress={() => setShowStageInfo(false)}
             >
@@ -326,6 +412,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     flex: 1,
   },
+  retryText: {
+    color: '#991B1B',
+    fontSize: 13,
+    fontWeight: '700',
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -337,6 +428,15 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingBottom: 24,
+  },
+  footerLoading: {
+    alignItems: 'center',
+    paddingVertical: 20,
+  },
+  loadMoreText: {
+    color: PLUM,
+    fontSize: 14,
+    fontWeight: '700',
   },
   emptyList: {
     flexGrow: 1,

@@ -28,7 +28,8 @@ const ROLE_SELECT = `
   )
 `;
 
-const REALTOR_SELECT = 'id, first_name, last_name, email, phone, brokerage, active';
+const REALTOR_SELECT =
+  'id, first_name, last_name, email, phone, brokerage, active';
 
 function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error) return error.message;
@@ -47,7 +48,7 @@ function normalizeRole(row: any): LeadRealtorRole {
 }
 
 function sanitizeSearchTerm(value: string) {
-  return value.trim().replace(/[%,]/g, ' ');
+  return value.trim().replace(/[%,()]/g, ' ');
 }
 
 export async function fetchLeadRealtorRoles(params: {
@@ -66,16 +67,27 @@ export async function fetchLeadRealtorRoles(params: {
       .order('updated_at', { ascending: false });
 
     if (error) {
-      return { data: [], error: new Error(getErrorMessage(error, 'Unable to load realtor roles')) };
+      return {
+        data: [],
+        error: new Error(
+          getErrorMessage(error, 'Unable to load realtor roles')
+        ),
+      };
     }
 
     return { data: (data || []).map(normalizeRole), error: null };
   } catch (error) {
-    return { data: [], error: new Error(getErrorMessage(error, 'Unable to load realtor roles')) };
+    return {
+      data: [],
+      error: new Error(getErrorMessage(error, 'Unable to load realtor roles')),
+    };
   }
 }
 
-export async function searchActiveRealtors(searchQuery: string): Promise<{
+export async function searchActiveRealtors(
+  searchQuery: string,
+  signal?: AbortSignal
+): Promise<{
   data: LeadRoleRealtor[];
   error: Error | null;
 }> {
@@ -95,7 +107,11 @@ export async function searchActiveRealtors(searchQuery: string): Promise<{
 
       if (words.length >= 2) {
         query = query.or(
-          `first_name.ilike.%${words[0]}%,last_name.ilike.%${words.slice(1).join(' ')}%,first_name.ilike.${searchTerm},last_name.ilike.${searchTerm},brokerage.ilike.${searchTerm},email.ilike.${searchTerm}`
+          `first_name.ilike.%${words[0]}%,last_name.ilike.%${words
+            .slice(1)
+            .join(
+              ' '
+            )}%,first_name.ilike.${searchTerm},last_name.ilike.${searchTerm},brokerage.ilike.${searchTerm},email.ilike.${searchTerm}`
         );
       } else {
         query = query.or(
@@ -104,15 +120,22 @@ export async function searchActiveRealtors(searchQuery: string): Promise<{
       }
     }
 
+    if (signal) query = query.abortSignal(signal);
     const { data, error } = await query;
 
     if (error) {
-      return { data: [], error: new Error(getErrorMessage(error, 'Unable to search realtors')) };
+      return {
+        data: [],
+        error: new Error(getErrorMessage(error, 'Unable to search realtors')),
+      };
     }
 
     return { data: (data || []) as LeadRoleRealtor[], error: null };
   } catch (error) {
-    return { data: [], error: new Error(getErrorMessage(error, 'Unable to search realtors')) };
+    return {
+      data: [],
+      error: new Error(getErrorMessage(error, 'Unable to search realtors')),
+    };
   }
 }
 
@@ -137,9 +160,15 @@ export async function clearPrimaryLeadRealtorRole(params: {
       .eq('role', params.role)
       .eq('is_primary', true);
 
-    return error ? new Error(getErrorMessage(error, 'Unable to clear current realtor role')) : null;
+    return error
+      ? new Error(
+          getErrorMessage(error, 'Unable to clear current realtor role')
+        )
+      : null;
   } catch (error) {
-    return new Error(getErrorMessage(error, 'Unable to clear current realtor role'));
+    return new Error(
+      getErrorMessage(error, 'Unable to clear current realtor role')
+    );
   }
 }
 
@@ -155,23 +184,23 @@ export async function upsertLeadRealtorRole(params: {
       data: { user },
     } = await supabase.auth.getUser();
 
-    const { error } = await supabase
-      .from('lead_realtor_roles')
-      .upsert(
-        {
-          lead_id: params.leadId,
-          lead_source: params.leadSource,
-          realtor_id: params.realtorId,
-          role: params.role,
-          is_primary: true,
-          cc_by_default: params.ccByDefault,
-          created_by: user?.id || null,
-          updated_by: user?.id || null,
-        },
-        { onConflict: 'lead_source,lead_id,realtor_id,role' }
-      );
+    const { error } = await supabase.from('lead_realtor_roles').upsert(
+      {
+        lead_id: params.leadId,
+        lead_source: params.leadSource,
+        realtor_id: params.realtorId,
+        role: params.role,
+        is_primary: true,
+        cc_by_default: params.ccByDefault,
+        created_by: user?.id || null,
+        updated_by: user?.id || null,
+      },
+      { onConflict: 'lead_source,lead_id,realtor_id,role' }
+    );
 
-    return error ? new Error(getErrorMessage(error, 'Unable to assign realtor role')) : null;
+    return error
+      ? new Error(getErrorMessage(error, 'Unable to assign realtor role'))
+      : null;
   } catch (error) {
     return new Error(getErrorMessage(error, 'Unable to assign realtor role'));
   }
@@ -191,10 +220,14 @@ export async function deleteLeadRealtorRole(params: {
       .eq('lead_source', params.leadSource)
       .eq('role', params.role);
 
-    query = params.roleId ? query.eq('id', params.roleId) : query.eq('is_primary', true);
+    query = params.roleId
+      ? query.eq('id', params.roleId)
+      : query.eq('is_primary', true);
 
     const { error } = await query;
-    return error ? new Error(getErrorMessage(error, 'Unable to remove realtor role')) : null;
+    return error
+      ? new Error(getErrorMessage(error, 'Unable to remove realtor role'))
+      : null;
   } catch (error) {
     return new Error(getErrorMessage(error, 'Unable to remove realtor role'));
   }

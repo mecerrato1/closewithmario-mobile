@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -56,6 +56,7 @@ const ROLE_CONFIGS: RoleConfig[] = [
 type LeadRealtorRolesSectionProps = {
   leadId: string;
   leadSource: LeadRealtorRoleSource;
+  initialRoles?: LeadRealtorRole[] | null;
   onBuyerAgentUpdated?: (updatedRecord: Record<string, unknown> | null) => void;
 };
 
@@ -95,6 +96,7 @@ function openEmail(email: string) {
 export function LeadRealtorRolesSection({
   leadId,
   leadSource,
+  initialRoles,
   onBuyerAgentUpdated,
 }: LeadRealtorRolesSectionProps) {
   const { colors, isDark } = useThemeColors();
@@ -127,17 +129,24 @@ export function LeadRealtorRolesSection({
   }, [leadId, leadSource]);
 
   useEffect(() => {
-    setRoles([]);
     setActiveRole(null);
     setSearchQuery('');
     setSearchResults([]);
-    void loadRoles();
-  }, [loadRoles]);
+    if (initialRoles !== undefined && initialRoles !== null) {
+      setRoles(initialRoles);
+      setError(null);
+      setLoading(false);
+    } else {
+      setRoles([]);
+      void loadRoles();
+    }
+  }, [initialRoles, loadRoles]);
 
   useEffect(() => {
     if (!activeRole) return;
 
     let cancelled = false;
+    const request = new AbortController();
     const timeoutId = setTimeout(async () => {
       if (trimmedSearch.length > 0 && trimmedSearch.length < 2) {
         setSearching(false);
@@ -146,7 +155,10 @@ export function LeadRealtorRolesSection({
       }
 
       setSearching(true);
-      const result = await searchActiveRealtors(trimmedSearch);
+      const result = await searchActiveRealtors(
+        trimmedSearch,
+        request.signal
+      );
       if (!cancelled) {
         if (result.error) {
           setSearchResults([]);
@@ -159,6 +171,7 @@ export function LeadRealtorRolesSection({
 
     return () => {
       cancelled = true;
+      request.abort();
       clearTimeout(timeoutId);
     };
   }, [activeRole, trimmedSearch]);
@@ -271,8 +284,7 @@ export function LeadRealtorRolesSection({
   const canShowSearchHint = activeRole && trimmedSearch.length > 0 && trimmedSearch.length < 2;
   const modalTitle = activeConfig ? `${activeConfig.label}` : 'Realtor Role';
 
-  const roleCards = useMemo(() => {
-    return ROLE_CONFIGS.map((config) => {
+  const roleCards = ROLE_CONFIGS.map((config) => {
       const assignment = getPrimaryRole(roles, config.role);
       const realtor = getRoleRealtor(assignment);
       const busy = savingRole === config.role || removingRole === config.role;
@@ -375,8 +387,7 @@ export function LeadRealtorRolesSection({
           </View>
         </View>
       );
-    });
-  }, [colors, isDark, loading, removingRole, roles, savingRole]);
+  });
 
   return (
     <View style={localStyles.container}>

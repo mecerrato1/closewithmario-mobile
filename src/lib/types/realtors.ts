@@ -53,7 +53,7 @@ export interface RealtorActivity {
 // Combined type for display - realtor with assignment data
 export interface AssignedRealtor {
   // Assignment fields
-  assignment_id: string;
+  assignment_id: string | null;
   lo_user_id: string;
   relationship_stage: RelationshipStage;
   assignment_notes: string | null;

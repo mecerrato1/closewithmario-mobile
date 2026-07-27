@@ -9,178 +9,221 @@ import type {
   RealtorActivity,
   RealtorActivityType,
   RelationshipStage,
+  LanguageCode,
 } from '../types/realtors';
+import { filterAndSortRealtors } from '../../features/realtors/realtorDirectoryState';
 
 // ============================================================================
 // Fetch Assigned Realtors
 // ============================================================================
 
-interface FetchRealtorsOptions {
+export interface FetchRealtorsOptions {
   search?: string;
   stage?: RelationshipStage | 'all';
   needsLove?: boolean;
+  offset?: number;
+  pageSize?: number;
+  signal?: AbortSignal;
+}
+
+interface RealtorDirectoryRow {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  brokerage: string | null;
+  profile_picture_url: string | null;
+  active: boolean | null;
+  lead_eligible: boolean | null;
+  campaign_eligible: boolean | null;
+  email_opt_out: boolean | null;
+  ai_draft_access: boolean | null;
+  preferred_language: string | null;
+  secondary_language: string | null;
+  county_filter: string[] | null;
+  notes: string | null;
+}
+
+interface RealtorAssignmentRow {
+  id: string;
+  realtor_id: string;
+  lo_user_id: string;
+  relationship_stage: RelationshipStage | null;
+  notes: string | null;
+  last_touched_at: string | null;
+  created_at: string;
+}
+
+export interface RealtorDirectoryPage {
+  data: AssignedRealtor[];
+  offset: number;
+  nextOffset: number;
+  hasMore: boolean;
+}
+
+const DEFAULT_DIRECTORY_PAGE_SIZE = 50;
+const VALID_LANGUAGES = new Set(['en', 'es', 'pt', 'fr', 'ht', 'zh']);
+
+function getStageFromLeadCount(count: number): RelationshipStage {
+  if (count >= 2) return 'hot';
+  if (count === 1) return 'warm';
+  return 'cold';
+}
+
+function normalizeLanguage(
+  value: string | null,
+  fallback: LanguageCode | null
+): LanguageCode | null {
+  return value && VALID_LANGUAGES.has(value)
+    ? (value as LanguageCode)
+    : fallback;
+}
+
+/**
+ * Fetch one caller-authorized, projected directory page. Counts and assignment
+ * metadata are requested only for the realtor IDs in that page.
+ */
+export async function fetchRealtorDirectoryPage({
+  loUserId,
+  includeAll,
+  offset = 0,
+  pageSize = DEFAULT_DIRECTORY_PAGE_SIZE,
+  signal,
+}: {
+  loUserId: string;
+  includeAll: boolean;
+  offset?: number;
+  pageSize?: number;
+  signal?: AbortSignal;
+}): Promise<{ data: RealtorDirectoryPage | null; error: Error | null }> {
+  try {
+    let directoryQuery = supabase.rpc('get_crm_realtor_directory', {
+      p_include_all: includeAll,
+      p_page_size: pageSize,
+      p_offset: offset,
+    });
+    if (signal) directoryQuery = directoryQuery.abortSignal(signal);
+
+    const { data: directoryData, error: directoryError } = await directoryQuery;
+    if (directoryError) {
+      return { data: null, error: new Error(directoryError.message) };
+    }
+    if (signal?.aborted) {
+      return { data: null, error: new Error('Request cancelled') };
+    }
+
+    const rows = (directoryData || []) as RealtorDirectoryRow[];
+    const realtorIds = rows.map((row) => row.id);
+    let assignments: RealtorAssignmentRow[] = [];
+    const leadCountMap: Record<string, number> = {};
+
+    if (realtorIds.length > 0) {
+      let assignmentQuery = supabase
+        .from('realtor_assignments')
+        .select(
+          'id, realtor_id, lo_user_id, relationship_stage, notes, last_touched_at, created_at'
+        )
+        .in('realtor_id', realtorIds)
+        .eq('lo_user_id', loUserId);
+      if (signal) assignmentQuery = assignmentQuery.abortSignal(signal);
+
+      let countQuery = includeAll
+        ? supabase.rpc('get_realtor_lead_counts', { realtor_ids: realtorIds })
+        : supabase.rpc('get_realtor_lead_counts_for_lo', {
+            realtor_ids: realtorIds,
+            lo_user_id: loUserId,
+          });
+      if (signal) countQuery = countQuery.abortSignal(signal);
+
+      const [assignmentResult, countResult] = await Promise.all([
+        assignmentQuery,
+        countQuery,
+      ]);
+      if (assignmentResult.error) {
+        return { data: null, error: new Error(assignmentResult.error.message) };
+      }
+      if (countResult.error) {
+        return { data: null, error: new Error(countResult.error.message) };
+      }
+      assignments = (assignmentResult.data || []) as RealtorAssignmentRow[];
+      (countResult.data || []).forEach((row: any) => {
+        if (row.realtor_id)
+          leadCountMap[row.realtor_id] = Number(row.lead_count) || 0;
+      });
+    }
+
+    const assignmentByRealtor = new Map(
+      assignments.map((assignment) => [assignment.realtor_id, assignment])
+    );
+    const mapped = rows
+      .filter((row) => !includeAll || row.active !== false)
+      .map((row): AssignedRealtor => {
+        const assignment = assignmentByRealtor.get(row.id);
+        const leadCount = leadCountMap[row.id] || 0;
+        return {
+          assignment_id: assignment?.id || null,
+          lo_user_id: assignment?.lo_user_id || loUserId,
+          relationship_stage:
+            assignment?.relationship_stage || getStageFromLeadCount(leadCount),
+          assignment_notes: assignment?.notes || null,
+          last_touched_at:
+            assignment?.last_touched_at || assignment?.created_at || '',
+          assigned_at: assignment?.created_at || '',
+          realtor_id: row.id,
+          first_name: row.first_name || '',
+          last_name: row.last_name || '',
+          phone: row.phone,
+          email: row.email,
+          brokerage: row.brokerage,
+          active: row.active ?? true,
+          lead_eligible: row.lead_eligible ?? false,
+          campaign_eligible: row.campaign_eligible ?? true,
+          email_opt_out: row.email_opt_out ?? false,
+          preferred_language:
+            normalizeLanguage(row.preferred_language, 'en') || 'en',
+          secondary_language: normalizeLanguage(row.secondary_language, null),
+          county_filter: row.county_filter,
+          profile_picture_url: row.profile_picture_url,
+          ai_draft_access: row.ai_draft_access ?? false,
+          notes: row.notes,
+          realtor_created_at: assignment?.created_at || '',
+          lead_count: leadCount,
+        };
+      });
+
+    return {
+      data: {
+        data: mapped,
+        offset,
+        nextOffset: offset + rows.length,
+        hasMore: rows.length === pageSize,
+      },
+      error: null,
+    };
+  } catch (err: any) {
+    return {
+      data: null,
+      error: err instanceof Error ? err : new Error(String(err)),
+    };
+  }
 }
 
 export async function fetchAssignedRealtors(
   loUserId: string,
   options: FetchRealtorsOptions = {}
 ): Promise<{ data: AssignedRealtor[] | null; error: Error | null }> {
-  try {
-    let query = supabase
-      .from('realtor_assignments')
-      .select(`
-        id,
-        lo_user_id,
-        relationship_stage,
-        notes,
-        last_touched_at,
-        created_at,
-        realtors (
-          id,
-          first_name,
-          last_name,
-          phone,
-          email,
-          brokerage,
-          active,
-          lead_eligible,
-          campaign_eligible,
-          email_opt_out,
-          preferred_language,
-          secondary_language,
-          county_filter,
-          profile_picture_url,
-          ai_draft_access,
-          notes,
-          created_at
-        )
-      `)
-      .eq('lo_user_id', loUserId)
-      .order('last_touched_at', { ascending: false, nullsFirst: false });
-
-    // Apply stage filter at query level
-    if (options.stage && options.stage !== 'all') {
-      query = query.eq('relationship_stage', options.stage);
-    }
-
-    // Apply needs love filter (14+ days since last touch)
-    if (options.needsLove) {
-      const fourteenDaysAgo = new Date();
-      fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-      query = query.lt('last_touched_at', fourteenDaysAgo.toISOString());
-    }
-
-    // Fetch all rows - Supabase defaults to 1000, so we need to paginate
-    let allData: any[] = [];
-    let from = 0;
-    const pageSize = 1000;
-    let hasMore = true;
-
-    while (hasMore) {
-      const { data: pageData, error: pageError } = await query.range(from, from + pageSize - 1);
-      
-      if (pageError) {
-        console.error('[realtors] fetchAssignedRealtors error:', pageError.message);
-        return { data: null, error: new Error(pageError.message) };
-      }
-
-      if (pageData && pageData.length > 0) {
-        allData = [...allData, ...pageData];
-        from += pageSize;
-        hasMore = pageData.length === pageSize;
-      } else {
-        hasMore = false;
-      }
-    }
-
-    // Get all realtor IDs to fetch lead counts
-    const realtorIds = (allData || [])
-      .filter((row: any) => row.realtors)
-      .map((row: any) => row.realtors.id);
-
-    // Fetch lead counts for realtors - only counting leads that belong to THIS LO
-    let leadCountMap: Record<string, number> = {};
-    if (realtorIds.length > 0) {
-      const { data: leadCounts, error: leadCountError } = await supabase
-        .rpc('get_realtor_lead_counts_for_lo', { 
-          realtor_ids: realtorIds,
-          lo_user_id: loUserId 
-        });
-      
-      if (leadCountError) {
-        console.error('[realtors] Lead counts error:', leadCountError.message);
-      }
-      
-      // Build map from function results
-      (leadCounts || []).forEach((row: any) => {
-        if (row.realtor_id) {
-          leadCountMap[row.realtor_id] = row.lead_count || 0;
-        }
-      });
-    }
-
-    const realtors: AssignedRealtor[] = (allData || [])
-      .filter((row: any) => row.realtors)
-      .map((row: any) => ({
-        assignment_id: row.id,
-        lo_user_id: row.lo_user_id,
-        relationship_stage: row.relationship_stage || 'warm',
-        assignment_notes: row.notes,
-        last_touched_at: row.last_touched_at || row.created_at,
-        assigned_at: row.created_at,
-        realtor_id: row.realtors.id,
-        first_name: row.realtors.first_name,
-        last_name: row.realtors.last_name,
-        phone: row.realtors.phone,
-        email: row.realtors.email,
-        brokerage: row.realtors.brokerage,
-        active: row.realtors.active,
-        lead_eligible: row.realtors.lead_eligible ?? false,
-        campaign_eligible: row.realtors.campaign_eligible ?? true,
-        email_opt_out: row.realtors.email_opt_out ?? false,
-        preferred_language: row.realtors.preferred_language || 'en',
-        secondary_language: row.realtors.secondary_language || null,
-        county_filter: row.realtors.county_filter || null,
-        profile_picture_url: row.realtors.profile_picture_url || null,
-        ai_draft_access: row.realtors.ai_draft_access ?? false,
-        notes: row.realtors.notes || null,
-        realtor_created_at: row.realtors.created_at,
-        lead_count: leadCountMap[row.realtors.id] || 0,
-      }))
-      // Sort: most leads first, then alphabetically by last name, first name
-      .sort((a, b) => {
-        const aCount = a.lead_count || 0;
-        const bCount = b.lead_count || 0;
-        // First sort by lead count descending
-        if (bCount !== aCount) return bCount - aCount;
-        // Then sort alphabetically by last name, then first name
-        const lastNameCompare = (a.last_name || '').localeCompare(b.last_name || '');
-        if (lastNameCompare !== 0) return lastNameCompare;
-        return (a.first_name || '').localeCompare(b.first_name || '');
-      });
-
-    // Apply search filter client-side
-    let filtered = realtors;
-    if (options.search) {
-      const searchLower = options.search.toLowerCase();
-      filtered = filtered.filter(
-        (r) => {
-          const fullName = `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase();
-          return (
-            fullName.includes(searchLower) ||
-            r.brokerage?.toLowerCase().includes(searchLower) ||
-            r.phone?.includes(options.search!) ||
-            r.email?.toLowerCase().includes(searchLower)
-          );
-        }
-      );
-    }
-
-    return { data: filtered, error: null };
-  } catch (err: any) {
-    console.error('[realtors] fetchAssignedRealtors exception:', err);
-    return { data: null, error: err };
-  }
+  const result = await fetchRealtorDirectoryPage({
+    loUserId,
+    includeAll: false,
+    offset: options.offset,
+    pageSize: options.pageSize,
+    signal: options.signal,
+  });
+  return {
+    data: result.data ? filterAndSortRealtors(result.data.data, options) : null,
+    error: result.error,
+  };
 }
 
 // ============================================================================
@@ -188,133 +231,24 @@ export async function fetchAssignedRealtors(
 // ============================================================================
 
 export async function fetchAllRealtors(
-  options: FetchRealtorsOptions = {}
+  options: FetchRealtorsOptions & { loUserId?: string } = {}
 ): Promise<{ data: AssignedRealtor[] | null; error: Error | null }> {
-  try {
-    let query = supabase
-      .from('realtors')
-      .select('*')
-      .eq('active', true)
-      .order('last_name', { ascending: true });
+  const { data: sessionData } = await supabase.auth.getSession();
+  const loUserId = options.loUserId || sessionData.session?.user.id;
+  if (!loUserId)
+    return { data: null, error: new Error('Authentication required') };
 
-    let allData: any[] = [];
-    let from = 0;
-    const pageSize = 1000;
-    let hasMore = true;
-
-    while (hasMore) {
-      const { data: pageData, error: pageError } = await query.range(from, from + pageSize - 1);
-
-      if (pageError) {
-        console.error('[realtors] fetchAllRealtors error:', pageError.message);
-        return { data: null, error: new Error(pageError.message) };
-      }
-
-      if (pageData && pageData.length > 0) {
-        allData = [...allData, ...pageData];
-        from += pageSize;
-        hasMore = pageData.length === pageSize;
-      } else {
-        hasMore = false;
-      }
-    }
-
-    // Get lead counts for all realtors
-    const realtorIds = allData.map((r: any) => r.id);
-    let leadCountMap: Record<string, number> = {};
-    if (realtorIds.length > 0) {
-      // Count leads + meta_ads for each realtor
-      const [leadsResult, metaResult] = await Promise.all([
-        supabase
-          .from('leads')
-          .select('realtor_id')
-          .in('realtor_id', realtorIds),
-        supabase
-          .from('meta_ads')
-          .select('realtor_id')
-          .in('realtor_id', realtorIds),
-      ]);
-
-      const allLeads = [...(leadsResult.data || []), ...(metaResult.data || [])];
-      allLeads.forEach((row: any) => {
-        if (row.realtor_id) {
-          leadCountMap[row.realtor_id] = (leadCountMap[row.realtor_id] || 0) + 1;
-        }
-      });
-    }
-
-    // Determine relationship stage based on lead count
-    const getStage = (count: number): RelationshipStage => {
-      if (count >= 2) return 'hot';
-      if (count === 1) return 'warm';
-      return 'cold';
-    };
-
-    const realtors: AssignedRealtor[] = allData.map((r: any) => {
-      const leadCount = leadCountMap[r.id] || 0;
-      return {
-        assignment_id: r.id, // Use realtor id as placeholder
-        lo_user_id: '',
-        relationship_stage: getStage(leadCount),
-        assignment_notes: null,
-        last_touched_at: r.created_at,
-        assigned_at: r.created_at,
-        realtor_id: r.id,
-        first_name: r.first_name,
-        last_name: r.last_name,
-        phone: r.phone,
-        email: r.email,
-        brokerage: r.brokerage,
-        active: r.active,
-        lead_eligible: r.lead_eligible ?? false,
-        campaign_eligible: r.campaign_eligible ?? true,
-        email_opt_out: r.email_opt_out ?? false,
-        preferred_language: r.preferred_language || 'en',
-        secondary_language: r.secondary_language || null,
-        county_filter: r.county_filter || null,
-        profile_picture_url: r.profile_picture_url || null,
-        ai_draft_access: r.ai_draft_access ?? false,
-        notes: r.notes || null,
-        realtor_created_at: r.created_at,
-        lead_count: leadCount,
-      };
-    })
-    .sort((a, b) => {
-      const aCount = a.lead_count || 0;
-      const bCount = b.lead_count || 0;
-      // First sort by lead count descending
-      if (bCount !== aCount) return bCount - aCount;
-      // Then sort alphabetically by last name, then first name
-      const lastNameCompare = (a.last_name || '').localeCompare(b.last_name || '');
-      if (lastNameCompare !== 0) return lastNameCompare;
-      return (a.first_name || '').localeCompare(b.first_name || '');
-    });
-
-    // Apply stage filter
-    let filtered = realtors;
-    if (options.stage && options.stage !== 'all') {
-      filtered = filtered.filter(r => r.relationship_stage === options.stage);
-    }
-
-    // Apply search filter
-    if (options.search) {
-      const searchLower = options.search.toLowerCase();
-      filtered = filtered.filter(r => {
-        const fullName = `${r.first_name || ''} ${r.last_name || ''}`.toLowerCase();
-        return (
-          fullName.includes(searchLower) ||
-          r.brokerage?.toLowerCase().includes(searchLower) ||
-          r.phone?.includes(options.search!) ||
-          r.email?.toLowerCase().includes(searchLower)
-        );
-      });
-    }
-
-    return { data: filtered, error: null };
-  } catch (err: any) {
-    console.error('[realtors] fetchAllRealtors exception:', err);
-    return { data: null, error: err };
-  }
+  const result = await fetchRealtorDirectoryPage({
+    loUserId,
+    includeAll: true,
+    offset: options.offset,
+    pageSize: options.pageSize,
+    signal: options.signal,
+  });
+  return {
+    data: result.data ? filterAndSortRealtors(result.data.data, options) : null,
+    error: result.error,
+  };
 }
 
 // ============================================================================
@@ -328,7 +262,8 @@ export async function fetchRealtorById(
   try {
     const { data, error } = await supabase
       .from('realtor_assignments')
-      .select(`
+      .select(
+        `
         id,
         lo_user_id,
         relationship_stage,
@@ -354,7 +289,8 @@ export async function fetchRealtorById(
           notes,
           created_at
         )
-      `)
+      `
+      )
       .eq('realtor_id', realtorId)
       .eq('lo_user_id', loUserId)
       .single();
@@ -579,7 +515,10 @@ export async function deleteRealtor(
       .eq('lo_user_id', loUserId);
 
     if (assignError) {
-      console.error('[realtors] deleteRealtor assignment error:', assignError.message);
+      console.error(
+        '[realtors] deleteRealtor assignment error:',
+        assignError.message
+      );
       return { error: new Error(assignError.message) };
     }
 
@@ -591,7 +530,10 @@ export async function deleteRealtor(
       .limit(1);
 
     if (checkError) {
-      console.error('[realtors] deleteRealtor check error:', checkError.message);
+      console.error(
+        '[realtors] deleteRealtor check error:',
+        checkError.message
+      );
       return { error: new Error(checkError.message) };
     }
 
@@ -603,7 +545,10 @@ export async function deleteRealtor(
         .eq('id', realtorId);
 
       if (realtorError) {
-        console.error('[realtors] deleteRealtor realtor error:', realtorError.message);
+        console.error(
+          '[realtors] deleteRealtor realtor error:',
+          realtorError.message
+        );
         return { error: new Error(realtorError.message) };
       }
     }
@@ -650,35 +595,56 @@ export async function fetchRealtorActivity(
 // ============================================================================
 
 export async function fetchLeadsByRealtor(
-  realtorId: string
+  realtorId: string,
+  pageSize: number = 25
 ): Promise<{ data: any[] | null; error: Error | null }> {
   try {
-    // Fetch from both leads and meta_ads tables
+    const boundedPageSize = Math.min(50, Math.max(1, pageSize));
+    // The lead-list endpoint does not currently accept realtorId. Keep this
+    // focused relationship view bounded per source instead of restoring an
+    // unbounded directory/count read.
     const [leadsResult, metaResult] = await Promise.all([
       supabase
         .from('leads')
         .select('id, first_name, last_name, email, phone, status, created_at')
         .eq('realtor_id', realtorId)
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .limit(boundedPageSize),
       supabase
         .from('meta_ads')
         .select('id, first_name, last_name, email, phone, status, created_at')
         .eq('realtor_id', realtorId)
-        .order('created_at', { ascending: false }),
+        .order('created_at', { ascending: false })
+        .limit(boundedPageSize),
     ]);
 
     if (leadsResult.error) {
-      console.error('[realtors] fetchLeadsByRealtor leads error:', leadsResult.error.message);
+      console.error(
+        '[realtors] fetchLeadsByRealtor leads error:',
+        leadsResult.error.message
+      );
     }
     if (metaResult.error) {
-      console.error('[realtors] fetchLeadsByRealtor meta_ads error:', metaResult.error.message);
+      console.error(
+        '[realtors] fetchLeadsByRealtor meta_ads error:',
+        metaResult.error.message
+      );
     }
 
     // Combine and sort by created_at
     const combined = [
-      ...(leadsResult.data || []).map(l => ({ ...l, source: 'lead' as const })),
-      ...(metaResult.data || []).map(m => ({ ...m, source: 'meta' as const })),
-    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      ...(leadsResult.data || []).map((l) => ({
+        ...l,
+        source: 'lead' as const,
+      })),
+      ...(metaResult.data || []).map((m) => ({
+        ...m,
+        source: 'meta' as const,
+      })),
+    ].sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
 
     return { data: combined, error: null };
   } catch (err: any) {
@@ -698,7 +664,8 @@ export async function fetchNeedsLoveRealtors(
   try {
     const { data, error } = await supabase
       .from('realtor_assignments')
-      .select(`
+      .select(
+        `
         id,
         lo_user_id,
         relationship_stage,
@@ -724,7 +691,8 @@ export async function fetchNeedsLoveRealtors(
           notes,
           created_at
         )
-      `)
+      `
+      )
       .eq('lo_user_id', loUserId)
       .order('last_touched_at', { ascending: true, nullsFirst: true })
       .limit(limit);
@@ -798,7 +766,10 @@ export async function touchRealtor(
 // Fetch Distinct Brokerages for Autocomplete
 // ============================================================================
 
-export async function fetchBrokerages(): Promise<{ data: string[] | null; error: Error | null }> {
+export async function fetchBrokerages(): Promise<{
+  data: string[] | null;
+  error: Error | null;
+}> {
   try {
     // Use database function to bypass RLS and get all brokerages
     const { data, error } = await supabase.rpc('get_all_brokerages');

@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import {
   View,
   Text,
@@ -29,6 +35,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { Session } from '@supabase/supabase-js';
 import { Audio, InterruptionModeIOS } from 'expo-av';
+import { File as FSFile, Paths } from 'expo-file-system';
 import RenderHTML from 'react-native-render-html';
 import { WebView } from 'react-native-webview';
 import type { Lead, MetaLead, SelectedLeadRef, Activity, LoanOfficer, Realtor, TrackingReason, CoBorrowerInfo, LoanOriginatorInfo } from '../lib/types/leads';
@@ -54,13 +61,21 @@ import { ReferralAgreementsSection } from '../components/ReferralAgreementsSecti
 import { MetaAdPreviewModal } from '../components/MetaAdPreviewModal';
 import { ApprovalRecipeSection } from '../components/ApprovalRecipeSection';
 import { LeadRealtorRolesSection } from '../components/LeadRealtorRolesSection';
+import { useLeadDetailBootstrap } from '../features/leads/useLeadDetailBootstrap';
+import type { LeadDetailContact } from '../features/leads/crmLeadApi';
+import { searchActiveRealtors } from '../lib/supabase/leadRealtorRoles';
 
 const PLUM = '#4C1D95';
-const CRM_API_BASE_URL = 'https://www.closewithmario.com';
+const CRM_API_BASE_URL = (
+  process.env.EXPO_PUBLIC_API_BASE_URL || 'https://www.closewithmario.com'
+).replace(/\/$/, '');
 const SCENARIO_VIEWING_NOW_WINDOW_MS = 3 * 60 * 1000;
 const HTML_TAG_PATTERN = /<[a-z][\s\S]*>/i;
 const HTML_TABLE_PATTERN = /<table[\s>]/i;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ACTIVITY_FIELDS =
+  'id, activity_type, notes, created_at, created_by, user_email, audio_url, body, subject, from_email, to_email, to_emails, cc_email, cc_emails, recipients, direction';
+const ACTIVITY_PAGE_SIZE = 20;
 
 const EMAIL_HTML_IGNORED_TAGS = ['head', 'script', 'iframe', 'object', 'embed', 'form'];
 
@@ -280,6 +295,7 @@ const buildLeadContactCandidates = ({
   email,
   currentRealtorName,
   currentRealtorContact,
+  bootstrapContacts,
 }: {
   record: Lead | MetaLead | null | undefined;
   isMeta: boolean;
@@ -287,6 +303,7 @@ const buildLeadContactCandidates = ({
   email: string;
   currentRealtorName: string | null;
   currentRealtorContact: CurrentRealtorContact | null;
+  bootstrapContacts?: LeadDetailContact[];
 }): LeadContactCandidate[] => {
   if (!record) return [];
 
@@ -351,6 +368,32 @@ const buildLeadContactCandidates = ({
     });
   });
 
+  (bootstrapContacts || []).forEach((contact) => {
+    const contactPhone = (contact.phone || '').trim();
+    const contactEmail = (contact.email || '').trim();
+    if (!contactPhone && !contactEmail) return;
+    const { firstName, lastName } = splitContactName(contact.name, 'Contact');
+    const roleLabel = contact.role || contact.relationship || 'Related Contact';
+    candidates.push({
+      key: buildContactCandidateKey(
+        'related',
+        contact.id,
+        firstName,
+        lastName,
+        contactPhone,
+        contactEmail
+      ),
+      label: `${contact.name} (${roleLabel})`,
+      saveLabel: `Save ${roleLabel}: ${contact.name}`,
+      firstName,
+      lastName,
+      phone: contactPhone,
+      email: contactEmail,
+      company: roleLabel,
+      extraNotes: `${roleLabel} for ${primaryName || 'lead'}`,
+    });
+  });
+
   const realtorName = currentRealtorContact?.name || currentRealtorName || record.referral_source_name || '';
   const realtorPhone = (currentRealtorContact?.phone || '').trim();
   const realtorEmail = (currentRealtorContact?.email || record.referral_source_email || '').trim();
@@ -381,7 +424,15 @@ const buildLeadContactCandidates = ({
     });
   }
 
-  return candidates;
+  const uniqueCandidates = new Map<string, LeadContactCandidate>();
+  candidates.forEach((candidate) => {
+    const identity = `${normalizeContactPhoneKey(candidate.phone)}|${normalizeContactStoragePart(candidate.email)}`;
+    if (identity !== '|' && !uniqueCandidates.has(identity)) {
+      uniqueCandidates.set(identity, candidate);
+    }
+  });
+
+  return Array.from(uniqueCandidates.values());
 };
 
 type SavedMetaAdCreative = {
@@ -2386,7 +2437,7 @@ export function LeadDetailView({
   session,
   loanOfficers,
   userRole: propUserRole,
-  onLeadUpdate,
+  onLeadUpdate: onLeadUpdateFromParent,
   onDeleteLead,
   selectedStatusFilter,
   searchQuery,
@@ -2409,6 +2460,12 @@ export function LeadDetailView({
   const [selectedActivityType, setSelectedActivityType] = useState<'call' | 'text' | 'email' | 'note'>('call');
   const [showQuickPhrases, setShowQuickPhrases] = useState(false);
   const [loadingActivities, setLoadingActivities] = useState(true);
+  const [loadingMoreActivities, setLoadingMoreActivities] = useState(false);
+  const [activitiesHasMore, setActivitiesHasMore] = useState(false);
+  const activityCursorRef = useRef<{ id: string; createdAt: string } | null>(null);
+  const activityCursorReadyRef = useRef(false);
+  const activityLoadMoreInFlightRef = useRef(false);
+  const activityLoadMoreAbortRef = useRef<AbortController | null>(null);
   const [savingActivity, setSavingActivity] = useState(false);
   const [deletingActivityId, setDeletingActivityId] = useState<string | null>(null);
   const [showLOPicker, setShowLOPicker] = useState(false);
@@ -2418,6 +2475,9 @@ export function LeadDetailView({
   const [realtorSearchQuery, setRealtorSearchQuery] = useState('');
   const [availableRealtors, setAvailableRealtors] = useState<Array<{ id: string; first_name: string; last_name: string; brokerage?: string }>>([]);
   const [loadingRealtors, setLoadingRealtors] = useState(false);
+  const realtorPickerAbortRef = useRef<AbortController | null>(null);
+  const realtorPickerGenerationRef = useRef(0);
+  const realtorPickerDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [currentRealtorName, setCurrentRealtorName] = useState<string | null>(null);
   const [currentRealtorContact, setCurrentRealtorContact] = useState<CurrentRealtorContact | null>(null);
   const [savedContactKeys, setSavedContactKeys] = useState<string[]>([]);
@@ -2582,14 +2642,18 @@ export function LeadDetailView({
   
   // Helper functions to match the same filters as the list view
   const matchesSearch = (lead: Lead | MetaLead) => {
-    if (!searchQuery.trim()) return true;
-    
-    const query = searchQuery.toLowerCase();
-    const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(' ').toLowerCase();
-    const email = lead.email?.toLowerCase() || '';
-    const phone = lead.phone?.toLowerCase() || '';
-    
-    return fullName.includes(query) || email.includes(query) || phone.includes(query);
+    const query = searchQuery.trim().toLowerCase();
+    if (!query || query.length >= 2) return true;
+
+    const fullName = [lead.first_name, lead.last_name]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return (
+      fullName.includes(query) ||
+      (lead.email?.toLowerCase() || '').includes(query) ||
+      (lead.phone?.toLowerCase() || '').includes(query)
+    );
   };
 
   const matchesLOFilter = (lead: Lead | MetaLead) => {
@@ -2609,7 +2673,48 @@ export function LeadDetailView({
   };
   
   const currentList = isMeta ? metaLeads : leads;
-  const record = currentList.find((item) => item.id === selected.id);
+  const listRecord = currentList.find((item) => item.id === selected.id) || null;
+  const detailLoad = useLeadDetailBootstrap(selected, listRecord);
+  const [recordOverride, setRecordOverride] = useState<Lead | MetaLead | null>(null);
+  useEffect(() => {
+    setRecordOverride(null);
+  }, [selected.id, selected.source]);
+  useEffect(() => {
+    if (detailLoad.lead) setRecordOverride(detailLoad.lead);
+  }, [detailLoad.lead]);
+  const record =
+    (recordOverride?.id === selected.id ? recordOverride : null)
+    || (detailLoad.lead?.id === selected.id ? detailLoad.lead : null)
+    || listRecord;
+
+  useLayoutEffect(() => {
+    const activeActivityRequest = activityLoadMoreAbortRef.current;
+    activityLoadMoreAbortRef.current = null;
+    activeActivityRequest?.abort();
+    activityLoadMoreInFlightRef.current = false;
+    activityCursorRef.current = null;
+    activityCursorReadyRef.current = false;
+    setActivities([]);
+    setActivitiesHasMore(false);
+    setLoadingActivities(true);
+    setLoadingMoreActivities(false);
+    setCurrentRealtorName(null);
+    setCurrentRealtorContact(null);
+    return () => {
+      const currentRequest = activityLoadMoreAbortRef.current;
+      activityLoadMoreAbortRef.current = null;
+      currentRequest?.abort();
+      activityLoadMoreInFlightRef.current = false;
+    };
+  }, [selected.id, selected.source]);
+
+  const onLeadUpdate = useCallback(
+    (updatedLead: Lead | MetaLead, source: 'lead' | 'meta') => {
+      setRecordOverride(updatedLead);
+      onLeadUpdateFromParent(updatedLead, source);
+    },
+    [onLeadUpdateFromParent]
+  );
 
   // Build the navigable list based on active tab
   let navigableList: Array<(Lead | MetaLead) & { source: 'lead' | 'meta' }>;
@@ -2699,6 +2804,7 @@ export function LeadDetailView({
 
   // Look up linked quick capture via converted_lead_id / converted_meta_ad_id
   useEffect(() => {
+    const request = new AbortController();
     const lookupLinkedCapture = async () => {
       if (!record) { setLinkedCaptureId(null); return; }
       const col = isMeta ? 'converted_meta_ad_id' : 'converted_lead_id';
@@ -2707,10 +2813,13 @@ export function LeadDetailView({
         .select('id')
         .eq(col, record.id)
         .limit(1)
+        .abortSignal(request.signal)
         .maybeSingle();
+      if (request.signal.aborted) return;
       setLinkedCaptureId(data?.id ?? null);
     };
-    lookupLinkedCapture();
+    void lookupLinkedCapture();
+    return () => request.abort();
   }, [record?.id, isMeta]);
 
   // Handle tracking toggle
@@ -2757,14 +2866,11 @@ export function LeadDetailView({
     
     setSendingPartnerUpdate(true);
     try {
-      // API base URL (must use www to avoid redirect issues)
-      const API_BASE_URL = 'https://www.closewithmario.com';
-      
       // Create abort controller for timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
       
-      const url = `${API_BASE_URL}/api/leads/partner-update`;
+      const url = `${CRM_API_BASE_URL}/api/leads/partner-update`;
       console.log('📧 Sending partner update:', {
         url,
         leadId: record.id,
@@ -3742,6 +3848,7 @@ export function LeadDetailView({
     email,
     currentRealtorName,
     currentRealtorContact,
+    bootstrapContacts: detailLoad.bootstrap?.contacts,
   });
   const callableContactCandidates = contactCandidates.filter((contact) => !!contact.phone.trim());
   const hasCallableContacts = callableContactCandidates.length > 0;
@@ -4075,16 +4182,8 @@ export function LeadDetailView({
           onInvalidateAttention(record!.id);
         }
         
-        // Refresh activities to show the new log
-        const { data } = await supabase
-          .from(tableName)
-          .select('*')
-          .eq(foreignKeyColumn, record!.id)
-          .order('created_at', { ascending: false });
-        
-        if (data) {
-          setActivities(data);
-        }
+        // Refresh the bounded bootstrap page so related data stays in sync.
+        void detailLoad.refresh();
       }
     } catch (e) {
       console.error('Error logging call activity:', e);
@@ -4301,16 +4400,7 @@ export function LeadDetailView({
           const updatedLead = { ...r, last_contact_date: now, ...(statusAdvanced ? { status: 'attempting_contact' } : {}) };
           onLeadUpdate(updatedLead, isMeta ? 'meta' : 'lead');
           
-          // Refresh activities to show the new log
-          const { data } = await supabase
-            .from(tableName)
-            .select('*')
-            .eq(foreignKeyColumn, r.id)
-            .order('created_at', { ascending: false });
-          
-          if (data) {
-            setActivities(data);
-          }
+          void detailLoad.refresh();
         }
       } catch (e) {
         console.error('Error logging text activity:', e);
@@ -4645,39 +4735,180 @@ export function LeadDetailView({
     loadLOInfo();
   }, [session?.user?.id, session?.user?.email]);
 
-  // Load activities from Supabase
+  // Bootstrap supplies the first bounded activity page. A bounded direct query is
+  // retained only as a fallback when the related-data portion of bootstrap fails.
   useEffect(() => {
+    let cancelled = false;
+    const request = new AbortController();
+
     const loadActivities = async () => {
-      if (!record) return;
-      
+      if (!record || detailLoad.loading) return;
+
+      if (detailLoad.bootstrap) {
+        const currentRequest = activityLoadMoreAbortRef.current;
+        activityLoadMoreAbortRef.current = null;
+        currentRequest?.abort();
+        activityLoadMoreInFlightRef.current = false;
+        setLoadingMoreActivities(false);
+        const nextActivities = [...detailLoad.bootstrap.activities].sort(
+          (left, right) =>
+            new Date(right.created_at).getTime() -
+              new Date(left.created_at).getTime() ||
+            right.id.localeCompare(left.id)
+        );
+        activityCursorRef.current = null;
+        activityCursorReadyRef.current = false;
+        setActivities(nextActivities);
+        setActivitiesHasMore(nextActivities.length >= ACTIVITY_PAGE_SIZE);
+        setDocsReceivedLogged(nextActivities.some((activity) => activity.activity_type === 'docs_received'));
+        setLoadingActivities(false);
+        return;
+      }
+
       try {
         setLoadingActivities(true);
-        
-        // Use correct table based on lead source
         const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
         const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
-        
+
         const { data, error } = await supabase
           .from(tableName)
-          .select('*')
+          .select(ACTIVITY_FIELDS)
           .eq(foreignKeyColumn, record.id)
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .limit(ACTIVITY_PAGE_SIZE + 1)
+          .abortSignal(request.signal);
 
         if (error) {
-          console.error('Error loading activities:', error);
-        } else {
-          setActivities(data || []);
-          setDocsReceivedLogged((data || []).some((a: any) => a.activity_type === 'docs_received'));
+          if (!cancelled && !request.signal.aborted) {
+            console.error('Error loading activities:', error);
+          }
+        } else if (!cancelled) {
+          const rows = (data || []) as Activity[];
+          const firstPage = rows.slice(0, ACTIVITY_PAGE_SIZE);
+          const oldest = firstPage[firstPage.length - 1];
+          activityCursorRef.current = oldest?.created_at
+            ? { id: oldest.id, createdAt: oldest.created_at }
+            : null;
+          activityCursorReadyRef.current = true;
+          setActivities(firstPage);
+          setActivitiesHasMore(rows.length > ACTIVITY_PAGE_SIZE);
+          setDocsReceivedLogged(rows.some((activity) => activity.activity_type === 'docs_received'));
         }
       } catch (e) {
-        console.error('Unexpected error loading activities:', e);
+        if (!cancelled && !request.signal.aborted) {
+          console.error('Unexpected error loading activities:', e);
+        }
       } finally {
-        setLoadingActivities(false);
+        if (!cancelled) setLoadingActivities(false);
       }
     };
 
-    loadActivities();
-  }, [record?.id, isMeta]);
+    void loadActivities();
+    return () => {
+      cancelled = true;
+      request.abort();
+    };
+  }, [detailLoad.bootstrap, detailLoad.loading, record?.id, isMeta]);
+
+  const loadOlderActivities = useCallback(async () => {
+    if (
+      !record ||
+      activityLoadMoreInFlightRef.current ||
+      loadingMoreActivities ||
+      !activitiesHasMore ||
+      activities.length === 0
+    ) return;
+
+    activityLoadMoreInFlightRef.current = true;
+    activityLoadMoreAbortRef.current?.abort();
+    const request = new AbortController();
+    activityLoadMoreAbortRef.current = request;
+    setLoadingMoreActivities(true);
+    try {
+      const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
+      const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
+
+      const fetchPage = async (cursor: { id: string; createdAt: string } | null) => {
+        let query = supabase
+          .from(tableName)
+          .select(ACTIVITY_FIELDS)
+          .eq(foreignKeyColumn, record.id);
+        if (cursor) {
+          query = query.or(
+            `created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`
+          );
+        }
+        const { data, error } = await query
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .limit(ACTIVITY_PAGE_SIZE + 1)
+          .abortSignal(request.signal);
+        if (error) throw error;
+        return (data || []) as Activity[];
+      };
+
+      // Bootstrap is intentionally bounded but does not expose its ordering
+      // cursor. Establish the deterministic created_at + id boundary lazily
+      // only when the user asks for older activity.
+      if (!activityCursorReadyRef.current) {
+        const seedRows = await fetchPage(null);
+        if (request.signal.aborted) return;
+        const seedPage = seedRows.slice(0, ACTIVITY_PAGE_SIZE);
+        const seedOldest = seedPage[seedPage.length - 1];
+        activityCursorRef.current = seedOldest?.created_at
+          ? { id: seedOldest.id, createdAt: seedOldest.created_at }
+          : null;
+        activityCursorReadyRef.current = true;
+        setActivities((current) => {
+          const merged = new Map(current.map((activity) => [activity.id, activity]));
+          seedPage.forEach((activity) => merged.set(activity.id, activity));
+          return Array.from(merged.values()).sort(
+            (a, b) =>
+              new Date(b.created_at).getTime() -
+                new Date(a.created_at).getTime() ||
+              b.id.localeCompare(a.id)
+          );
+        });
+        if (seedRows.length <= ACTIVITY_PAGE_SIZE || !activityCursorRef.current) {
+          setActivitiesHasMore(false);
+          return;
+        }
+      }
+
+      const rows = await fetchPage(activityCursorRef.current);
+      if (request.signal.aborted) return;
+      const page = rows.slice(0, ACTIVITY_PAGE_SIZE);
+      setActivities((current) => {
+        const merged = new Map(current.map((activity) => [activity.id, activity]));
+        page.forEach((activity) => merged.set(activity.id, activity));
+        return Array.from(merged.values()).sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() -
+              new Date(a.created_at).getTime() ||
+            b.id.localeCompare(a.id)
+        );
+      });
+      const oldest = page[page.length - 1];
+      if (oldest?.created_at) {
+        activityCursorRef.current = {
+          id: oldest.id,
+          createdAt: oldest.created_at,
+        };
+      }
+      setActivitiesHasMore(rows.length > ACTIVITY_PAGE_SIZE);
+    } catch (error) {
+      if (request.signal.aborted) return;
+      console.error('Error loading older activities:', error);
+      Alert.alert('Could not load older activity', 'Please try again.');
+    } finally {
+      if (activityLoadMoreAbortRef.current === request) {
+        activityLoadMoreAbortRef.current = null;
+        activityLoadMoreInFlightRef.current = false;
+        setLoadingMoreActivities(false);
+      }
+    }
+  }, [activities, activitiesHasMore, isMeta, loadingMoreActivities, record]);
 
   // Set default callback date when record changes
   useEffect(() => {
@@ -4941,7 +5172,28 @@ export function LeadDetailView({
 
   const handlePlayVoiceNote = async (activity: Activity, recordingUrl?: string) => {
     // Support both audio_url (voice notes) and recording URLs (call recordings)
-    const audioUrl = recordingUrl || activity.audio_url;
+    let audioUrl = recordingUrl || activity.audio_url;
+    if (!audioUrl && activity.has_audio && record) {
+      try {
+        const params = new URLSearchParams({
+          leadId: record.id,
+          leadSource: isMeta ? 'meta' : 'organic',
+          activityId: activity.id,
+        });
+        const response = await authenticatedFetch(
+          `${CRM_API_BASE_URL}/api/leads/activity-audio?${params.toString()}`
+        );
+        if (!response.ok) throw new Error('Audio is unavailable.');
+        const cachedAudio = new FSFile(Paths.cache, `lead-activity-${activity.id}.m4a`);
+        cachedAudio.create({ overwrite: true, intermediates: true });
+        cachedAudio.write(new Uint8Array(await response.arrayBuffer()));
+        audioUrl = cachedAudio.uri;
+      } catch (error) {
+        console.error('Error loading activity audio', error);
+        alert('Could not load this recording.');
+        return;
+      }
+    }
     if (!audioUrl) return;
 
     try {
@@ -5077,11 +5329,10 @@ export function LeadDetailView({
     showSmsToast(`Sending text to ${firstName}...`, 'info');
 
     try {
-      const API_BASE_URL = 'https://www.closewithmario.com';
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-      const response = await authenticatedFetch(`${API_BASE_URL}/api/send-docs-received-sms`, {
+      const response = await authenticatedFetch(`${CRM_API_BASE_URL}/api/send-docs-received-sms`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -5249,49 +5500,95 @@ export function LeadDetailView({
     }
   };
 
-  // Fetch realtors for the picker with server-side search
+  // Keep assignment lookup focused and server-filtered. RLS remains the source
+  // of authorization, and the projected result is capped for the picker.
   const fetchRealtorsForPicker = async (searchQuery: string = '') => {
+    realtorPickerGenerationRef.current += 1;
+    const generation = realtorPickerGenerationRef.current;
+    realtorPickerAbortRef.current?.abort();
+    const controller = new AbortController();
+    realtorPickerAbortRef.current = controller;
     setLoadingRealtors(true);
     try {
-      let query = supabase
-        .from('realtors')
-        .select('id, first_name, last_name, brokerage')
-        .eq('active', true)
-        .order('last_name', { ascending: true })
-        .limit(50);
-
-      // Apply server-side search if query provided
-      if (searchQuery.trim()) {
-        const search = searchQuery.trim().toLowerCase();
-        query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,brokerage.ilike.%${search}%`);
+      const result = await searchActiveRealtors(searchQuery, controller.signal);
+      if (controller.signal.aborted || generation !== realtorPickerGenerationRef.current) {
+        return;
       }
-
-      const { data, error } = await query;
-
-      if (error) {
-        console.error('Error fetching realtors:', error);
+      if (result.error) {
+        if (result.error.name !== 'AbortError') {
+          console.error('Error fetching realtors:', result.error);
+        }
       } else {
-        setAvailableRealtors(data || []);
+        setAvailableRealtors(
+          result.data.map((realtor) => ({
+            id: realtor.id,
+            first_name: realtor.first_name || '',
+            last_name: realtor.last_name || '',
+            brokerage: realtor.brokerage || undefined,
+          }))
+        );
       }
     } catch (e) {
-      console.error('Unexpected error fetching realtors:', e);
+      if (!controller.signal.aborted) {
+        console.error('Unexpected error fetching realtors:', e);
+      }
     } finally {
-      setLoadingRealtors(false);
+      if (generation === realtorPickerGenerationRef.current) {
+        setLoadingRealtors(false);
+      }
     }
   };
 
+  useEffect(() => {
+    return () => {
+      realtorPickerGenerationRef.current += 1;
+      realtorPickerAbortRef.current?.abort();
+      if (realtorPickerDebounceRef.current) {
+        clearTimeout(realtorPickerDebounceRef.current);
+      }
+    };
+  }, []);
+
   // Fetch current realtor contact details when record changes
   useEffect(() => {
+    let cancelled = false;
+    const request = new AbortController();
+
     const fetchCurrentRealtor = async () => {
+      if (detailLoad.loading) return;
+      const bootstrapRoles = detailLoad.bootstrap?.realtorRoles;
+      if (bootstrapRoles !== undefined && bootstrapRoles !== null) {
+        const buyerRole = bootstrapRoles.find((role) => role.role === 'buyer_agent' && role.is_primary)
+          || bootstrapRoles.find((role) => role.role === 'buyer_agent');
+        const realtor = buyerRole?.realtor || buyerRole?.realtors || null;
+        if (realtor) {
+          const realtorName = `${realtor.first_name || ''} ${realtor.last_name || ''}`.trim();
+          if (cancelled) return;
+          setCurrentRealtorName(realtorName || null);
+          setCurrentRealtorContact({
+            name: realtorName || 'Realtor',
+            phone: realtor.phone || '',
+            email: realtor.email || '',
+          });
+        } else {
+          if (cancelled) return;
+          setCurrentRealtorName(null);
+          setCurrentRealtorContact(null);
+        }
+        return;
+      }
+
       if (record?.realtor_id) {
         const { data } = await supabase
           .from('realtors')
           .select('first_name, last_name, phone, email')
           .eq('id', record.realtor_id)
+          .abortSignal(request.signal)
           .single();
         
         if (data) {
           const realtorName = `${data.first_name || ''} ${data.last_name || ''}`.trim();
+          if (cancelled) return;
           setCurrentRealtorName(realtorName || null);
           setCurrentRealtorContact({
             name: realtorName || 'Realtor',
@@ -5299,16 +5596,22 @@ export function LeadDetailView({
             email: data.email || '',
           });
         } else {
+          if (cancelled) return;
           setCurrentRealtorName(null);
           setCurrentRealtorContact(null);
         }
       } else {
+        if (cancelled) return;
         setCurrentRealtorName(null);
         setCurrentRealtorContact(null);
       }
     };
-    fetchCurrentRealtor();
-  }, [record?.realtor_id]);
+    void fetchCurrentRealtor();
+    return () => {
+      cancelled = true;
+      request.abort();
+    };
+  }, [detailLoad.bootstrap?.realtorRoles, detailLoad.loading, record?.realtor_id]);
 
   // Handle realtor assignment
   const handleUpdateRealtor = async (newRealtorId: string | null) => {
@@ -5552,11 +5855,27 @@ export function LeadDetailView({
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
             <Text style={styles.backButtonText}>✕</Text>
           </TouchableOpacity>
-          <Text style={styles.detailHeaderTitle}>Lead not found</Text>
+          <Text style={styles.detailHeaderTitle}>
+            {detailLoad.loading ? 'Loading lead' : 'Lead unavailable'}
+          </Text>
           <View style={{ width: 40 }} />
         </View>
         <View style={styles.centerContent}>
-          <Text>We couldn&apos;t find this lead in memory.</Text>
+          {detailLoad.loading ? (
+            <ActivityIndicator size="large" color={PLUM} />
+          ) : (
+            <>
+              <Text style={{ color: colors.textPrimary, textAlign: 'center' }}>
+                {detailLoad.error || 'We could not load this lead.'}
+              </Text>
+              <TouchableOpacity
+                style={{ marginTop: 16, borderRadius: 10, backgroundColor: PLUM, paddingHorizontal: 18, paddingVertical: 10 }}
+                onPress={() => void detailLoad.retry()}
+              >
+                <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Retry</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
     );
@@ -5954,7 +6273,25 @@ export function LeadDetailView({
         </View>
       ) : (
         /* Details Tab Content */
-        <ScrollView contentContainerStyle={{ paddingBottom: 32, backgroundColor: colors.background }} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: 32, backgroundColor: colors.background }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={detailLoad.refreshing}
+              onRefresh={() => {
+                void Promise.all([
+                  detailLoad.refresh(),
+                  loadLeadScenarios(),
+                  loadDetailMessageIndicators().then((counts) => {
+                    setMessageUnreadCount(counts.messageUnreadCount);
+                    setDmUnreadCount(counts.dmUnreadCount);
+                  }),
+                ]);
+              }}
+            />
+          }
+        >
           <View style={[styles.detailCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
 
             {/* AI Attention Card */}
@@ -6209,11 +6546,14 @@ export function LeadDetailView({
                     value={realtorSearchQuery}
                     onChangeText={(text) => {
                       setRealtorSearchQuery(text);
-                      // Debounced server-side search
-                      if (text.trim().length >= 2) {
-                        fetchRealtorsForPicker(text);
-                      } else if (text.trim().length === 0) {
-                        fetchRealtorsForPicker('');
+                      if (realtorPickerDebounceRef.current) {
+                        clearTimeout(realtorPickerDebounceRef.current);
+                      }
+                      realtorPickerAbortRef.current?.abort();
+                      if (text.trim().length >= 2 || text.trim().length === 0) {
+                        realtorPickerDebounceRef.current = setTimeout(() => {
+                          void fetchRealtorsForPicker(text);
+                        }, 300);
                       }
                     }}
                     autoCapitalize="none"
@@ -6835,10 +7175,11 @@ export function LeadDetailView({
             </View>
           )}
 
-          {propUserRole !== 'realtor' && (
+          {propUserRole !== 'realtor' && !detailLoad.loading && (
             <LeadRealtorRolesSection
               leadId={record.id}
               leadSource={crmLeadSource}
+              initialRoles={detailLoad.bootstrap ? detailLoad.bootstrap.realtorRoles : null}
               onBuyerAgentUpdated={(updatedRecord) => {
                 if (updatedRecord) {
                   onLeadUpdate(updatedRecord as Lead | MetaLead, isMeta ? 'meta' : 'lead');
@@ -7364,7 +7705,7 @@ export function LeadDetailView({
                   })()}
                   
                   {/* Voice note playback button */}
-                  {activity.audio_url && (
+                  {(activity.audio_url || activity.has_audio) && (
                     <TouchableOpacity
                       style={[
                         styles.voiceNoteButton,
@@ -7379,7 +7720,7 @@ export function LeadDetailView({
                   )}
                   
                   {/* Call recording playback button (parsed from notes) */}
-                  {!activity.audio_url && activity.activity_type === 'call' && (() => {
+                  {!activity.audio_url && !activity.has_audio && activity.activity_type === 'call' && (() => {
                     const recordingUrl = parseRecordingUrl(activity.notes);
                     if (!recordingUrl) return null;
                     return (
@@ -7408,6 +7749,26 @@ export function LeadDetailView({
                   )}
                 </View>
               ))}
+              {activitiesHasMore ? (
+                <TouchableOpacity
+                  style={{
+                    alignSelf: 'center',
+                    marginTop: 12,
+                    paddingHorizontal: 18,
+                    paddingVertical: 10,
+                  }}
+                  onPress={() => void loadOlderActivities()}
+                  disabled={loadingMoreActivities}
+                >
+                  {loadingMoreActivities ? (
+                    <ActivityIndicator size="small" color={PLUM} />
+                  ) : (
+                    <Text style={{ color: PLUM, fontWeight: '700' }}>
+                      Load older activity
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              ) : null}
             </View>
           ) : (
             <Text style={styles.noTasksText}>No activity logged yet</Text>

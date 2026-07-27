@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,12 @@ import * as Sharing from 'expo-sharing';
 import { supabase } from '../lib/supabase';
 import { authenticatedFetch } from '../lib/authenticatedFetch';
 import {
+  fetchSmsHistoryPage,
+  type SmsHistoryMessage,
+} from '../features/messages/messageHistoryClient';
+import { LatestRequestGate } from '../features/messages/messagePagination';
+import { usePaginatedMessageHistory } from '../features/messages/usePaginatedMessageHistory';
+import {
   getSmsVoiceTranscript,
   getSmsVoiceTranscriptionStatus,
   hasSmsAudioAttachment,
@@ -30,27 +36,9 @@ import {
   getSmsMediaFallbackLabel,
   parseSmsVoiceSummary,
   type SmsMediaAttachment,
-  type SmsRawPayload,
-  type SmsVoiceSummary,
 } from '../lib/smsMedia';
 
-interface SmsMessage {
-  id: string;
-  direction: 'inbound' | 'outbound';
-  from_number: string;
-  to_number: string;
-  message_text: string | null;
-  created_at: string;
-  sent_at?: string;
-  received_at?: string;
-  status?: string;
-  raw_payload?: SmsRawPayload | string | null;
-  voice_transcription_status?: string | null;
-  voice_transcript?: string | null;
-  voice_summary?: SmsVoiceSummary | string | null;
-  voice_transcribed_at?: string | null;
-  voice_transcription_error?: string | null;
-}
+type SmsMessage = SmsHistoryMessage;
 
 function formatVoiceMetaValue(value: string) {
   return value
@@ -95,7 +83,11 @@ function formatAttachmentMeta(attachment: SmsMediaAttachment) {
 
   if (typeof attachment.size === 'number' && attachment.size > 0) {
     const sizeInKb = attachment.size / 1024;
-    parts.push(sizeInKb >= 1024 ? `${(sizeInKb / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(sizeInKb))} KB`);
+    parts.push(
+      sizeInKb >= 1024
+        ? `${(sizeInKb / 1024).toFixed(1)} MB`
+        : `${Math.max(1, Math.round(sizeInKb))} KB`
+    );
   }
 
   return parts.join(' • ');
@@ -113,7 +105,9 @@ interface SmsMessagingProps {
 }
 
 // API base URL - uses the same backend as the website (www to avoid redirect)
-const API_BASE_URL = 'https://www.closewithmario.com';
+const API_BASE_URL = (
+  process.env.EXPO_PUBLIC_API_BASE_URL || 'https://www.closewithmario.com'
+).replace(/\/$/, '');
 
 export function SmsMessaging({
   leadId,
@@ -125,31 +119,83 @@ export function SmsMessaging({
   onMessageSent,
   showHeader = true,
 }: SmsMessagingProps) {
-  const [messages, setMessages] = useState<SmsMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [smsOptIn, setSmsOptIn] = useState<boolean | null | undefined>(initialSmsOptIn);
-  const [smsOptedOut, setSmsOptedOut] = useState<boolean | null | undefined>(initialSmsOptedOut);
-  const [currentMediaSound, setCurrentMediaSound] = useState<Audio.Sound | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [smsOptIn, setSmsOptIn] = useState<boolean | null | undefined>(
+    initialSmsOptIn
+  );
+  const [smsOptedOut, setSmsOptedOut] = useState<boolean | null | undefined>(
+    initialSmsOptedOut
+  );
+  const [currentMediaSound, setCurrentMediaSound] =
+    useState<Audio.Sound | null>(null);
   const [playingMediaId, setPlayingMediaId] = useState<string | null>(null);
   const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
   const [sharingImage, setSharingImage] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+  const statusGateRef = useRef(new LatestRequestGate());
   const isSmsOptedOut = !!smsOptedOut || smsOptIn === false;
+  const fetchHistoryPage = useCallback(
+    (
+      cursor: Parameters<typeof fetchSmsHistoryPage>[0]['cursor'],
+      signal: AbortSignal
+    ) => fetchSmsHistoryPage({ leadId, cursor, signal }),
+    [leadId]
+  );
+  const {
+    messages,
+    loading,
+    loadingOlder,
+    hasOlder,
+    error: historyError,
+    scrollRevision,
+    reload,
+    loadOlder,
+    retry,
+    clearError: clearHistoryError,
+  } = usePaginatedMessageHistory({
+    queryKey: `sms:${leadId}`,
+    fetchPage: fetchHistoryPage,
+  });
+  const error = actionError || historyError;
 
   // Scroll to bottom (newest messages)
-  const scrollToBottom = () => {
-    if (flatListRef.current && messages.length > 0) {
+  const scrollToBottom = useCallback(() => {
+    if (flatListRef.current) {
       flatListRef.current.scrollToEnd({ animated: true });
     }
-  };
+  }, []);
+
+  const refreshSmsStatus = useCallback(async () => {
+    const request = statusGateRef.current.begin();
+    try {
+      let query = supabase
+        .from(leadSource)
+        .select('sms_opt_in, sms_opted_out')
+        .eq('id', leadId);
+      query = query.abortSignal(request.signal);
+      const { data, error: statusError } = await query.maybeSingle();
+
+      if (statusError) throw new Error(statusError.message);
+      if (!statusGateRef.current.isCurrent(request) || !data) return;
+      setSmsOptIn(data.sms_opt_in);
+      setSmsOptedOut(data.sms_opted_out);
+    } catch (statusError) {
+      if (statusGateRef.current.isCurrent(request)) {
+        console.error('Error fetching SMS opt-out state:', statusError);
+      }
+    } finally {
+      statusGateRef.current.finish(request);
+    }
+  }, [leadId, leadSource]);
 
   // Fetch messages on mount and set up realtime subscription
   useEffect(() => {
-    fetchMessages();
-    refreshSmsStatus();
+    const statusGate = statusGateRef.current;
+    setSmsOptIn(initialSmsOptIn);
+    setSmsOptedOut(initialSmsOptedOut);
+    void refreshSmsStatus();
 
     // Set up realtime subscription for new messages
     const subscription = supabase
@@ -164,42 +210,34 @@ export function SmsMessaging({
         },
         (payload) => {
           console.log('📱 SMS message change detected:', payload);
-          fetchMessages();
-          refreshSmsStatus();
+          void reload();
+          void refreshSmsStatus();
         }
       )
       .subscribe();
 
     return () => {
+      statusGate.cancel();
       subscription.unsubscribe();
     };
-  }, [leadId, leadSource]);
+  }, [
+    initialSmsOptIn,
+    initialSmsOptedOut,
+    leadId,
+    leadSource,
+    refreshSmsStatus,
+    reload,
+  ]);
 
-  async function refreshSmsStatus() {
-    try {
-      const { data, error: statusError } = await supabase
-        .from(leadSource)
-        .select('sms_opt_in, sms_opted_out')
-        .eq('id', leadId)
-        .maybeSingle();
-
-      if (statusError) throw statusError;
-
-      if (data) {
-        setSmsOptIn(data.sms_opt_in);
-        setSmsOptedOut(data.sms_opted_out);
-      }
-    } catch (err) {
-      console.error('Error fetching SMS opt-out state:', err);
-    }
-  }
-
-  // Scroll to bottom when messages change
+  // Scroll to the latest message after initial loads and refreshes, but keep the
+  // viewport stable when an older page is prepended.
   useEffect(() => {
     if (messages.length > 0) {
-      setTimeout(scrollToBottom, 100);
+      const timeoutId = setTimeout(scrollToBottom, 100);
+      return () => clearTimeout(timeoutId);
     }
-  }, [messages]);
+    return undefined;
+  }, [messages.length, scrollRevision, scrollToBottom]);
 
   useEffect(() => {
     return () => {
@@ -209,25 +247,6 @@ export function SmsMessaging({
     };
   }, [currentMediaSound]);
 
-  async function fetchMessages() {
-    try {
-      setError(null);
-      const { data, error: fetchError } = await supabase
-        .from('sms_messages')
-        .select('id, direction, from_number, to_number, message_text, created_at, sent_at, received_at, status, raw_payload, voice_transcription_status, voice_transcript, voice_summary, voice_transcribed_at, voice_transcription_error')
-        .eq('lead_id', leadId)
-        .order('created_at', { ascending: true });
-
-      if (fetchError) throw fetchError;
-      setMessages(data || []);
-    } catch (err: any) {
-      console.error('Error fetching messages:', err);
-      setError('Failed to load messages');
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function sendMessage() {
     if (!newMessage.trim() || !leadPhone) {
       console.log('📱 [SMS] Send aborted - empty message or no phone');
@@ -235,7 +254,11 @@ export function SmsMessaging({
     }
 
     if (isSmsOptedOut) {
-      setError(`${leadName || 'This lead'} has opted out of SMS. Reply START from their phone to re-enable texting.`);
+      setActionError(
+        `${
+          leadName || 'This lead'
+        } has opted out of SMS. Reply START from their phone to re-enable texting.`
+      );
       return;
     }
 
@@ -246,16 +269,17 @@ export function SmsMessaging({
     });
 
     setSending(true);
-    setError(null);
+    setActionError(null);
+    clearHistoryError();
 
     try {
       const url = `${API_BASE_URL}/api/send-sms-message`;
       console.log('📱 [SMS] POST to:', url);
-      
+
       // Add timeout to prevent hanging
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-      
+
       const response = await authenticatedFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -266,7 +290,7 @@ export function SmsMessaging({
         }),
         signal: controller.signal,
       });
-      
+
       clearTimeout(timeoutId);
       console.log('📱 [SMS] Response status:', response.status);
 
@@ -287,14 +311,14 @@ export function SmsMessaging({
 
       setNewMessage('');
       Keyboard.dismiss();
-      await fetchMessages();
+      await reload();
       onMessageSent?.();
     } catch (err: any) {
       console.log('📱 [SMS] Error:', err.name, err.message || err);
       if (err.name === 'AbortError') {
-        setError('Request timed out. Please try again.');
+        setActionError('Request timed out. Please try again.');
       } else {
-        setError(err.message || 'Failed to send message');
+        setActionError(err.message || 'Failed to send message');
       }
     } finally {
       setSending(false);
@@ -304,10 +328,14 @@ export function SmsMessaging({
   const formatPhoneNumber = (phone: string) => {
     const digits = phone.replace(/\D/g, '');
     if (digits.length === 11 && digits.startsWith('1')) {
-      return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+      return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(
+        7
+      )}`;
     }
     if (digits.length === 10) {
-      return `+1 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+      return `+1 (${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(
+        6
+      )}`;
     }
     return phone;
   };
@@ -338,7 +366,10 @@ export function SmsMessaging({
       await Linking.openURL(url);
     } catch (openError) {
       console.error('Error opening media attachment:', openError);
-      Alert.alert('Unable to open attachment', 'This media attachment could not be opened right now.');
+      Alert.alert(
+        'Unable to open attachment',
+        'This media attachment could not be opened right now.'
+      );
     }
   };
 
@@ -350,20 +381,30 @@ export function SmsMessaging({
 
       const sharingAvailable = await Sharing.isAvailableAsync();
       if (!sharingAvailable) {
-        Alert.alert('Sharing unavailable', 'This device cannot open the share sheet right now.');
+        Alert.alert(
+          'Sharing unavailable',
+          'This device cannot open the share sheet right now.'
+        );
         return;
       }
 
-      const downloadedFile = await FSFile.downloadFileAsync(expandedImageUrl, Paths.cache, {
-        idempotent: true,
-      });
+      const downloadedFile = await FSFile.downloadFileAsync(
+        expandedImageUrl,
+        Paths.cache,
+        {
+          idempotent: true,
+        }
+      );
 
       await Sharing.shareAsync(downloadedFile.uri, {
         UTI: 'public.image',
       });
     } catch (shareError) {
       console.error('Error sharing image attachment:', shareError);
-      Alert.alert('Unable to share image', 'This photo could not be prepared for sharing right now.');
+      Alert.alert(
+        'Unable to share image',
+        'This photo could not be prepared for sharing right now.'
+      );
     } finally {
       setSharingImage(false);
     }
@@ -442,12 +483,23 @@ export function SmsMessaging({
     }
   };
 
-  const renderAttachment = (attachment: SmsMediaAttachment, isOutbound: boolean) => {
+  const renderAttachment = (
+    attachment: SmsMediaAttachment,
+    isOutbound: boolean
+  ) => {
     const textColor = isOutbound ? '#FFFFFF' : '#0F172A';
-    const secondaryTextColor = isOutbound ? 'rgba(255, 255, 255, 0.75)' : '#64748B';
-    const cardStyle = isOutbound ? smsStyles.outboundAttachmentCard : smsStyles.inboundAttachmentCard;
-    const actionStyle = isOutbound ? smsStyles.outboundAttachmentAction : smsStyles.inboundAttachmentAction;
-    const actionTextStyle = isOutbound ? smsStyles.outboundAttachmentActionText : smsStyles.inboundAttachmentActionText;
+    const secondaryTextColor = isOutbound
+      ? 'rgba(255, 255, 255, 0.75)'
+      : '#64748B';
+    const cardStyle = isOutbound
+      ? smsStyles.outboundAttachmentCard
+      : smsStyles.inboundAttachmentCard;
+    const actionStyle = isOutbound
+      ? smsStyles.outboundAttachmentAction
+      : smsStyles.inboundAttachmentAction;
+    const actionTextStyle = isOutbound
+      ? smsStyles.outboundAttachmentActionText
+      : smsStyles.inboundAttachmentActionText;
     const isPlaying = playingMediaId === attachment.id;
 
     if (attachment.kind === 'image') {
@@ -458,11 +510,20 @@ export function SmsMessaging({
           style={smsStyles.imageAttachmentWrap}
           onPress={() => setExpandedImageUrl(attachment.url)}
         >
-          <Image source={{ uri: attachment.url }} style={smsStyles.imageAttachment} resizeMode="cover" />
+          <Image
+            source={{ uri: attachment.url }}
+            style={smsStyles.imageAttachment}
+            resizeMode="cover"
+          />
           <View style={smsStyles.imageAttachmentBadge}>
             <Text style={smsStyles.imageAttachmentBadgeText}>Photo</Text>
           </View>
-          <View style={[smsStyles.imageAttachmentOverlay, isOutbound && smsStyles.outboundImageAttachmentOverlay]}>
+          <View
+            style={[
+              smsStyles.imageAttachmentOverlay,
+              isOutbound && smsStyles.outboundImageAttachmentOverlay,
+            ]}
+          >
             <Ionicons name="expand-outline" size={14} color="#FFFFFF" />
             <Text style={smsStyles.imageAttachmentOverlayText}>Open photo</Text>
           </View>
@@ -473,11 +534,22 @@ export function SmsMessaging({
     return (
       <View key={attachment.id} style={[smsStyles.attachmentCard, cardStyle]}>
         <View style={smsStyles.attachmentHeader}>
-          <Ionicons name={getAttachmentIcon(attachment)} size={18} color={textColor} />
+          <Ionicons
+            name={getAttachmentIcon(attachment)}
+            size={18}
+            color={textColor}
+          />
           <View style={smsStyles.attachmentTextWrap}>
-            <Text style={[smsStyles.attachmentTitle, { color: textColor }]}>{getAttachmentTitle(attachment)}</Text>
+            <Text style={[smsStyles.attachmentTitle, { color: textColor }]}>
+              {getAttachmentTitle(attachment)}
+            </Text>
             {!!formatAttachmentMeta(attachment) && (
-              <Text style={[smsStyles.attachmentMeta, { color: secondaryTextColor }]}>
+              <Text
+                style={[
+                  smsStyles.attachmentMeta,
+                  { color: secondaryTextColor },
+                ]}
+              >
                 {formatAttachmentMeta(attachment)}
               </Text>
             )}
@@ -503,7 +575,11 @@ export function SmsMessaging({
             }}
           >
             <Text style={[smsStyles.attachmentActionText, actionTextStyle]}>
-              {attachment.kind === 'audio' ? 'Open' : attachment.kind === 'video' ? 'Open video' : 'Open'}
+              {attachment.kind === 'audio'
+                ? 'Open'
+                : attachment.kind === 'video'
+                ? 'Open video'
+                : 'Open'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -519,23 +595,33 @@ export function SmsMessaging({
     const voiceTranscript = getSmsVoiceTranscript(item);
     const summaryText = voiceSummary?.one_sentence_summary?.trim() || '';
     const urgency = voiceSummary?.urgency?.trim() || '';
-    const requestedCallbackTime = voiceSummary?.requested_callback_time?.trim() || '';
+    const requestedCallbackTime =
+      voiceSummary?.requested_callback_time?.trim() || '';
     const mentionsDocs = voiceSummary?.mentions_docs === true;
     const mentionsProperty = voiceSummary?.mentions_property === true;
     const transcriptionError = item.voice_transcription_error?.trim() || '';
 
-    const analysisCardStyle = isOutbound ? smsStyles.outboundVoiceInsightCard : smsStyles.inboundVoiceInsightCard;
+    const analysisCardStyle = isOutbound
+      ? smsStyles.outboundVoiceInsightCard
+      : smsStyles.inboundVoiceInsightCard;
     const titleColor = isOutbound ? '#FFFFFF' : '#0F172A';
     const bodyColor = isOutbound ? 'rgba(255, 255, 255, 0.92)' : '#334155';
     const secondaryColor = isOutbound ? 'rgba(255, 255, 255, 0.76)' : '#64748B';
-    const chipStyle = isOutbound ? smsStyles.outboundVoiceChip : smsStyles.inboundVoiceChip;
-    const chipTextStyle = isOutbound ? smsStyles.outboundVoiceChipText : smsStyles.inboundVoiceChipText;
+    const chipStyle = isOutbound
+      ? smsStyles.outboundVoiceChip
+      : smsStyles.inboundVoiceChip;
+    const chipTextStyle = isOutbound
+      ? smsStyles.outboundVoiceChipText
+      : smsStyles.inboundVoiceChipText;
 
     if (voiceStatus === 'pending' || voiceStatus === 'processing') {
       return (
         <View style={[smsStyles.voiceInsightCard, analysisCardStyle]}>
           <View style={smsStyles.voiceInsightHeaderRow}>
-            <ActivityIndicator size="small" color={isOutbound ? '#FFFFFF' : '#7C3AED'} />
+            <ActivityIndicator
+              size="small"
+              color={isOutbound ? '#FFFFFF' : '#7C3AED'}
+            />
             <Text style={[smsStyles.voiceInsightTitle, { color: titleColor }]}>
               Transcribing this voice message...
             </Text>
@@ -551,7 +637,11 @@ export function SmsMessaging({
       return (
         <View style={[smsStyles.voiceInsightCard, analysisCardStyle]}>
           <View style={smsStyles.voiceInsightHeaderRow}>
-            <Ionicons name="alert-circle-outline" size={16} color={isOutbound ? '#FFFFFF' : '#DC2626'} />
+            <Ionicons
+              name="alert-circle-outline"
+              size={16}
+              color={isOutbound ? '#FFFFFF' : '#DC2626'}
+            />
             <Text style={[smsStyles.voiceInsightTitle, { color: titleColor }]}>
               Voice transcript unavailable
             </Text>
@@ -560,7 +650,13 @@ export function SmsMessaging({
             We couldn&apos;t transcribe this voice message yet.
           </Text>
           {transcriptionError ? (
-            <Text style={[smsStyles.voiceInsightFootnote, { color: secondaryColor }]} numberOfLines={2}>
+            <Text
+              style={[
+                smsStyles.voiceInsightFootnote,
+                { color: secondaryColor },
+              ]}
+              numberOfLines={2}
+            >
               {transcriptionError}
             </Text>
           ) : null}
@@ -581,7 +677,11 @@ export function SmsMessaging({
     return (
       <View style={[smsStyles.voiceInsightCard, analysisCardStyle]}>
         <View style={smsStyles.voiceInsightHeaderRow}>
-          <Ionicons name="sparkles-outline" size={16} color={isOutbound ? '#FFFFFF' : '#7C3AED'} />
+          <Ionicons
+            name="sparkles-outline"
+            size={16}
+            color={isOutbound ? '#FFFFFF' : '#7C3AED'}
+          />
           <Text style={[smsStyles.voiceInsightTitle, { color: titleColor }]}>
             Voice note
           </Text>
@@ -597,7 +697,9 @@ export function SmsMessaging({
           <View style={smsStyles.voiceChipRow}>
             {chips.map((chip) => (
               <View key={chip} style={[smsStyles.voiceChip, chipStyle]}>
-                <Text style={[smsStyles.voiceChipText, chipTextStyle]}>{chip}</Text>
+                <Text style={[smsStyles.voiceChipText, chipTextStyle]}>
+                  {chip}
+                </Text>
               </View>
             ))}
           </View>
@@ -605,7 +707,14 @@ export function SmsMessaging({
 
         {voiceTranscript ? (
           <View style={smsStyles.voiceTranscriptWrap}>
-            <Text style={[smsStyles.voiceTranscriptLabel, { color: secondaryColor }]}>Transcript</Text>
+            <Text
+              style={[
+                smsStyles.voiceTranscriptLabel,
+                { color: secondaryColor },
+              ]}
+            >
+              Transcript
+            </Text>
             <Text style={[smsStyles.voiceInsightBody, { color: bodyColor }]}>
               {voiceTranscript}
             </Text>
@@ -620,7 +729,9 @@ export function SmsMessaging({
     const mediaAttachments = getSmsMessageMedia(item);
     const messageText = item.message_text?.trim() || '';
     const shouldShowFallbackText = !messageText && mediaAttachments.length > 1;
-    const fallbackText = shouldShowFallbackText ? getSmsMediaFallbackLabel(mediaAttachments) : '';
+    const fallbackText = shouldShowFallbackText
+      ? getSmsMediaFallbackLabel(mediaAttachments)
+      : '';
     const displayText = messageText || fallbackText;
     const isFallbackText = !messageText && !!displayText;
 
@@ -650,8 +761,15 @@ export function SmsMessaging({
           ) : null}
 
           {mediaAttachments.length > 0 ? (
-            <View style={[smsStyles.mediaAttachments, displayText ? smsStyles.mediaAttachmentsWithText : null]}>
-              {mediaAttachments.map((attachment) => renderAttachment(attachment, isOutbound))}
+            <View
+              style={[
+                smsStyles.mediaAttachments,
+                displayText ? smsStyles.mediaAttachmentsWithText : null,
+              ]}
+            >
+              {mediaAttachments.map((attachment) =>
+                renderAttachment(attachment, isOutbound)
+              )}
             </View>
           ) : null}
 
@@ -701,7 +819,9 @@ export function SmsMessaging({
             <Ionicons name="chatbubbles" size={20} color="#7C3AED" />
             <View style={smsStyles.headerInfo}>
               <Text style={smsStyles.headerName}>{leadName}</Text>
-              <Text style={smsStyles.headerPhone}>{formatPhoneNumber(leadPhone)}</Text>
+              <Text style={smsStyles.headerPhone}>
+                {formatPhoneNumber(leadPhone)}
+              </Text>
             </View>
           </View>
         </TouchableWithoutFeedback>
@@ -712,7 +832,25 @@ export function SmsMessaging({
         <View style={smsStyles.errorBanner}>
           <Ionicons name="alert-circle" size={16} color="#DC2626" />
           <Text style={smsStyles.errorText}>{error}</Text>
-          <TouchableOpacity onPress={() => setError(null)}>
+          <TouchableOpacity
+            onPress={() => {
+              if (actionError) {
+                setActionError(null);
+              } else {
+                void retry();
+              }
+            }}
+          >
+            <Text style={smsStyles.errorRetryText}>
+              {actionError ? 'Dismiss' : 'Retry'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => {
+              setActionError(null);
+              clearHistoryError();
+            }}
+          >
             <Ionicons name="close" size={16} color="#DC2626" />
           </TouchableOpacity>
         </View>
@@ -722,7 +860,8 @@ export function SmsMessaging({
         <View style={smsStyles.optOutBanner}>
           <Ionicons name="alert-circle" size={16} color="#C2410C" />
           <Text style={smsStyles.optOutBannerText}>
-            SMS opted out via STOP. Reply START from the lead&apos;s phone to re-enable texting.
+            SMS opted out via STOP. Reply START from the lead&apos;s phone to
+            re-enable texting.
           </Text>
         </View>
       )}
@@ -737,6 +876,24 @@ export function SmsMessaging({
         extraData={playingMediaId}
         keyboardShouldPersistTaps="handled"
         onScrollBeginDrag={Keyboard.dismiss}
+        maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+        ListHeaderComponent={
+          hasOlder ? (
+            <TouchableOpacity
+              style={smsStyles.loadOlderButton}
+              onPress={() => {
+                void loadOlder();
+              }}
+              disabled={loadingOlder}
+            >
+              {loadingOlder ? (
+                <ActivityIndicator size="small" color="#7C3AED" />
+              ) : (
+                <Text style={smsStyles.loadOlderText}>Load older messages</Text>
+              )}
+            </TouchableOpacity>
+          ) : null
+        }
         ListEmptyComponent={
           <View style={smsStyles.emptyContainer}>
             <Ionicons name="chatbubble-outline" size={48} color="#CBD5E1" />
@@ -744,14 +901,17 @@ export function SmsMessaging({
             <Text style={smsStyles.emptySubtext}>Send the first message!</Text>
           </View>
         }
-        onContentSizeChange={scrollToBottom}
       />
 
       {/* Input Area */}
       <View style={smsStyles.inputContainer}>
         <TextInput
           style={smsStyles.textInput}
-          placeholder={isSmsOptedOut ? 'SMS disabled until the lead replies START' : 'Type a message...'}
+          placeholder={
+            isSmsOptedOut
+              ? 'SMS disabled until the lead replies START'
+              : 'Type a message...'
+          }
           placeholderTextColor="#94A3B8"
           value={newMessage}
           onChangeText={setNewMessage}
@@ -762,7 +922,8 @@ export function SmsMessaging({
         <TouchableOpacity
           style={[
             smsStyles.sendButton,
-            (!newMessage.trim() || sending || isSmsOptedOut) && smsStyles.sendButtonDisabled,
+            (!newMessage.trim() || sending || isSmsOptedOut) &&
+              smsStyles.sendButtonDisabled,
           ]}
           onPress={sendMessage}
           disabled={!newMessage.trim() || sending || isSmsOptedOut}
@@ -778,7 +939,10 @@ export function SmsMessaging({
       <Modal visible={!!expandedImageUrl} transparent animationType="fade">
         <View style={smsStyles.fullScreenOverlay}>
           <TouchableOpacity
-            style={[smsStyles.fullScreenActionButton, smsStyles.fullScreenShareButton]}
+            style={[
+              smsStyles.fullScreenActionButton,
+              smsStyles.fullScreenShareButton,
+            ]}
             onPress={() => {
               shareExpandedImage().catch(() => undefined);
             }}
@@ -791,7 +955,10 @@ export function SmsMessaging({
             )}
           </TouchableOpacity>
           <TouchableOpacity
-            style={[smsStyles.fullScreenActionButton, smsStyles.fullScreenClose]}
+            style={[
+              smsStyles.fullScreenActionButton,
+              smsStyles.fullScreenClose,
+            ]}
             onPress={() => setExpandedImageUrl(null)}
           >
             <Ionicons name="close" size={28} color="#FFFFFF" />
@@ -860,6 +1027,11 @@ const smsStyles = StyleSheet.create({
     fontSize: 13,
     color: '#DC2626',
   },
+  errorRetryText: {
+    fontSize: 13,
+    color: '#991B1B',
+    fontWeight: '700',
+  },
   optOutBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -885,6 +1057,20 @@ const smsStyles = StyleSheet.create({
     paddingVertical: 16,
     paddingBottom: 24,
     flexGrow: 1,
+  },
+  loadOlderButton: {
+    alignSelf: 'center',
+    minHeight: 36,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    marginBottom: 14,
+    borderRadius: 18,
+    backgroundColor: '#EDE9FE',
+  },
+  loadOlderText: {
+    color: '#7C3AED',
+    fontSize: 13,
+    fontWeight: '700',
   },
   messageBubbleContainer: {
     marginBottom: 8,

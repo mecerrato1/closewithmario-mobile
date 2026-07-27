@@ -2,7 +2,45 @@
 // Role detection and permission management
 import { supabase } from './supabase';
 
-export type UserRole = 'super_admin' | 'admin' | 'loan_officer' | 'realtor' | 'buyer';
+export type UserRole =
+  | 'super_admin'
+  | 'admin'
+  | 'loan_officer'
+  | 'realtor'
+  | 'buyer';
+
+const SESSION_CACHE_TTL_MS = 5 * 60 * 1000;
+type CacheEntry<T> = { value: T; expiresAt: number };
+const roleCache = new Map<string, CacheEntry<UserRole>>();
+const teamMemberCache = new Map<string, CacheEntry<string>>();
+
+function readSessionCache<T>(
+  cache: Map<string, CacheEntry<T>>,
+  key: string
+): T | undefined {
+  const entry = cache.get(key);
+  if (!entry) return undefined;
+  if (entry.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return undefined;
+  }
+  return entry.value;
+}
+
+function writeSessionCache<T>(
+  cache: Map<string, CacheEntry<T>>,
+  key: string,
+  value: T
+) {
+  cache.set(key, {
+    value,
+    expiresAt: Date.now() + SESSION_CACHE_TTL_MS,
+  });
+}
+
+function roleCacheKey(userId: string, email: string) {
+  return `${userId}:${email.trim().toLowerCase()}`;
+}
 
 // Super Admins have full access to everything
 const SUPER_ADMIN_EMAILS = [
@@ -24,19 +62,30 @@ const ADMIN_EMAILS = [
 /**
  * Determine user's role based on email and team membership
  */
-export async function getUserRole(userId: string, email: string): Promise<UserRole> {
+export async function getUserRole(
+  userId: string,
+  email: string
+): Promise<UserRole> {
   const emailLower = email.toLowerCase();
-  
+  const cacheKey = roleCacheKey(userId, emailLower);
+  const cachedRole = readSessionCache(roleCache, cacheKey);
+  if (cachedRole) return cachedRole;
+
+  const remember = (role: UserRole) => {
+    if (role !== 'buyer') writeSessionCache(roleCache, cacheKey, role);
+    return role;
+  };
+
   // Check super admin first (highest priority)
   if (SUPER_ADMIN_EMAILS.includes(emailLower)) {
-    return 'super_admin';
+    return remember('super_admin');
   }
-  
+
   // Check admin
   if (ADMIN_EMAILS.includes(emailLower)) {
-    return 'admin';
+    return remember('admin');
   }
-  
+
   // Check if user is a loan officer (by user_id)
   let { data: loData } = await supabase
     .from('loan_officers')
@@ -44,11 +93,12 @@ export async function getUserRole(userId: string, email: string): Promise<UserRo
     .eq('user_id', userId)
     .eq('active', true)
     .maybeSingle();
-  
+
   if (loData) {
-    return 'loan_officer';
+    writeSessionCache(teamMemberCache, `${userId}:loan_officer`, loData.id);
+    return remember('loan_officer');
   }
-  
+
   // Auto-link: Check if there's an unlinked loan officer with this email
   const { data: unlinkedLO } = await supabase
     .from('loan_officers')
@@ -57,18 +107,21 @@ export async function getUserRole(userId: string, email: string): Promise<UserRo
     .is('user_id', null)
     .eq('active', true)
     .maybeSingle();
-  
+
   if (unlinkedLO) {
     // Link this auth user to the loan officer record
     await supabase
       .from('loan_officers')
       .update({ user_id: userId })
       .eq('id', unlinkedLO.id);
-    
-    console.log(`✅ Auto-linked user ${userId} to loan officer ${unlinkedLO.id}`);
-    return 'loan_officer';
+
+    console.log(
+      `✅ Auto-linked user ${userId} to loan officer ${unlinkedLO.id}`
+    );
+    writeSessionCache(teamMemberCache, `${userId}:loan_officer`, unlinkedLO.id);
+    return remember('loan_officer');
   }
-  
+
   // Check if user is a realtor (by user_id)
   let { data: realtorData } = await supabase
     .from('realtors')
@@ -76,11 +129,12 @@ export async function getUserRole(userId: string, email: string): Promise<UserRo
     .eq('user_id', userId)
     .eq('active', true)
     .maybeSingle();
-  
+
   if (realtorData) {
-    return 'realtor';
+    writeSessionCache(teamMemberCache, `${userId}:realtor`, realtorData.id);
+    return remember('realtor');
   }
-  
+
   // Auto-link: Check if there's an unlinked realtor with this email
   const { data: unlinkedRealtor } = await supabase
     .from('realtors')
@@ -89,20 +143,23 @@ export async function getUserRole(userId: string, email: string): Promise<UserRo
     .is('user_id', null)
     .eq('active', true)
     .maybeSingle();
-  
+
   if (unlinkedRealtor) {
     // Link this auth user to the realtor record
     await supabase
       .from('realtors')
       .update({ user_id: userId })
       .eq('id', unlinkedRealtor.id);
-    
-    console.log(`✅ Auto-linked user ${userId} to realtor ${unlinkedRealtor.id}`);
-    return 'realtor';
+
+    console.log(
+      `✅ Auto-linked user ${userId} to realtor ${unlinkedRealtor.id}`
+    );
+    writeSessionCache(teamMemberCache, `${userId}:realtor`, unlinkedRealtor.id);
+    return remember('realtor');
   }
-  
+
   // Default to buyer
-  return 'buyer';
+  return remember('buyer');
 }
 
 /**
@@ -112,6 +169,9 @@ export async function getUserTeamMemberId(
   userId: string,
   role: 'loan_officer' | 'realtor'
 ): Promise<string | null> {
+  const cacheKey = `${userId}:${role}`;
+  const cachedMemberId = readSessionCache(teamMemberCache, cacheKey);
+  if (cachedMemberId) return cachedMemberId;
   const table = role === 'loan_officer' ? 'loan_officers' : 'realtors';
   const { data } = await supabase
     .from(table)
@@ -119,8 +179,10 @@ export async function getUserTeamMemberId(
     .eq('user_id', userId)
     .eq('active', true)
     .maybeSingle();
-  
-  return data?.id || null;
+
+  const memberId = data?.id || null;
+  if (memberId) writeSessionCache(teamMemberCache, cacheKey, memberId);
+  return memberId;
 }
 
 /**

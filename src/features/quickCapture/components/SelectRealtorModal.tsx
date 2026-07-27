@@ -1,7 +1,7 @@
 // src/features/quickCapture/components/SelectRealtorModal.tsx
 // Modal picker to select an existing realtor
 
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { fetchAssignedRealtors } from '../../../lib/supabase/realtors';
+import { useRealtors } from '../../../hooks/useRealtors';
 import type { AssignedRealtor } from '../../../lib/types/realtors';
 
 interface SelectRealtorModalProps {
@@ -33,35 +33,31 @@ export default function SelectRealtorModal({
   onClose,
   selectedRealtorId,
 }: SelectRealtorModalProps) {
-  const [realtors, setRealtors] = useState<AssignedRealtor[]>([]);
-  const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
+  const {
+    realtors,
+    loading,
+    loadingMore,
+    hasMore,
+    error,
+    setSearchQuery,
+    loadMore,
+    retry,
+  } = useRealtors({
+    userId,
+    autoFetch: visible,
+  });
 
-  // Debounce search
   useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setDebouncedSearch(search), 300);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [search]);
+    setSearchQuery(search);
+  }, [search, setSearchQuery]);
 
-  // Fetch on open or search change
   useEffect(() => {
-    if (!visible || !userId) return;
-
-    const load = async () => {
-      setLoading(true);
-      const { data } = await fetchAssignedRealtors(userId, {
-        search: debouncedSearch || undefined,
-      });
-      setRealtors(data || []);
-      setLoading(false);
-    };
-    load();
-  }, [visible, userId, debouncedSearch]);
+    if (!visible) {
+      setSearch('');
+      setSearchQuery('');
+    }
+  }, [setSearchQuery, visible]);
 
   const handleSelect = useCallback(
     (r: AssignedRealtor) => {
@@ -107,7 +103,12 @@ export default function SelectRealtorModal({
   );
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+    >
       <KeyboardAvoidingView
         style={styles.overlay}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -146,7 +147,11 @@ export default function SelectRealtorModal({
               style={styles.clearRow}
               onPress={() => onSelect({ realtor_id: '', realtor_name: '' })}
             >
-              <Ionicons name="remove-circle-outline" size={20} color="#EF4444" />
+              <Ionicons
+                name="remove-circle-outline"
+                size={20}
+                color="#EF4444"
+              />
               <Text style={styles.clearText}>Remove Realtor Link</Text>
             </TouchableOpacity>
           )}
@@ -164,11 +169,51 @@ export default function SelectRealtorModal({
               contentContainerStyle={styles.list}
               ListEmptyComponent={
                 <View style={styles.emptyWrap}>
-                  <Text style={styles.emptyText}>
-                    {search ? 'No realtors match your search' : 'No realtors found'}
-                  </Text>
+                  {error ? (
+                    <>
+                      <Text style={styles.emptyText}>{error}</Text>
+                      <TouchableOpacity
+                        style={styles.retryButton}
+                        onPress={() => void retry()}
+                      >
+                        <Text style={styles.retryText}>Retry</Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <Text style={styles.emptyText}>
+                      {search
+                        ? 'No realtors match your search'
+                        : 'No realtors found'}
+                    </Text>
+                  )}
                 </View>
               }
+              ListFooterComponent={
+                loadingMore ? (
+                  <ActivityIndicator
+                    style={styles.footerLoader}
+                    color="#7C3AED"
+                  />
+                ) : error && realtors.length > 0 ? (
+                  <TouchableOpacity
+                    style={styles.footerRetry}
+                    onPress={() => void retry()}
+                  >
+                    <Text style={styles.retryText}>Retry loading realtors</Text>
+                  </TouchableOpacity>
+                ) : hasMore ? (
+                  <TouchableOpacity
+                    style={styles.footerRetry}
+                    onPress={() => void loadMore()}
+                  >
+                    <Text style={styles.retryText}>Load more realtors</Text>
+                  </TouchableOpacity>
+                ) : null
+              }
+              onEndReached={() => {
+                if (hasMore) void loadMore();
+              }}
+              onEndReachedThreshold={0.4}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             />
@@ -256,6 +301,30 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 14,
     color: '#9CA3AF',
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 12,
+    borderRadius: 8,
+    backgroundColor: '#7C3AED',
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+  },
+  retryText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  footerLoader: {
+    paddingVertical: 16,
+  },
+  footerRetry: {
+    alignSelf: 'center',
+    marginVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#7C3AED',
+    paddingHorizontal: 18,
+    paddingVertical: 9,
   },
   row: {
     flexDirection: 'row',

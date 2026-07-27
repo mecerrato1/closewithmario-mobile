@@ -145,6 +145,11 @@ export default function RealtorDetailScreen({
 
   const fullName = getRealtorFullName(realtor);
   const initials = getRealtorInitials(realtor);
+  const touchCurrentAssignment = async () => {
+    if (realtor.assignment_id) {
+      await touchRealtor(realtor.assignment_id);
+    }
+  };
 
   // Fetch activity and leads on mount
   useEffect(() => {
@@ -180,6 +185,7 @@ export default function RealtorDetailScreen({
   }, [realtor.realtor_id]);
 
   const handleStageChange = async (newStage: RelationshipStage) => {
+    if (!realtor.assignment_id) return;
     setStage(newStage);
     setSaving(true);
     const { error } = await updateAssignment(realtor.assignment_id, {
@@ -313,6 +319,7 @@ export default function RealtorDetailScreen({
   };
 
   const handleSaveNotes = async () => {
+    if (!realtor.assignment_id) return;
     setSaving(true);
     const { error } = await updateAssignment(realtor.assignment_id, { notes });
     setSaving(false);
@@ -327,7 +334,7 @@ export default function RealtorDetailScreen({
     if (realtor.phone) {
       Linking.openURL(`tel:${realtor.phone}`);
       await logRealtorActivity(realtor.realtor_id, userId, 'call');
-      await touchRealtor(realtor.assignment_id);
+      await touchCurrentAssignment();
       onUpdate();
     } else {
       Alert.alert('No Phone', 'This realtor has no phone number on file.');
@@ -375,14 +382,14 @@ export default function RealtorDetailScreen({
     if (templateMode === 'text') {
       const encodedBody = encodeURIComponent(messageBody);
       await logRealtorActivity(realtor.realtor_id, userId, 'text');
-      await touchRealtor(realtor.assignment_id);
+      await touchCurrentAssignment();
       onUpdate();
       Linking.openURL(`sms:${realtor.phone}?body=${encodedBody}`);
     } else if (templateMode === 'email') {
       const subject = encodeURIComponent(getRealtorTemplateSubject(template, useSpanishTemplates));
       const body = encodeURIComponent(messageBody);
       await logRealtorActivity(realtor.realtor_id, userId, 'email');
-      await touchRealtor(realtor.assignment_id);
+      await touchCurrentAssignment();
       onUpdate();
       
       // Try Outlook first, fallback to mailto
@@ -423,14 +430,14 @@ export default function RealtorDetailScreen({
     if (templateMode === 'text') {
       const encodedBody = encodeURIComponent(messageBody);
       await logRealtorActivity(realtor.realtor_id, userId, 'text');
-      await touchRealtor(realtor.assignment_id);
+      await touchCurrentAssignment();
       onUpdate();
       Linking.openURL(`sms:${realtor.phone}?body=${encodedBody}`);
     } else if (templateMode === 'email') {
       const subject = encodeURIComponent('Quick message');
       const body = encodeURIComponent(messageBody);
       await logRealtorActivity(realtor.realtor_id, userId, 'email');
-      await touchRealtor(realtor.assignment_id);
+      await touchCurrentAssignment();
       onUpdate();
       
       // Try Outlook first, fallback to mailto
@@ -1119,67 +1126,71 @@ export default function RealtorDetailScreen({
           </View>
         </Modal>
 
-        {/* Relationship Stage */}
-        <View style={[styles.section, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-            Relationship Stage
-          </Text>
-          <View style={styles.stageButtons}>
-            {STAGES.map((s) => {
-              const config = STAGE_CONFIG[s];
-              const isSelected = stage === s;
-              return (
-                <TouchableOpacity
-                  key={s}
-                  style={[
-                    styles.stageButton,
-                    { borderColor: colors.border },
-                    isSelected && { backgroundColor: config.bgColor, borderColor: config.color },
-                  ]}
-                  onPress={() => handleStageChange(s)}
-                >
-                  <Text
-                    style={[
-                      styles.stageButtonText,
-                      { color: isSelected ? config.color : colors.textSecondary },
-                    ]}
-                  >
-                    {config.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
+        {realtor.assignment_id ? (
+          <>
+            {/* Relationship Stage */}
+            <View style={[styles.section, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+                Relationship Stage
+              </Text>
+              <View style={styles.stageButtons}>
+                {STAGES.map((s) => {
+                  const config = STAGE_CONFIG[s];
+                  const isSelected = stage === s;
+                  return (
+                    <TouchableOpacity
+                      key={s}
+                      style={[
+                        styles.stageButton,
+                        { borderColor: colors.border },
+                        isSelected && { backgroundColor: config.bgColor, borderColor: config.color },
+                      ]}
+                      onPress={() => handleStageChange(s)}
+                    >
+                      <Text
+                        style={[
+                          styles.stageButtonText,
+                          { color: isSelected ? config.color : colors.textSecondary },
+                        ]}
+                      >
+                        {config.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
 
-        {/* Notes */}
-        <View style={[styles.section, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Notes</Text>
-          <TextInput
-            style={[
-              styles.notesInput,
-              { color: colors.textPrimary, borderColor: colors.border },
-            ]}
-            placeholder="Add notes about this realtor..."
-            placeholderTextColor={colors.textSecondary}
-            value={notes}
-            onChangeText={setNotes}
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-          />
-          <TouchableOpacity
-            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-            onPress={handleSaveNotes}
-            disabled={saving}
-          >
-            {saving ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Text style={styles.saveButtonText}>Save Notes</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+            {/* Notes */}
+            <View style={[styles.section, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+              <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Notes</Text>
+              <TextInput
+                style={[
+                  styles.notesInput,
+                  { color: colors.textPrimary, borderColor: colors.border },
+                ]}
+                placeholder="Add notes about this realtor..."
+                placeholderTextColor={colors.textSecondary}
+                value={notes}
+                onChangeText={setNotes}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
+              <TouchableOpacity
+                style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+                onPress={handleSaveNotes}
+                disabled={saving}
+              >
+                {saving ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.saveButtonText}>Save Notes</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : null}
 
         {/* Activity Timeline */}
         <View style={[styles.section, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>

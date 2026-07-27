@@ -1,8 +1,11 @@
-// src/hooks/useRealtors.ts
-// Hook for managing realtor list state with search, filters, and refresh
+// Hook for managing the caller-authorized, paginated realtor directory.
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { fetchAssignedRealtors, fetchAllRealtors, fetchNeedsLoveRealtors } from '../lib/supabase/realtors';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { fetchRealtorDirectoryPage } from '../lib/supabase/realtors';
+import {
+  filterAndSortRealtors,
+  mergeRealtorPages,
+} from '../features/realtors/realtorDirectoryState';
 import type { AssignedRealtor, RelationshipStage } from '../lib/types/realtors';
 import type { UserRole } from '../lib/roles';
 
@@ -16,117 +19,260 @@ interface UseRealtorsResult {
   realtors: AssignedRealtor[];
   needsLoveRealtors: AssignedRealtor[];
   loading: boolean;
+  loadingMore: boolean;
   refreshing: boolean;
+  hasMore: boolean;
+  loadedCount: number;
   error: string | null;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   stageFilter: RelationshipStage | 'all';
   setStageFilter: (stage: RelationshipStage | 'all') => void;
+  loadMore: () => Promise<void>;
+  retry: () => Promise<void>;
   refresh: () => Promise<void>;
   onRefresh: () => void;
 }
 
 const DEBOUNCE_MS = 300;
+const PAGE_SIZE = 50;
 
-export function useRealtors({ userId, autoFetch = true, userRole }: UseRealtorsOptions): UseRealtorsResult {
-  const [realtors, setRealtors] = useState<AssignedRealtor[]>([]);
-  const [needsLoveRealtors, setNeedsLoveRealtors] = useState<AssignedRealtor[]>([]);
-  const [loading, setLoading] = useState(true);
+function isCancelled(error: Error | null, signal: AbortSignal): boolean {
+  return (
+    signal.aborted ||
+    error?.name === 'AbortError' ||
+    error?.message === 'Request cancelled'
+  );
+}
+
+export function useRealtors({
+  userId,
+  autoFetch = true,
+  userRole,
+}: UseRealtorsOptions): UseRealtorsResult {
+  const [directoryRealtors, setDirectoryRealtors] = useState<AssignedRealtor[]>(
+    []
+  );
+  const [loading, setLoading] = useState(autoFetch);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [stageFilter, setStageFilter] = useState<RelationshipStage | 'all'>('all');
-  
-  const debounceTimer = useRef<NodeJS.Timeout | null>(null);
+  const [stageFilter, setStageFilter] = useState<RelationshipStage | 'all'>(
+    'all'
+  );
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
-  // Debounce search input
-  useEffect(() => {
-    if (debounceTimer.current) {
-      clearTimeout(debounceTimer.current);
-    }
-    debounceTimer.current = setTimeout(() => {
-      setDebouncedSearch(searchQuery);
-    }, DEBOUNCE_MS);
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
+  const generationRef = useRef(0);
+  const inFlightRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const offsetRef = useRef(0);
+  const hasMoreRef = useRef(false);
+  const failedModeRef = useRef<'first' | 'more'>('first');
 
+  useEffect(() => {
+    mountedRef.current = true;
     return () => {
-      if (debounceTimer.current) {
-        clearTimeout(debounceTimer.current);
-      }
+      mountedRef.current = false;
+      generationRef.current += 1;
+      abortRef.current?.abort();
+      inFlightRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(
+      () => setDebouncedSearch(searchQuery),
+      DEBOUNCE_MS
+    );
+    return () => {
+      if (debounceTimer.current) clearTimeout(debounceTimer.current);
     };
   }, [searchQuery]);
 
-  // Fetch realtors
-  const fetchData = useCallback(async (isRefresh = false) => {
-    if (!userId) {
+  const loadFirstPage = useCallback(
+    async (isRefresh: boolean, clearExisting: boolean) => {
+      generationRef.current += 1;
+      const generation = generationRef.current;
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      inFlightRef.current = true;
+      offsetRef.current = 0;
+      hasMoreRef.current = false;
+      setHasMore(false);
+      setLoadingMore(false);
+      setError(null);
+
+      if (clearExisting) setDirectoryRealtors([]);
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      if (!userId) {
+        inFlightRef.current = false;
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
+      const result = await fetchRealtorDirectoryPage({
+        loUserId: userId,
+        includeAll: userRole === 'super_admin' || userRole === 'admin',
+        offset: 0,
+        pageSize: PAGE_SIZE,
+        signal: controller.signal,
+      });
+
+      if (
+        !mountedRef.current ||
+        generation !== generationRef.current ||
+        controller.signal.aborted
+      ) {
+        return;
+      }
+
+      if (result.error || !result.data) {
+        if (!isCancelled(result.error, controller.signal)) {
+          failedModeRef.current = 'first';
+          setError(result.error?.message || 'Failed to load realtors');
+        }
+      } else {
+        setDirectoryRealtors(result.data.data);
+        offsetRef.current = result.data.nextOffset;
+        hasMoreRef.current = result.data.hasMore;
+        setHasMore(result.data.hasMore);
+      }
+
+      inFlightRef.current = false;
       setLoading(false);
+      setRefreshing(false);
+    },
+    [userId, userRole]
+  );
+
+  const loadMore = useCallback(async () => {
+    if (!userId || inFlightRef.current || !hasMoreRef.current) return;
+
+    const generation = generationRef.current;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    inFlightRef.current = true;
+    setLoadingMore(true);
+    setError(null);
+
+    const result = await fetchRealtorDirectoryPage({
+      loUserId: userId,
+      includeAll: userRole === 'super_admin' || userRole === 'admin',
+      offset: offsetRef.current,
+      pageSize: PAGE_SIZE,
+      signal: controller.signal,
+    });
+
+    if (
+      !mountedRef.current ||
+      generation !== generationRef.current ||
+      controller.signal.aborted
+    ) {
       return;
     }
 
-    if (isRefresh) {
-      setRefreshing(true);
+    if (result.error || !result.data) {
+      if (!isCancelled(result.error, controller.signal)) {
+        failedModeRef.current = 'more';
+        setError(result.error?.message || 'Failed to load more realtors');
+      }
     } else {
-      setLoading(true);
+      setDirectoryRealtors((current) =>
+        mergeRealtorPages(current, result.data!.data)
+      );
+      offsetRef.current = result.data.nextOffset;
+      hasMoreRef.current = result.data.hasMore;
+      setHasMore(result.data.hasMore);
     }
+
+    inFlightRef.current = false;
+    setLoadingMore(false);
+  }, [userId, userRole]);
+
+  useEffect(() => {
+    generationRef.current += 1;
+    abortRef.current?.abort();
+    inFlightRef.current = false;
+    offsetRef.current = 0;
+    hasMoreRef.current = false;
+    setDirectoryRealtors([]);
+    setHasMore(false);
+    setLoadingMore(false);
+    setRefreshing(false);
     setError(null);
 
-    try {
-      // Super admins see all realtors; others see only their assigned ones
-      const isSuperAdmin = userRole === 'super_admin';
-      const { data, error: fetchError } = isSuperAdmin
-        ? await fetchAllRealtors({ search: debouncedSearch || undefined, stage: stageFilter })
-        : await fetchAssignedRealtors(userId, { search: debouncedSearch || undefined, stage: stageFilter });
-
-      if (fetchError) {
-        setError(fetchError.message);
-        setRealtors([]);
-      } else {
-        setRealtors(data || []);
-      }
-
-      // Fetch "needs love" realtors (only if no search/filter active)
-      if (!debouncedSearch && stageFilter === 'all') {
-        const { data: needsLove } = await fetchNeedsLoveRealtors(userId, 5);
-        setNeedsLoveRealtors(needsLove || []);
-      } else {
-        setNeedsLoveRealtors([]);
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch realtors');
-      setRealtors([]);
-    } finally {
+    if (autoFetch && userId) {
+      void loadFirstPage(false, true);
+    } else {
       setLoading(false);
-      setRefreshing(false);
     }
-  }, [userId, debouncedSearch, stageFilter, userRole]);
+  }, [autoFetch, loadFirstPage, userId, userRole]);
 
-  // Auto-fetch on mount and when filters change
-  useEffect(() => {
-    if (autoFetch) {
-      fetchData();
-    }
-  }, [fetchData, autoFetch]);
+  const realtors = useMemo(
+    () =>
+      filterAndSortRealtors(directoryRealtors, {
+        search: debouncedSearch || undefined,
+        stage: stageFilter,
+      }),
+    [debouncedSearch, directoryRealtors, stageFilter]
+  );
 
-  // Manual refresh
-  const refresh = useCallback(async () => {
-    await fetchData(true);
-  }, [fetchData]);
+  const needsLoveRealtors = useMemo(
+    () =>
+      filterAndSortRealtors(directoryRealtors, { needsLove: true })
+        .sort((a, b) => {
+          const aTime = Date.parse(a.last_touched_at) || 0;
+          const bTime = Date.parse(b.last_touched_at) || 0;
+          return aTime - bTime;
+        })
+        .slice(0, 5),
+    [directoryRealtors]
+  );
 
-  // Pull-to-refresh handler
+  const refresh = useCallback(
+    () => loadFirstPage(true, false),
+    [loadFirstPage]
+  );
+
+  const retry = useCallback(
+    () =>
+      failedModeRef.current === 'more'
+        ? loadMore()
+        : loadFirstPage(directoryRealtors.length > 0, false),
+    [directoryRealtors.length, loadFirstPage, loadMore]
+  );
+
   const onRefresh = useCallback(() => {
-    fetchData(true);
-  }, [fetchData]);
+    void refresh();
+  }, [refresh]);
 
   return {
     realtors,
     needsLoveRealtors,
     loading,
+    loadingMore,
     refreshing,
+    hasMore,
+    loadedCount: directoryRealtors.length,
     error,
     searchQuery,
     setSearchQuery,
     stageFilter,
     setStageFilter,
+    loadMore,
+    retry,
     refresh,
     onRefresh,
   };

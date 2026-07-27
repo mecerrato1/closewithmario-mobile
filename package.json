@@ -6,7 +6,9 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "test": "tsx --test \"src/features/**/*.test.ts\" \"src/features/**/*.test.mjs\"",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -42,6 +44,7 @@
     "@types/react": "~19.1.0",
     "expo-mcp": "~0.2.1",
     "expo-module-scripts": "^5.0.7",
+    "tsx": "^4.23.1",
     "typescript": "~5.9.2"
   },
   "private": true

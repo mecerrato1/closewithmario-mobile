@@ -15,33 +15,17 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
+import { authenticatedFetch } from '../lib/authenticatedFetch';
+import {
+  fetchMetaDmHistoryPage,
+  type MetaDmHistoryMessage,
+} from '../features/messages/messageHistoryClient';
+import { useMetaDmConversation } from '../features/messages/useMetaDmConversation';
+import { usePaginatedMessageHistory } from '../features/messages/usePaginatedMessageHistory';
 import { useThemeColors } from '../styles/theme';
 
 type LeadSource = 'organic' | 'meta';
-type MetaDmPlatform = 'messenger' | 'instagram';
-
-type MetaDmConversation = {
-  id: string;
-  platform: MetaDmPlatform;
-  participant_name: string | null;
-  can_reply: boolean;
-  conversation_link: string | null;
-  last_message_at: string | null;
-  message_count: number | null;
-  matched_via: string | null;
-};
-
-type MetaDmMessage = {
-  id: string;
-  direction: 'inbound' | 'outbound';
-  message_text: string | null;
-  created_at: string;
-  sender_name: string | null;
-  attachments?: unknown;
-  status?: string | null;
-  received_at?: string | null;
-  read_at?: string | null;
-};
+type MetaDmMessage = MetaDmHistoryMessage;
 
 interface MetaDmMessagingProps {
   leadId: string;
@@ -54,15 +38,22 @@ interface MetaDmMessagingProps {
   onConversationRead?: () => void;
 }
 
-const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || 'https://www.closewithmario.com').replace(/\/$/, '');
+const API_BASE_URL = (
+  process.env.EXPO_PUBLIC_API_BASE_URL || 'https://www.closewithmario.com'
+).replace(/\/$/, '');
 
 function getRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function getRecordArray(value: unknown): Record<string, unknown>[] {
   return Array.isArray(value)
-    ? value.map((item) => getRecord(item)).filter(Boolean) as Record<string, unknown>[]
+    ? (value.map((item) => getRecord(item)).filter(Boolean) as Record<
+        string,
+        unknown
+      >[])
     : [];
 }
 
@@ -70,7 +61,10 @@ function getAttachmentPreview(attachments: unknown) {
   const attachmentItems = getRecordArray(getRecord(attachments)?.data);
   for (const item of attachmentItems) {
     const genericTemplate = getRecord(item.generic_template);
-    if (typeof genericTemplate?.title === 'string' && genericTemplate.title.trim()) {
+    if (
+      typeof genericTemplate?.title === 'string' &&
+      genericTemplate.title.trim()
+    ) {
       return genericTemplate.title.trim();
     }
 
@@ -133,202 +127,91 @@ export function MetaDmMessaging({
   onConversationRead,
 }: MetaDmMessagingProps) {
   const { colors } = useThemeColors();
-  const [conversation, setConversation] = useState<MetaDmConversation | null>(null);
-  const [messages, setMessages] = useState<MetaDmMessage[]>([]);
   const [draft, setDraft] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [emptyReason, setEmptyReason] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const flatListRef = useRef<FlatList<MetaDmMessage>>(null);
-
-  const scrollToBottom = useCallback(() => {
-    if (flatListRef.current && messages.length > 0) {
-      flatListRef.current.scrollToEnd({ animated: true });
-    }
-  }, [messages.length]);
-
-  const getAccessToken = useCallback(async (forceRefresh = false) => {
-    if (forceRefresh) {
-      const { data, error } = await supabase.auth.refreshSession();
-      if (error || !data.session?.access_token) {
-        throw new Error('Your session expired. Please sign in again.');
+  const activeConversationIdRef = useRef<string | null>(null);
+  const onConversationReadRef = useRef(onConversationRead);
+  const {
+    conversation,
+    loading: conversationLoading,
+    syncing,
+    error: conversationError,
+    emptyReason,
+    refresh: refreshConversation,
+    reloadStored,
+    clearError: clearConversationError,
+  } = useMetaDmConversation({
+    leadId,
+    leadSource,
+    conversationId,
+  });
+  const fetchHistoryPage = useCallback(
+    (
+      cursor: Parameters<typeof fetchMetaDmHistoryPage>[0]['cursor'],
+      signal: AbortSignal
+    ) => {
+      if (!conversation?.id) {
+        return Promise.resolve({ items: [], hasOlder: false });
       }
-      return data.session.access_token;
-    }
-
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (session?.access_token) {
-      return session.access_token;
-    }
-
-    const { data, error } = await supabase.auth.refreshSession();
-    if (error || !data.session?.access_token) {
-      throw new Error('Your session expired. Please sign in again.');
-    }
-
-    return data.session.access_token;
-  }, []);
-
-  const fetchWithAuthRetry = useCallback(
-    async (path: string, init: RequestInit) => {
-      let token = await getAccessToken(false);
-
-      const makeRequest = async (accessToken: string) =>
-        fetch(`${API_BASE_URL}${path}`, {
-          ...init,
-          headers: {
-            ...(init.headers || {}),
-            Authorization: `Bearer ${accessToken}`,
-          },
-        });
-
-      let response = await makeRequest(token);
-      if (response.status === 401) {
-        token = await getAccessToken(true);
-        response = await makeRequest(token);
-      }
-
-      return response;
-    },
-    [getAccessToken]
-  );
-
-  const fetchStoredConversation = useCallback(async () => {
-    let conversationQuery = supabase
-      .from('meta_dm_conversations')
-      .select('id, platform, participant_name, can_reply, conversation_link, last_message_at, message_count, matched_via');
-
-    if (conversationId) {
-      conversationQuery = conversationQuery.eq('id', conversationId).limit(1);
-    } else {
-      conversationQuery = conversationQuery
-        .eq('lead_id', leadId)
-        .eq('lead_source', leadSource)
-        .order('last_message_at', { ascending: false })
-        .limit(1);
-    }
-
-    const { data: conversationData, error: conversationError } = await conversationQuery.maybeSingle();
-
-    if (conversationError) {
-      throw conversationError;
-    }
-
-    const nextConversation = (conversationData as MetaDmConversation | null) || null;
-    setConversation(nextConversation);
-
-    if (!nextConversation?.id) {
-      setMessages([]);
-      return null;
-    }
-
-    const { data: messageData, error: messageError } = await supabase
-      .from('meta_dm_messages')
-      .select('id, direction, message_text, created_at, sender_name, attachments, status, received_at, read_at')
-      .eq('conversation_id', nextConversation.id)
-      .order('created_at', { ascending: true });
-
-    if (messageError) {
-      throw messageError;
-    }
-
-    setMessages((messageData || []) as MetaDmMessage[]);
-    return nextConversation;
-  }, [conversationId, leadId, leadSource]);
-
-  const performSync = useCallback(
-    async (force = false) => {
-      const response = await fetchWithAuthRetry('/api/meta-dm-sync', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          leadId,
-          leadSource,
-          conversationId,
-          force,
-        }),
+      return fetchMetaDmHistoryPage({
+        conversationId: conversation.id,
+        cursor,
+        signal,
       });
-
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to sync Messenger conversation');
-      }
-
-      setEmptyReason(result.matched ? null : result.reason || 'No Messenger conversation matched this lead yet.');
-      return fetchStoredConversation();
     },
-    [conversationId, fetchStoredConversation, fetchWithAuthRetry, leadId, leadSource]
+    [conversation?.id]
   );
-
-  const handleRefresh = useCallback(async () => {
-    setSyncing(true);
-    setError(null);
-
-    try {
-      await performSync(true);
-    } catch (refreshError) {
-      const message =
-        refreshError instanceof Error ? refreshError.message : 'Failed to sync Messenger conversation';
-      setError(message);
-      await fetchStoredConversation().catch((fetchError) => {
-        console.error('[MetaDmMessaging] Failed to reload stored conversation after refresh error', fetchError);
-      });
-    } finally {
-      setSyncing(false);
-    }
-  }, [fetchStoredConversation, performSync]);
+  const {
+    messages,
+    loading: historyLoading,
+    loadingOlder,
+    hasOlder,
+    error: historyError,
+    scrollRevision,
+    reload: reloadHistory,
+    loadOlder,
+    retry: retryHistory,
+    clearError: clearHistoryError,
+    mutateMessages,
+  } = usePaginatedMessageHistory({
+    queryKey: `dm:${conversation?.id || 'none'}`,
+    enabled: Boolean(conversation?.id),
+    fetchPage: fetchHistoryPage,
+  });
+  const loading =
+    conversationLoading || (Boolean(conversation?.id) && historyLoading);
+  const error = actionError || conversationError || historyError;
+  activeConversationIdRef.current = conversation?.id || null;
 
   useEffect(() => {
-    let cancelled = false;
+    onConversationReadRef.current = onConversationRead;
+  }, [onConversationRead]);
 
-    setConversation(null);
-    setMessages([]);
+  const scrollToBottom = useCallback(() => {
+    if (flatListRef.current) {
+      flatListRef.current.scrollToEnd({ animated: true });
+    }
+  }, []);
+
+  const handleRefresh = useCallback(async () => {
+    setActionError(null);
+    clearConversationError();
+    clearHistoryError();
+    await refreshConversation();
+    await reloadHistory();
+  }, [
+    clearConversationError,
+    clearHistoryError,
+    refreshConversation,
+    reloadHistory,
+  ]);
+
+  useEffect(() => {
     setDraft('');
-    setError(null);
-    setEmptyReason(null);
-    setLoading(true);
-
-    const loadConversation = async () => {
-      try {
-        const existingConversation = await fetchStoredConversation();
-        if (cancelled) return;
-
-        if (!existingConversation) {
-          try {
-            await performSync(false);
-          } catch (syncError) {
-            if (cancelled) return;
-            const message =
-              syncError instanceof Error ? syncError.message : 'Failed to sync Messenger conversation';
-            setError(message);
-            await fetchStoredConversation().catch((fetchError) => {
-              console.error('[MetaDmMessaging] Failed to load stored conversation after initial sync error', fetchError);
-            });
-          }
-        }
-      } catch (loadError) {
-        if (cancelled) return;
-        setError(loadError instanceof Error ? loadError.message : 'Failed to load Messenger conversation');
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void loadConversation();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [fetchStoredConversation, performSync]);
+    setActionError(null);
+  }, [conversationId, leadId, leadSource]);
 
   useEffect(() => {
     if (messages.length === 0) return;
@@ -338,46 +221,43 @@ export function MetaDmMessaging({
     }, 80);
 
     return () => clearTimeout(timeoutId);
-  }, [messages, scrollToBottom]);
+  }, [messages.length, scrollRevision, scrollToBottom]);
+
+  const markConversationRead = useCallback(async () => {
+    const activeConversationId = conversation?.id;
+    if (!activeConversationId) return;
+
+    const { error: readError } = await supabase.rpc(
+      'mark_meta_dm_conversation_read',
+      {
+        p_conversation_id: activeConversationId,
+      }
+    );
+
+    if (readError) {
+      console.error(
+        '[MetaDmMessaging] Failed to mark Messenger conversation read',
+        readError
+      );
+      return;
+    }
+    if (activeConversationIdRef.current !== activeConversationId) return;
+
+    onConversationReadRef.current?.();
+
+    const readAt = new Date().toISOString();
+    mutateMessages((currentMessages) =>
+      currentMessages.map((message) =>
+        message.direction === 'inbound' && !message.read_at
+          ? { ...message, read_at: readAt }
+          : message
+      )
+    );
+  }, [conversation?.id, mutateMessages]);
 
   useEffect(() => {
-    if (!conversation?.id) return;
-
-    const hasUnreadInbound = messages.some((message) => message.direction === 'inbound' && !message.read_at);
-    if (!hasUnreadInbound) return;
-
-    let cancelled = false;
-
-    const markRead = async () => {
-      const { error: readError } = await supabase.rpc('mark_meta_dm_conversation_read', {
-        p_conversation_id: conversation.id,
-      });
-
-      if (readError) {
-        console.error('[MetaDmMessaging] Failed to mark Messenger conversation read', readError);
-        return;
-      }
-
-      if (cancelled) return;
-
-      onConversationRead?.();
-
-      const readAt = new Date().toISOString();
-      setMessages((currentMessages) =>
-        currentMessages.map((message) =>
-          message.direction === 'inbound' && !message.read_at
-            ? { ...message, read_at: readAt }
-            : message
-        )
-      );
-    };
-
-    void markRead();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [conversation?.id, messages, onConversationRead]);
+    void markConversationRead();
+  }, [markConversationRead]);
 
   useEffect(() => {
     if (!conversation?.id) return;
@@ -392,8 +272,15 @@ export function MetaDmMessaging({
           table: 'meta_dm_messages',
           filter: `conversation_id=eq.${conversation.id}`,
         },
-        () => {
-          void fetchStoredConversation();
+        (payload) => {
+          void reloadHistory();
+          void reloadStored();
+          if (
+            payload.eventType === 'INSERT' &&
+            (payload.new as { direction?: unknown }).direction === 'inbound'
+          ) {
+            void markConversationRead();
+          }
         }
       )
       .subscribe();
@@ -409,7 +296,7 @@ export function MetaDmMessaging({
           filter: `id=eq.${conversation.id}`,
         },
         () => {
-          void fetchStoredConversation();
+          void reloadStored();
         }
       )
       .subscribe();
@@ -418,57 +305,88 @@ export function MetaDmMessaging({
       void supabase.removeChannel(messageChannel);
       void supabase.removeChannel(conversationChannel);
     };
-  }, [conversation?.id, fetchStoredConversation]);
+  }, [conversation?.id, markConversationRead, reloadHistory, reloadStored]);
 
   const sendMessage = useCallback(async () => {
-    if (!conversation?.id || !draft.trim() || sending || !conversation.can_reply) {
+    if (
+      !conversation?.id ||
+      !draft.trim() ||
+      sending ||
+      !conversation.can_reply
+    ) {
       return;
     }
 
     const messageToSend = draft.trim();
     setSending(true);
-    setError(null);
+    setActionError(null);
+    clearConversationError();
+    clearHistoryError();
 
     try {
-      const response = await fetchWithAuthRetry('/api/meta-dm-send', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          conversationId: conversation.id,
-          message: messageToSend,
-        }),
-      });
+      const response = await authenticatedFetch(
+        `${API_BASE_URL}/api/meta-dm-send`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            conversationId: conversation.id,
+            message: messageToSend,
+          }),
+        }
+      );
 
-      const result = await response.json().catch(() => ({}));
+      const result: unknown = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(result.error || 'Failed to send Messenger reply');
+        const resultRecord = getRecord(result);
+        throw new Error(
+          typeof resultRecord?.error === 'string'
+            ? resultRecord.error
+            : 'Failed to send Messenger reply'
+        );
       }
 
       setDraft('');
       Keyboard.dismiss();
-      await fetchStoredConversation();
+      await Promise.all([reloadStored(), reloadHistory()]);
       onMessageSent?.();
     } catch (sendError) {
-      const message = sendError instanceof Error ? sendError.message : 'Failed to send Messenger reply';
-      setError(message);
+      const message =
+        sendError instanceof Error
+          ? sendError.message
+          : 'Failed to send Messenger reply';
+      setActionError(message);
     } finally {
       setSending(false);
     }
-  }, [conversation, draft, fetchStoredConversation, fetchWithAuthRetry, onMessageSent, sending]);
+  }, [
+    clearConversationError,
+    clearHistoryError,
+    conversation,
+    draft,
+    onMessageSent,
+    reloadHistory,
+    reloadStored,
+    sending,
+  ]);
 
   const openInMetaUrl = toMetaInboxUrl(conversation?.conversation_link || null);
-  const composerDisabled = !conversation?.id || !conversation.can_reply || sending;
+  const composerDisabled =
+    !conversation?.id || !conversation.can_reply || sending;
   const composerPlaceholder = !conversation?.id
     ? 'No Messenger thread yet. Tap Refresh to try matching again.'
     : !conversation.can_reply
-      ? 'Messenger replies are blocked for this thread.'
-      : 'Type a Messenger reply...';
+    ? 'Messenger replies are blocked for this thread.'
+    : 'Type a Messenger reply...';
 
   const renderMessage = ({ item }: { item: MetaDmMessage }) => {
     const isOutbound = item.direction === 'outbound';
-    const displayText = item.message_text?.trim() || getAttachmentPreview(item.attachments) || 'Attachment';
+    const displayText =
+      item.message_text?.trim() ||
+      getAttachmentPreview(item.attachments) ||
+      'Attachment';
     const statusText = isOutbound ? getOutboundStatusText(item) : null;
 
     return (
@@ -483,7 +401,13 @@ export function MetaDmMessaging({
             dmStyles.messageBubble,
             isOutbound
               ? [dmStyles.outboundBubble, { backgroundColor: PLUM }]
-              : [dmStyles.inboundBubble, { backgroundColor: colors.cardBackground, borderColor: colors.border }],
+              : [
+                  dmStyles.inboundBubble,
+                  {
+                    backgroundColor: colors.cardBackground,
+                    borderColor: colors.border,
+                  },
+                ],
           ]}
         >
           <Text
@@ -498,7 +422,11 @@ export function MetaDmMessaging({
             <Text
               style={[
                 dmStyles.messageTime,
-                { color: isOutbound ? 'rgba(255,255,255,0.8)' : colors.textSecondary },
+                {
+                  color: isOutbound
+                    ? 'rgba(255,255,255,0.8)'
+                    : colors.textSecondary,
+                },
               ]}
             >
               {formatTime(item.created_at)}
@@ -507,7 +435,11 @@ export function MetaDmMessaging({
               <Text
                 style={[
                   dmStyles.messageStatus,
-                  { color: isOutbound ? 'rgba(255,255,255,0.85)' : colors.textSecondary },
+                  {
+                    color: isOutbound
+                      ? 'rgba(255,255,255,0.85)'
+                      : colors.textSecondary,
+                  },
                 ]}
               >
                 {statusText}
@@ -521,7 +453,12 @@ export function MetaDmMessaging({
 
   if (loading) {
     return (
-      <View style={[dmStyles.loadingContainer, { backgroundColor: colors.background }]}>
+      <View
+        style={[
+          dmStyles.loadingContainer,
+          { backgroundColor: colors.background },
+        ]}
+      >
         <ActivityIndicator size="small" color={PLUM} />
         <Text style={[dmStyles.loadingText, { color: colors.textSecondary }]}>
           Loading Messenger conversation...
@@ -549,14 +486,30 @@ export function MetaDmMessaging({
           >
             <View style={dmStyles.headerTopRow}>
               <View style={dmStyles.headerLeadBlock}>
-                <View style={[dmStyles.headerIcon, { backgroundColor: '#EEF2FF' }]}>
-                  <Ionicons name="chatbubble-ellipses-outline" size={18} color={PLUM} />
+                <View
+                  style={[dmStyles.headerIcon, { backgroundColor: '#EEF2FF' }]}
+                >
+                  <Ionicons
+                    name="chatbubble-ellipses-outline"
+                    size={18}
+                    color={PLUM}
+                  />
                 </View>
                 <View style={dmStyles.headerTextBlock}>
-                  <Text style={[dmStyles.headerTitle, { color: colors.textPrimary }]}>
+                  <Text
+                    style={[
+                      dmStyles.headerTitle,
+                      { color: colors.textPrimary },
+                    ]}
+                  >
                     {conversation?.participant_name || leadName}
                   </Text>
-                  <Text style={[dmStyles.headerSubtitle, { color: colors.textSecondary }]}>
+                  <Text
+                    style={[
+                      dmStyles.headerSubtitle,
+                      { color: colors.textSecondary },
+                    ]}
+                  >
                     Facebook Messenger
                     {leadPhone ? ` • ${leadPhone}` : ''}
                     {!leadPhone && leadEmail ? ` • ${leadEmail}` : ''}
@@ -566,32 +519,47 @@ export function MetaDmMessaging({
 
               <View style={dmStyles.headerActions}>
                 <TouchableOpacity
-                  style={[dmStyles.headerButton, { borderColor: colors.border }]}
+                  style={[
+                    dmStyles.headerButton,
+                    { borderColor: colors.border },
+                  ]}
                   onPress={() => {
                     void handleRefresh();
                   }}
                   disabled={syncing}
                 >
-                  <Text style={[dmStyles.headerButtonText, { color: colors.textSecondary }]}>
+                  <Text
+                    style={[
+                      dmStyles.headerButtonText,
+                      { color: colors.textSecondary },
+                    ]}
+                  >
                     {syncing ? 'Refreshing...' : 'Refresh'}
                   </Text>
                 </TouchableOpacity>
 
                 {openInMetaUrl ? (
                   <TouchableOpacity
-                    style={[dmStyles.headerButton, dmStyles.headerButtonPrimary]}
+                    style={[
+                      dmStyles.headerButton,
+                      dmStyles.headerButtonPrimary,
+                    ]}
                     onPress={() => {
                       void Linking.openURL(openInMetaUrl);
                     }}
                   >
-                    <Text style={dmStyles.headerButtonPrimaryText}>Open in Meta</Text>
+                    <Text style={dmStyles.headerButtonPrimaryText}>
+                      Open in Meta
+                    </Text>
                   </TouchableOpacity>
                 ) : null}
               </View>
             </View>
 
             {conversation?.matched_via ? (
-              <Text style={[dmStyles.matchHint, { color: colors.textSecondary }]}>
+              <Text
+                style={[dmStyles.matchHint, { color: colors.textSecondary }]}
+              >
                 Matched from stored Meta thread data
               </Text>
             ) : null}
@@ -599,13 +567,28 @@ export function MetaDmMessaging({
             <View style={dmStyles.bannerStack}>
               <View style={dmStyles.infoBanner}>
                 <Text style={dmStyles.infoBannerText}>
-                  Messenger history syncs from your Facebook Page inbox. Replies to real leads may still be blocked until the Meta app is live and approved for pages_messaging.
+                  Messenger history syncs from your Facebook Page inbox. Replies
+                  to real leads may still be blocked until the Meta app is live
+                  and approved for pages_messaging.
                 </Text>
               </View>
 
               {error ? (
                 <View style={dmStyles.errorBanner}>
                   <Text style={dmStyles.errorBannerText}>{error}</Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      if (actionError) {
+                        void sendMessage();
+                      } else if (historyError && conversation?.id) {
+                        void retryHistory();
+                      } else {
+                        void handleRefresh();
+                      }
+                    }}
+                  >
+                    <Text style={dmStyles.errorRetryText}>Retry</Text>
+                  </TouchableOpacity>
                 </View>
               ) : null}
 
@@ -618,7 +601,8 @@ export function MetaDmMessaging({
               {conversation && !conversation.can_reply ? (
                 <View style={dmStyles.warningBanner}>
                   <Text style={dmStyles.warningBannerText}>
-                    Meta currently marks this thread as reply-restricted, so the composer is disabled.
+                    Meta currently marks this thread as reply-restricted, so the
+                    composer is disabled.
                   </Text>
                 </View>
               ) : null}
@@ -635,6 +619,26 @@ export function MetaDmMessaging({
               dmStyles.messagesList,
               messages.length === 0 && dmStyles.messagesListEmpty,
             ]}
+            maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+            ListHeaderComponent={
+              hasOlder ? (
+                <TouchableOpacity
+                  style={dmStyles.loadOlderButton}
+                  onPress={() => {
+                    void loadOlder();
+                  }}
+                  disabled={loadingOlder}
+                >
+                  {loadingOlder ? (
+                    <ActivityIndicator size="small" color={PLUM} />
+                  ) : (
+                    <Text style={dmStyles.loadOlderText}>
+                      Load older messages
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              ) : null
+            }
             ListEmptyComponent={
               <View
                 style={[
@@ -645,11 +649,19 @@ export function MetaDmMessaging({
                   },
                 ]}
               >
-                <Text style={[dmStyles.emptyTitle, { color: colors.textPrimary }]}>
+                <Text
+                  style={[dmStyles.emptyTitle, { color: colors.textPrimary }]}
+                >
                   No Messenger thread stored yet
                 </Text>
-                <Text style={[dmStyles.emptySubtitle, { color: colors.textSecondary }]}>
-                  Use Refresh to try matching this lead against your Page inbox again.
+                <Text
+                  style={[
+                    dmStyles.emptySubtitle,
+                    { color: colors.textSecondary },
+                  ]}
+                >
+                  Use Refresh to try matching this lead against your Page inbox
+                  again.
                 </Text>
               </View>
             }
@@ -684,7 +696,8 @@ export function MetaDmMessaging({
             <TouchableOpacity
               style={[
                 dmStyles.sendButton,
-                (!draft.trim() || composerDisabled) && dmStyles.sendButtonDisabled,
+                (!draft.trim() || composerDisabled) &&
+                  dmStyles.sendButtonDisabled,
               ]}
               onPress={() => {
                 void sendMessage();
@@ -803,6 +816,9 @@ const dmStyles = StyleSheet.create({
     lineHeight: 18,
   },
   errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
     backgroundColor: '#FEF2F2',
     borderColor: '#FECACA',
     borderWidth: 1,
@@ -811,9 +827,15 @@ const dmStyles = StyleSheet.create({
     paddingVertical: 10,
   },
   errorBannerText: {
+    flex: 1,
     color: '#B91C1C',
     fontSize: 12,
     lineHeight: 18,
+  },
+  errorRetryText: {
+    color: '#991B1B',
+    fontSize: 12,
+    fontWeight: '700',
   },
   warningBanner: {
     backgroundColor: '#FFFBEB',
@@ -832,6 +854,20 @@ const dmStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     gap: 10,
+  },
+  loadOlderButton: {
+    alignSelf: 'center',
+    minHeight: 36,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    marginBottom: 4,
+    borderRadius: 18,
+    backgroundColor: '#EDE9FE',
+  },
+  loadOlderText: {
+    color: PLUM,
+    fontSize: 13,
+    fontWeight: '700',
   },
   messagesListContainer: {
     flex: 1,
