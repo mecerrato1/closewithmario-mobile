@@ -55,8 +55,13 @@ export type CrmLeadFacets = {
   unreadSms: number;
   needsAttention: number;
   newThisWeek: number;
+  ownerTotal: number;
+  unassignedOwner: number;
   statuses: Record<string, number>;
   ads: Record<string, number>;
+  sourceDetails: Record<string, number>;
+  metaSourceKeys: Record<string, number>;
+  organicSourceKeys: Record<string, number>;
   loanOfficers: Record<string, number>;
 };
 
@@ -77,7 +82,13 @@ export type CrmLeadListQuery = {
   ad?: string;
   platform?: CrmLeadPlatform;
   importSource?: 'all' | 'loandock';
-  ownerLoId?: string | null;
+  ownerLoId?: string | 'unassigned' | null;
+  sourceKey?: string;
+  sourceDetail?: string;
+  excludeUnqualified?: boolean;
+  needsAttention?: boolean;
+  unreadOnly?: boolean;
+  trackedOnly?: boolean;
   sort?: CrmLeadSort;
   direction?: 'asc' | 'desc';
 };
@@ -162,8 +173,15 @@ function parseFacets(value: unknown): CrmLeadFacets | null {
     unreadSms: readCount(value.unreadSms ?? value.unread_sms),
     needsAttention: readCount(value.needsAttention ?? value.needs_attention),
     newThisWeek: readCount(value.newThisWeek ?? value.new_this_week),
+    ownerTotal: readCount(value.ownerTotal ?? value.owner_total),
+    unassignedOwner: readCount(value.unassignedOwner ?? value.unassigned_owner),
     statuses: readCounts(value.statuses),
     ads: readCounts(value.ads),
+    sourceDetails: readCounts(value.sourceDetails ?? value.source_details),
+    metaSourceKeys: readCounts(value.metaSourceKeys ?? value.meta_source_keys),
+    organicSourceKeys: readCounts(
+      value.organicSourceKeys ?? value.organic_source_keys
+    ),
     loanOfficers: readLoanOfficerCounts(
       value.loanOfficers ?? value.loan_officers
     ),
@@ -250,6 +268,16 @@ export async function fetchCrmLeadListPage(
   if (search.length >= 2) params.set('search', search);
   if (query.ad && query.ad !== 'all') params.set('ad', query.ad);
   if (query.ownerLoId) params.set('ownerLoId', query.ownerLoId);
+  if (query.sourceKey && query.sourceKey !== 'all') {
+    params.set('sourceKey', query.sourceKey);
+  }
+  if (query.sourceDetail && query.sourceDetail !== 'all') {
+    params.set('sourceDetail', query.sourceDetail);
+  }
+  if (query.excludeUnqualified) params.set('excludeUnqualified', '1');
+  if (query.needsAttention) params.set('needsAttention', '1');
+  if (query.unreadOnly) params.set('unreadOnly', '1');
+  if (query.trackedOnly) params.set('trackedOnly', '1');
   if (options.cursor) params.set('cursor', options.cursor);
 
   const request = options.request ?? defaultRequester;
@@ -401,6 +429,40 @@ export async function fetchCrmLeadDetailBootstrap(
 
 export function crmLeadKey(lead: Pick<CrmLeadSummary, 'id' | 'source'>) {
   return `${lead.source}:${lead.id}`;
+}
+
+type CrmLeadSourceFields = {
+  source?: string | null;
+  db_source?: string | null;
+  source_detail?: string | null;
+  ad_name?: string | null;
+  campaign_name?: string | null;
+};
+
+function firstSourceValue(
+  values: Array<string | null | undefined>,
+  fallback: string
+) {
+  for (const value of values) {
+    const normalized = value?.trim();
+    if (normalized) return normalized;
+  }
+  return fallback;
+}
+
+export function getCrmLeadSourceKey(
+  lead: CrmLeadSourceFields,
+  source: CrmLeadSource
+) {
+  return source === 'meta'
+    ? firstSourceValue(
+        [lead.ad_name, lead.source_detail, lead.campaign_name],
+        'meta'
+      )
+    : firstSourceValue(
+        [lead.source_detail, lead.db_source, lead.source],
+        'organic'
+      );
 }
 
 export function toMobileLead(

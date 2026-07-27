@@ -145,6 +145,7 @@ export default function AuthenticatedRoot({
         return (
           <MessagesTabScreen
             session={session}
+            userRole={userRole}
             onNavigateToLead={handleNavigateToLead}
           />
         );

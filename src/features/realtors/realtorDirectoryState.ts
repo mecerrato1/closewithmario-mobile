@@ -9,6 +9,34 @@ export interface RealtorDirectoryFilters {
   needsLove?: boolean;
 }
 
+export interface RealtorDirectoryPageState {
+  nextOffset: number;
+  hasMore: boolean;
+  totalCount: number;
+}
+
+export function getRealtorDirectoryPageState(
+  offset: number,
+  itemCount: number,
+  totalCount: number
+): RealtorDirectoryPageState {
+  const safeOffset =
+    Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0;
+  const safeItemCount =
+    Number.isFinite(itemCount) && itemCount >= 0 ? Math.floor(itemCount) : 0;
+  const safeTotalCount =
+    Number.isFinite(totalCount) && totalCount >= 0
+      ? Math.floor(totalCount)
+      : safeOffset + safeItemCount;
+  const nextOffset = safeOffset + safeItemCount;
+
+  return {
+    nextOffset,
+    hasMore: nextOffset < safeTotalCount,
+    totalCount: safeTotalCount,
+  };
+}
+
 export function filterAndSortRealtors(
   realtors: AssignedRealtor[],
   options: RealtorDirectoryFilters = {}

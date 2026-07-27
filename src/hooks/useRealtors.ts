@@ -23,6 +23,7 @@ interface UseRealtorsResult {
   refreshing: boolean;
   hasMore: boolean;
   loadedCount: number;
+  totalCount: number;
   error: string | null;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
@@ -57,6 +58,7 @@ export function useRealtors({
   const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [hasMore, setHasMore] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [stageFilter, setStageFilter] = useState<RelationshipStage | 'all'>(
@@ -108,7 +110,10 @@ export function useRealtors({
       setLoadingMore(false);
       setError(null);
 
-      if (clearExisting) setDirectoryRealtors([]);
+      if (clearExisting) {
+        setDirectoryRealtors([]);
+        setTotalCount(0);
+      }
       if (isRefresh) {
         setRefreshing(true);
       } else {
@@ -125,6 +130,8 @@ export function useRealtors({
       const result = await fetchRealtorDirectoryPage({
         loUserId: userId,
         includeAll: userRole === 'super_admin' || userRole === 'admin',
+        search: debouncedSearch || undefined,
+        stage: stageFilter,
         offset: 0,
         pageSize: PAGE_SIZE,
         signal: controller.signal,
@@ -148,13 +155,14 @@ export function useRealtors({
         offsetRef.current = result.data.nextOffset;
         hasMoreRef.current = result.data.hasMore;
         setHasMore(result.data.hasMore);
+        setTotalCount(result.data.totalCount);
       }
 
       inFlightRef.current = false;
       setLoading(false);
       setRefreshing(false);
     },
-    [userId, userRole]
+    [debouncedSearch, stageFilter, userId, userRole]
   );
 
   const loadMore = useCallback(async () => {
@@ -170,6 +178,8 @@ export function useRealtors({
     const result = await fetchRealtorDirectoryPage({
       loUserId: userId,
       includeAll: userRole === 'super_admin' || userRole === 'admin',
+      search: debouncedSearch || undefined,
+      stage: stageFilter,
       offset: offsetRef.current,
       pageSize: PAGE_SIZE,
       signal: controller.signal,
@@ -195,11 +205,12 @@ export function useRealtors({
       offsetRef.current = result.data.nextOffset;
       hasMoreRef.current = result.data.hasMore;
       setHasMore(result.data.hasMore);
+      setTotalCount(result.data.totalCount);
     }
 
     inFlightRef.current = false;
     setLoadingMore(false);
-  }, [userId, userRole]);
+  }, [debouncedSearch, stageFilter, userId, userRole]);
 
   useEffect(() => {
     generationRef.current += 1;
@@ -209,6 +220,7 @@ export function useRealtors({
     hasMoreRef.current = false;
     setDirectoryRealtors([]);
     setHasMore(false);
+    setTotalCount(0);
     setLoadingMore(false);
     setRefreshing(false);
     setError(null);
@@ -220,14 +232,7 @@ export function useRealtors({
     }
   }, [autoFetch, loadFirstPage, userId, userRole]);
 
-  const realtors = useMemo(
-    () =>
-      filterAndSortRealtors(directoryRealtors, {
-        search: debouncedSearch || undefined,
-        stage: stageFilter,
-      }),
-    [debouncedSearch, directoryRealtors, stageFilter]
-  );
+  const realtors = directoryRealtors;
 
   const needsLoveRealtors = useMemo(
     () =>
@@ -266,6 +271,7 @@ export function useRealtors({
     refreshing,
     hasMore,
     loadedCount: directoryRealtors.length,
+    totalCount,
     error,
     searchQuery,
     setSearchQuery,

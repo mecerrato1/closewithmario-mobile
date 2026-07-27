@@ -43,7 +43,7 @@ export default function RealtorsListScreen({
     loadingMore,
     refreshing,
     hasMore,
-    loadedCount,
+    totalCount,
     error,
     searchQuery,
     setSearchQuery,
@@ -130,8 +130,7 @@ export default function RealtorsListScreen({
     <RealtorCard realtor={item} onPress={() => onRealtorPress(item)} />
   );
 
-  const displayedCount =
-    searchQuery || stageFilter !== 'all' ? realtors.length : loadedCount;
+  const displayedCount = totalCount;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -139,11 +138,7 @@ export default function RealtorsListScreen({
       <View style={[styles.header, { backgroundColor: PLUM }]}>
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>
-            Realtors{' '}
-            <Text style={styles.headerCount}>
-              ({displayedCount}
-              {hasMore ? '+' : ''})
-            </Text>
+            Realtors <Text style={styles.headerCount}>({displayedCount})</Text>
           </Text>
           <View style={styles.headerActions}>
             <TouchableOpacity style={styles.addButton} onPress={onAddPress}>

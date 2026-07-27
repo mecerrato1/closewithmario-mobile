@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import {
 import { Session } from '@supabase/supabase-js';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../lib/supabase';
+import type { UserRole } from '../../lib/roles';
 import { useThemeColors } from '../../styles/theme';
 import { SmsMessaging } from '../../components/SmsMessaging';
 import { MetaDmMessaging } from '../../components/MetaDmMessaging';
@@ -37,6 +38,7 @@ type ScreenState =
 
 interface MessagesTabScreenProps {
   session: Session;
+  userRole: UserRole;
   onNavigateToLead?: (leadId: string, source: ThreadSource) => void;
 }
 
@@ -135,23 +137,38 @@ function formatScenarioChangeValue(
 
 export default function MessagesTabScreen({
   session,
+  userRole,
   onNavigateToLead,
 }: MessagesTabScreenProps) {
   const { colors } = useThemeColors();
   const [screenState, setScreenState] = useState<ScreenState>({
     screen: 'list',
   });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+  const isSearchTooShort = searchQuery.trim().length === 1;
   const {
     conversations,
     loading,
     refreshing,
+    loadingMore,
+    hasMore,
     error,
     refresh,
     reload,
+    retry,
+    loadMore,
     markLocallyRead,
-  } = useMessageInbox(session);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterMode, setFilterMode] = useState<FilterMode>('all');
+  } = useMessageInbox(session, {
+    search: debouncedSearch.length >= 2 ? debouncedSearch : '',
+    unreadOnly: filterMode === 'unread',
+    enabled: userRole !== 'buyer',
+  });
 
   const markConversationAsRead = useCallback(
     async (conversation: ConversationSummary) => {
@@ -206,6 +223,7 @@ export default function MessagesTabScreen({
   );
 
   const filteredConversations = useMemo(() => {
+    if (isSearchTooShort) return [];
     const trimmedQuery = searchQuery.trim().toLowerCase();
     const digitQuery = searchQuery.replace(/\D/g, '');
 
@@ -227,7 +245,7 @@ export default function MessagesTabScreen({
         (!!digitQuery && phoneDigits.includes(digitQuery))
       );
     });
-  }, [conversations, filterMode, searchQuery]);
+  }, [conversations, filterMode, isSearchTooShort, searchQuery]);
 
   const handleConversationPress = useCallback(
     (conversation: ConversationSummary) => {
@@ -691,6 +709,11 @@ export default function MessagesTabScreen({
               );
             })}
           </View>
+          {isSearchTooShort ? (
+            <Text style={[styles.searchHint, { color: colors.textSecondary }]}>
+              Enter at least 2 characters to search all conversations.
+            </Text>
+          ) : null}
         </View>
 
         {loading ? (
@@ -705,7 +728,7 @@ export default function MessagesTabScreen({
             {error && conversations.length > 0 ? (
               <TouchableOpacity
                 style={styles.errorBanner}
-                onPress={handleRefresh}
+                onPress={() => void retry()}
               >
                 <Ionicons name="alert-circle" size={18} color="#B91C1C" />
                 <Text style={styles.errorBannerText}>{error}</Text>
@@ -724,6 +747,24 @@ export default function MessagesTabScreen({
                   tintColor={ACCENT}
                 />
               }
+              onEndReached={() => void loadMore()}
+              onEndReachedThreshold={0.4}
+              ListFooterComponent={
+                loadingMore ? (
+                  <View style={styles.listFooter}>
+                    <ActivityIndicator size="small" color={ACCENT} />
+                  </View>
+                ) : hasMore && !error ? (
+                  <TouchableOpacity
+                    style={styles.listFooter}
+                    onPress={() => void loadMore()}
+                  >
+                    <Text style={styles.loadMoreText}>
+                      Load more conversations
+                    </Text>
+                  </TouchableOpacity>
+                ) : null
+              }
               ListEmptyComponent={
                 <View style={styles.emptyState}>
                   <Ionicons
@@ -736,6 +777,8 @@ export default function MessagesTabScreen({
                   >
                     {error
                       ? 'Could not load messages'
+                      : isSearchTooShort
+                      ? 'Keep typing to search'
                       : filterMode === 'unread'
                       ? 'No unread conversations'
                       : 'No conversations yet'}
@@ -748,6 +791,8 @@ export default function MessagesTabScreen({
                   >
                     {error
                       ? error
+                      : isSearchTooShort
+                      ? 'Enter at least 2 characters to search all conversations.'
                       : searchQuery.trim()
                       ? 'Try a different name, phone number, or message preview.'
                       : 'Incoming and outgoing lead messages will appear here.'}
@@ -755,7 +800,7 @@ export default function MessagesTabScreen({
                   {error ? (
                     <TouchableOpacity
                       style={styles.retryButton}
-                      onPress={handleRefresh}
+                      onPress={() => void retry()}
                     >
                       <Text style={styles.retryButtonText}>Try again</Text>
                     </TouchableOpacity>
@@ -815,6 +860,10 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     paddingVertical: 0,
+  },
+  searchHint: {
+    fontSize: 12,
+    lineHeight: 16,
   },
   filterRow: {
     flexDirection: 'row',
@@ -881,6 +930,16 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
     gap: 10,
     flexGrow: 1,
+  },
+  listFooter: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadMoreText: {
+    color: ACCENT,
+    fontSize: 13,
+    fontWeight: '700',
   },
   conversationCard: {
     flexDirection: 'row',

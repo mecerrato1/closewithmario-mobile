@@ -19,16 +19,14 @@ test('message inbox uses authorized compact summaries instead of row scans', asy
     readFile(messagesScreenUrl, 'utf8'),
   ]);
 
-  assert.match(client, /authenticatedFetch\([\s\S]*\/api\/leads\/list/);
-  assert.match(client, /get_crm_sms_conversation_summaries/);
-  assert.match(client, /CRM_SUMMARY_ID_CHUNK_SIZE/);
-  assert.match(client, /get_unread_meta_dm_counts/);
-  assert.match(
-    client,
-    /from\(["']meta_dm_conversations["']\)[\s\S]*\.limit\(DM_CONVERSATION_PAGE_SIZE\)/
-  );
-  assert.match(client, /last_message_at\.lt\.\$\{cursor\.lastMessageAt\}/);
-  assert.match(client, /if \(!message\.lead_id\) return/);
+  assert.match(client, /\/api\/messages\/conversations/);
+  assert.match(client, /authenticatedFetch/);
+  assert.match(client, /cursor/);
+  assert.match(client, /unreadOnly/);
+  assert.doesNotMatch(client, /\/api\/leads\/list/);
+  assert.doesNotMatch(client, /get_crm_sms_conversation_summaries/);
+  assert.doesNotMatch(client, /get_unread_meta_dm_counts/);
+  assert.doesNotMatch(client, /from\(["']meta_dm_conversations["']\)/);
   assert.doesNotMatch(client, /from\(["']sms_messages["']\)/);
   assert.doesNotMatch(client, /from\(["']meta_dm_messages["']\)/);
   assert.doesNotMatch(screen, /\.from\('leads'\)[\s\S]*\.select/);

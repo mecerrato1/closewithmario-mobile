@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import type { AssignedRealtor } from '../../lib/types/realtors';
 import {
   filterAndSortRealtors,
+  getRealtorDirectoryPageState,
   mergeRealtorPages,
 } from './realtorDirectoryState';
 
@@ -99,4 +101,57 @@ test('filterAndSortRealtors orders loaded matches by count then name', () => {
     sorted.map((item) => item.realtor_id),
     ['two', 'three', 'one']
   );
+});
+
+test('directory continuation uses the exact server total', () => {
+  assert.deepEqual(getRealtorDirectoryPageState(0, 50, 50), {
+    nextOffset: 50,
+    hasMore: false,
+    totalCount: 50,
+  });
+  assert.deepEqual(getRealtorDirectoryPageState(50, 25, 90), {
+    nextOffset: 75,
+    hasMore: true,
+    totalCount: 90,
+  });
+  assert.deepEqual(getRealtorDirectoryPageState(75, 15, 90), {
+    nextOffset: 90,
+    hasMore: false,
+    totalCount: 90,
+  });
+});
+
+test('directory client consolidates each page into one server-filtered RPC', () => {
+  const source = readFileSync('src/lib/supabase/realtors.ts', 'utf8');
+  const start = source.indexOf(
+    'export async function fetchRealtorDirectoryPage'
+  );
+  const end = source.indexOf(
+    'export async function fetchAssignedRealtors',
+    start
+  );
+  const directoryClient = source.slice(start, end);
+
+  assert.match(directoryClient, /get_crm_realtor_directory_page/);
+  assert.match(directoryClient, /p_search: search\?\.trim\(\) \|\| null/);
+  assert.match(directoryClient, /p_stage: stage/);
+  assert.match(directoryClient, /p_active_only: includeAll/);
+  assert.match(directoryClient, /response\.totalCount/);
+  assert.doesNotMatch(directoryClient, /\.from\('realtor_assignments'\)/);
+  assert.doesNotMatch(directoryClient, /get_realtor_lead_counts(?:_for_lo)?/);
+});
+
+test('directory query changes abort stale work and reset pagination', () => {
+  const hook = readFileSync('src/hooks/useRealtors.ts', 'utf8');
+
+  assert.match(
+    hook,
+    /abortRef\.current\?\.abort\(\)[\s\S]*offsetRef\.current = 0/
+  );
+  assert.match(
+    hook,
+    /search: debouncedSearch \|\| undefined[\s\S]*stage: stageFilter/
+  );
+  assert.match(hook, /\[debouncedSearch, stageFilter, userId, userRole\]/);
+  assert.match(hook, /setTotalCount\(result\.data\.totalCount\)/);
 });

@@ -1,40 +1,67 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authenticatedFetch } from '../../lib/authenticatedFetch';
-import { getUserRole, type UserRole } from '../../lib/roles';
-import {
-  getSmsMessageMedia,
-  getSmsMessagePreviewText,
-  parseSmsVoiceSummary,
-} from '../../lib/smsMedia';
-import { supabase } from '../../lib/supabase';
-import { chunkValues, CRM_SUMMARY_ID_CHUNK_SIZE } from './messagePagination';
 import type {
-  ApiLeadSource,
   ConversationSummary,
-  MessageLeadSummary,
-  MetaDmConversationSummaryRow,
-  MetaDmUnreadCountRow,
   PendingScenarioUpdate,
-  SmsConversationSummaryRow,
   ThreadSource,
 } from './messageTypes';
-
-type MessageInboxScope = 'all' | 'loan_officer' | 'realtor';
-
-type LeadListPayload = {
-  items?: unknown;
-  nextCursor?: unknown;
-  hasMore?: unknown;
-};
 
 const CRM_API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_BASE_URL || 'https://www.closewithmario.com'
 ).replace(/\/$/, '');
-const LEAD_LIST_PAGE_SIZE = 1000;
-const MAX_LEAD_LIST_PAGES = 2;
-const DM_CONVERSATION_PAGE_SIZE = 200;
-const MAX_DM_CONVERSATION_PAGES = 10;
+export const MESSAGE_INBOX_PAGE_SIZE = 50;
 const SCENARIO_UPDATE_READ_STORAGE_PREFIX = 'messages.scenarioUpdateReadIds.v1';
+
+export type MessageInboxQuery = {
+  userId: string;
+  search: string;
+  unreadOnly: boolean;
+};
+
+export type MessageInboxPage = {
+  items: ConversationSummary[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  totalCount: number;
+};
+
+type Requester = (input: string, init?: RequestInit) => Promise<Response>;
+
+type ApiConversationSummary = {
+  key: string;
+  channel: 'sms' | 'dm';
+  conversationId: string | null;
+  leadId: string;
+  leadSource: 'organic' | 'meta';
+  leadName: string;
+  leadEmail: string | null;
+  leadPhone: string | null;
+  platform: string | null;
+  smsOptIn: boolean | null;
+  smsOptedOut: boolean | null;
+  lastMessageAt: string;
+  lastMessagePreview: string | null;
+  lastMessageDirection: 'inbound' | 'outbound' | null;
+  unreadCount: number;
+  isAutomated: boolean;
+};
+
+type PendingLeadSummary = {
+  name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  platform?: string | null;
+  smsOptIn?: boolean | null;
+  smsOptedOut?: boolean | null;
+};
+
+type PendingScenarioUpdateWithLead = PendingScenarioUpdate & {
+  leadSummary?: PendingLeadSummary | null;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
 
 function createAbortError() {
   const error = new Error('Request cancelled');
@@ -46,115 +73,157 @@ function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) throw createAbortError();
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+function readNullableString(value: unknown) {
+  return typeof value === 'string' ? value : null;
 }
 
-function parseLeadListItem(value: unknown): MessageLeadSummary {
-  if (
-    !isRecord(value) ||
-    typeof value.id !== 'string' ||
-    (value.source !== 'organic' && value.source !== 'meta')
-  ) {
-    throw new Error('The message lead-list response was invalid.');
+function readNullableBoolean(value: unknown) {
+  return typeof value === 'boolean' ? value : null;
+}
+
+function readCount(value: unknown) {
+  const count = Number(value);
+  if (!Number.isSafeInteger(count) || count < 0) {
+    throw new Error('The conversation summary count was invalid.');
   }
-
-  const nullableString = (input: unknown) =>
-    typeof input === 'string' ? input : null;
-  const nullableBoolean = (input: unknown) =>
-    typeof input === 'boolean' ? input : null;
-  const unreadCount = Number(value.unread_sms_count);
-
-  return {
-    id: value.id,
-    source: value.source,
-    first_name: nullableString(value.first_name),
-    last_name: nullableString(value.last_name),
-    email: nullableString(value.email),
-    phone: nullableString(value.phone),
-    platform: nullableString(value.platform),
-    sms_opt_in: nullableBoolean(value.sms_opt_in),
-    sms_opted_out: nullableBoolean(value.sms_opted_out),
-    unread_sms_count:
-      Number.isSafeInteger(unreadCount) && unreadCount >= 0 ? unreadCount : 0,
-  };
+  return count;
 }
 
-function parseLeadListPayload(value: unknown) {
-  if (!isRecord(value) || !Array.isArray((value as LeadListPayload).items)) {
-    throw new Error('The message lead-list response was invalid.');
-  }
-
-  const cursorValue = (value as LeadListPayload).nextCursor;
-  if (
-    cursorValue !== null &&
-    cursorValue !== undefined &&
-    typeof cursorValue !== 'string'
-  ) {
-    throw new Error('The message lead-list cursor was invalid.');
-  }
-
-  return {
-    items: ((value as LeadListPayload).items as unknown[]).map(
-      parseLeadListItem
-    ),
-    nextCursor:
-      typeof cursorValue === 'string' && cursorValue.length > 0
-        ? cursorValue
-        : null,
-    hasMore: (value as LeadListPayload).hasMore === true,
-  };
-}
-
-function getInboxScope(role: UserRole): MessageInboxScope | null {
-  if (role === 'super_admin' || role === 'admin') return 'all';
-  if (role === 'loan_officer') return 'loan_officer';
-  if (role === 'realtor') return 'realtor';
-  return null;
-}
-
-function getLeadDisplayName(lead: MessageLeadSummary) {
-  return (
-    [lead.first_name, lead.last_name].filter(Boolean).join(' ').trim() ||
-    lead.email ||
-    lead.phone ||
-    'Unknown lead'
-  );
-}
-
-function toThreadSource(source: ApiLeadSource): ThreadSource {
+function toThreadSource(source: 'organic' | 'meta'): ThreadSource {
   return source === 'meta' ? 'meta' : 'lead';
 }
 
-function buildLeadKey(source: ApiLeadSource, id: string) {
-  return `${source}:${id}`;
+function parseApiConversation(value: unknown): ApiConversationSummary {
+  if (
+    !isRecord(value) ||
+    typeof value.key !== 'string' ||
+    (value.channel !== 'sms' && value.channel !== 'dm') ||
+    typeof value.leadId !== 'string' ||
+    (value.leadSource !== 'organic' && value.leadSource !== 'meta') ||
+    typeof value.leadName !== 'string' ||
+    typeof value.lastMessageAt !== 'string' ||
+    !Number.isFinite(Date.parse(value.lastMessageAt)) ||
+    typeof value.isAutomated !== 'boolean'
+  ) {
+    throw new Error('The conversation summary response was invalid.');
+  }
+  const conversationId = readNullableString(value.conversationId);
+  if (
+    (value.channel === 'dm' && !conversationId) ||
+    (value.channel === 'sms' && conversationId)
+  ) {
+    throw new Error('The conversation summary response was invalid.');
+  }
+  const direction = value.lastMessageDirection;
+  if (
+    direction !== null &&
+    direction !== 'inbound' &&
+    direction !== 'outbound'
+  ) {
+    throw new Error('The conversation summary response was invalid.');
+  }
+  return {
+    key: value.key,
+    channel: value.channel,
+    conversationId,
+    leadId: value.leadId,
+    leadSource: value.leadSource,
+    leadName: value.leadName,
+    leadEmail: readNullableString(value.leadEmail),
+    leadPhone: readNullableString(value.leadPhone),
+    platform: readNullableString(value.platform),
+    smsOptIn: readNullableBoolean(value.smsOptIn),
+    smsOptedOut: readNullableBoolean(value.smsOptedOut),
+    lastMessageAt: value.lastMessageAt,
+    lastMessagePreview: readNullableString(value.lastMessagePreview),
+    lastMessageDirection: direction,
+    unreadCount: readCount(value.unreadCount),
+    isAutomated: value.isAutomated,
+  };
 }
 
-function getSmsPreview(message: SmsConversationSummaryRow) {
-  const voiceSummary = parseSmsVoiceSummary(message.voice_summary);
-  return (
-    message.message_text?.trim() ||
-    voiceSummary?.one_sentence_summary?.trim() ||
-    message.voice_transcript?.trim() ||
-    getSmsMessagePreviewText(message) ||
-    (getSmsMessageMedia(message).length > 0
-      ? 'Media attachment'
-      : message.direction === 'outbound'
-      ? 'Sent a message'
-      : 'New message')
-  );
+function toConversationSummary(
+  conversation: ApiConversationSummary
+): ConversationSummary {
+  return {
+    key: conversation.key,
+    channel: conversation.channel,
+    conversationId: conversation.conversationId,
+    leadId: conversation.leadId,
+    source: toThreadSource(conversation.leadSource),
+    leadName: conversation.leadName,
+    leadEmail: conversation.leadEmail,
+    platform: conversation.platform,
+    phone: conversation.leadPhone || '',
+    preview:
+      conversation.lastMessagePreview ||
+      (conversation.lastMessageDirection === 'outbound'
+        ? 'Sent a message'
+        : 'New message'),
+    latestMessageAt: conversation.lastMessageAt,
+    latestDirection: conversation.lastMessageDirection,
+    unreadCount: conversation.unreadCount,
+    isAutomated: conversation.isAutomated,
+    smsOptIn: conversation.smsOptIn,
+    smsOptedOut: conversation.smsOptedOut,
+  };
 }
 
-function sortConversations(conversations: ConversationSummary[]) {
+export function sortConversationSummaries(
+  conversations: ConversationSummary[]
+) {
   return [...conversations].sort((left, right) => {
+    const scenarioDifference =
+      Number(right.channel === 'scenario_update') -
+      Number(left.channel === 'scenario_update');
+    if (scenarioDifference !== 0) return scenarioDifference;
     const unreadDifference =
       Number(right.unreadCount > 0) - Number(left.unreadCount > 0);
     if (unreadDifference !== 0) return unreadDifference;
-    return (
+    const timeDifference =
       new Date(right.latestMessageAt).getTime() -
-      new Date(left.latestMessageAt).getTime()
-    );
+      new Date(left.latestMessageAt).getTime();
+    return timeDifference || left.key.localeCompare(right.key);
   });
+}
+
+export function parseMessageInboxPage(value: unknown): MessageInboxPage {
+  if (!isRecord(value) || !Array.isArray(value.items)) {
+    throw new Error('The conversation page response was invalid.');
+  }
+  if (
+    value.nextCursor !== null &&
+    value.nextCursor !== undefined &&
+    typeof value.nextCursor !== 'string'
+  ) {
+    throw new Error('The conversation cursor response was invalid.');
+  }
+  if (typeof value.hasMore !== 'boolean') {
+    throw new Error('The conversation page response was invalid.');
+  }
+  const nextCursor =
+    typeof value.nextCursor === 'string' && value.nextCursor.length > 0
+      ? value.nextCursor
+      : null;
+  if (value.hasMore !== Boolean(nextCursor)) {
+    throw new Error('The conversation pagination response was invalid.');
+  }
+  const items = value.items
+    .map(parseApiConversation)
+    .map(toConversationSummary);
+  if (new Set(items.map((item) => item.key)).size !== items.length) {
+    throw new Error('The conversation page contained duplicate rows.');
+  }
+  const totalCount = readCount(value.totalCount);
+  if (totalCount < items.length) {
+    throw new Error('The conversation total was invalid.');
+  }
+  return {
+    items,
+    nextCursor,
+    hasMore: value.hasMore,
+    totalCount,
+  };
 }
 
 function getScenarioUpdatePreview(updates: PendingScenarioUpdate[]) {
@@ -202,143 +271,29 @@ export async function saveReadScenarioUpdateIds(
   }
 }
 
-async function fetchAuthorizedMessageLeads(
-  scope: MessageInboxScope,
-  signal?: AbortSignal
-) {
-  const leadsByKey = new Map<string, MessageLeadSummary>();
-  let cursor: string | null = null;
-  let pageCount = 0;
-
-  while (pageCount < MAX_LEAD_LIST_PAGES) {
-    throwIfAborted(signal);
-    const params = new URLSearchParams({
-      projection: 'summary',
-      scope,
-      limit: String(LEAD_LIST_PAGE_SIZE),
-      search: '',
-      status: 'all',
-      ad: 'all',
-      platform: 'all',
-      importSource: 'all',
-      sort: 'last_contact',
-      direction: 'desc',
-      includeFacets: '0',
-    });
-    if (cursor) params.set('cursor', cursor);
-
-    const response = await authenticatedFetch(
-      `${CRM_API_BASE_URL}/api/leads/list?${params.toString()}`,
-      { signal }
-    );
-    const payload: unknown = await response.json().catch(() => null);
-    if (!response.ok) {
-      throw new Error(
-        isRecord(payload) && typeof payload.error === 'string'
-          ? payload.error
-          : 'Failed to load authorized message contacts.'
-      );
-    }
-
-    const page = parseLeadListPayload(payload);
-    page.items.forEach((lead) => {
-      leadsByKey.set(buildLeadKey(lead.source, lead.id), lead);
-    });
-
-    pageCount += 1;
-    if (page.hasMore && !page.nextCursor) {
-      throw new Error(
-        'The message lead-list response omitted its next cursor.'
-      );
-    }
-    if (!page.hasMore) break;
-    cursor = page.nextCursor;
-  }
-
-  return Array.from(leadsByKey.values());
-}
-
-async function fetchSmsConversationSummaries(
-  leadIds: string[],
-  signal?: AbortSignal
-) {
-  const summaryByMessageId = new Map<string, SmsConversationSummaryRow>();
-  for (const chunk of chunkValues(leadIds, CRM_SUMMARY_ID_CHUNK_SIZE)) {
-    throwIfAborted(signal);
-    let query = supabase.rpc('get_crm_sms_conversation_summaries', {
-      p_lead_ids: chunk,
-    });
-    if (signal) query = query.abortSignal(signal);
-    const { data, error } = await query;
-    if (error) throw new Error(error.message);
-
-    ((data || []) as SmsConversationSummaryRow[]).forEach((message) => {
-      if (message?.id) summaryByMessageId.set(message.id, message);
-    });
-  }
-  return Array.from(summaryByMessageId.values());
-}
-
-async function fetchDmConversationSummaries(signal?: AbortSignal) {
-  const conversations = new Map<string, MetaDmConversationSummaryRow>();
-  let cursor: { id: string; lastMessageAt: string } | null = null;
-
-  for (let page = 0; page < MAX_DM_CONVERSATION_PAGES; page += 1) {
-    throwIfAborted(signal);
-    let query = supabase
-      .from('meta_dm_conversations')
-      .select(
-        'id, lead_id, lead_source, platform, participant_name, last_message_at'
-      )
-      .not('lead_id', 'is', null)
-      .order('last_message_at', { ascending: false, nullsFirst: false })
-      .order('id', { ascending: false })
-      .limit(DM_CONVERSATION_PAGE_SIZE);
-    if (cursor) {
-      query = query.or(
-        `last_message_at.lt.${cursor.lastMessageAt},and(last_message_at.eq.${cursor.lastMessageAt},id.lt.${cursor.id})`
-      );
-    }
-    if (signal) query = query.abortSignal(signal);
-
-    const { data, error } = await query;
-    if (error) throw new Error(error.message);
-    const rows = (data || []) as MetaDmConversationSummaryRow[];
-    rows.forEach((conversation) => {
-      if (conversation.id) conversations.set(conversation.id, conversation);
-    });
-    if (rows.length < DM_CONVERSATION_PAGE_SIZE) {
-      return Array.from(conversations.values());
-    }
-    const oldest = rows[rows.length - 1];
-    if (!oldest?.last_message_at) {
-      return Array.from(conversations.values());
-    }
-    cursor = {
-      id: oldest.id,
-      lastMessageAt: oldest.last_message_at,
-    };
-  }
-
-  return Array.from(conversations.values());
-}
-
-async function fetchDmUnreadCounts(signal?: AbortSignal) {
-  let query = supabase.rpc('get_unread_meta_dm_counts');
-  if (signal) query = query.abortSignal(signal);
-  const { data, error } = await query;
-  if (error) throw new Error(error.message);
-  return (data || []) as MetaDmUnreadCountRow[];
-}
-
-async function fetchPendingScenarioUpdates(signal?: AbortSignal) {
-  const response = await authenticatedFetch(
-    `${CRM_API_BASE_URL}/api/leads/qualification-submissions?pending=1&limit=1000`,
-    {
-      headers: { Accept: 'application/json' },
-      signal,
-    }
-  );
+async function fetchPendingScenarioUpdates({
+  userId,
+  search,
+  unreadOnly,
+  signal,
+  request,
+}: {
+  userId: string;
+  search: string;
+  unreadOnly: boolean;
+  signal?: AbortSignal;
+  request: Requester;
+}) {
+  const [response, readIds] = await Promise.all([
+    request(
+      `${CRM_API_BASE_URL}/api/leads/qualification-submissions?pending=1&limit=1000`,
+      {
+        headers: { Accept: 'application/json' },
+        signal,
+      }
+    ),
+    loadReadScenarioUpdateIds(userId),
+  ]);
   const payload: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     throw new Error(
@@ -350,183 +305,136 @@ async function fetchPendingScenarioUpdates(signal?: AbortSignal) {
   if (!isRecord(payload) || !Array.isArray(payload.submissions)) {
     throw new Error('The scenario update response was invalid.');
   }
-  return payload.submissions as PendingScenarioUpdate[];
-}
 
-export async function loadMessageInbox({
-  userId,
-  email,
-  signal,
-}: {
-  userId: string;
-  email: string;
-  signal?: AbortSignal;
-}) {
-  const role = await getUserRole(userId, email);
-  throwIfAborted(signal);
-  const scope = getInboxScope(role);
-  if (!scope) return [] as ConversationSummary[];
-
-  const [leads, readScenarioUpdateIds] = await Promise.all([
-    fetchAuthorizedMessageLeads(scope, signal),
-    loadReadScenarioUpdateIds(userId),
-  ]);
-  throwIfAborted(signal);
-
-  if (leads.length === 0) return [] as ConversationSummary[];
-
-  const uniqueLeadIds = Array.from(new Set(leads.map((lead) => lead.id)));
-  const [smsRows, dmRows, dmUnreadRows, pendingScenarioUpdates] =
-    await Promise.all([
-      fetchSmsConversationSummaries(uniqueLeadIds, signal),
-      fetchDmConversationSummaries(signal),
-      fetchDmUnreadCounts(signal),
-      fetchPendingScenarioUpdates(signal),
-    ]);
-  throwIfAborted(signal);
-
-  const leadsByKey = new Map(
-    leads.map((lead) => [buildLeadKey(lead.source, lead.id), lead])
-  );
-  const leadsById = new Map<string, MessageLeadSummary>();
-  leads.forEach((lead) => {
-    const existing = leadsById.get(lead.id);
-    if (!existing || lead.source === 'organic') leadsById.set(lead.id, lead);
-  });
-
-  const conversations = new Map<string, ConversationSummary>();
-  smsRows.forEach((message) => {
-    if (!message.lead_id) return;
-    const lead = leadsById.get(message.lead_id);
-    if (!lead) return;
-
-    const key = `sms:${buildLeadKey(lead.source, lead.id)}`;
-    const existing = conversations.get(key);
+  const updatesByLead = new Map<string, PendingScenarioUpdateWithLead[]>();
+  payload.submissions.forEach((value) => {
     if (
-      existing &&
-      new Date(existing.latestMessageAt).getTime() >=
-        new Date(message.created_at).getTime()
+      !isRecord(value) ||
+      typeof value.id !== 'string' ||
+      typeof value.leadId !== 'string' ||
+      (value.leadSource !== 'organic' && value.leadSource !== 'meta') ||
+      value.status !== 'pending' ||
+      typeof value.submittedAt !== 'string'
     ) {
       return;
     }
-
-    conversations.set(key, {
-      key,
-      channel: 'sms',
-      conversationId: null,
-      leadId: lead.id,
-      source: toThreadSource(lead.source),
-      leadName: getLeadDisplayName(lead),
-      leadEmail: lead.email,
-      platform: lead.platform,
-      phone: lead.phone || '',
-      preview: getSmsPreview(message),
-      latestMessageAt: message.created_at,
-      latestDirection: message.direction,
-      unreadCount: Math.max(0, Number(lead.unread_sms_count) || 0),
-      isAutomated: Boolean(message.is_automated),
-      smsOptIn: lead.sms_opt_in,
-      smsOptedOut: lead.sms_opted_out,
-    });
+    const update = value as unknown as PendingScenarioUpdateWithLead;
+    const key = `${update.leadSource}:${update.leadId}`;
+    const current = updatesByLead.get(key) || [];
+    current.push(update);
+    updatesByLead.set(key, current);
   });
 
-  const unreadDmByLeadKey = new Map<string, number>();
-  dmUnreadRows.forEach((row) => {
-    if (row.lead_source !== 'organic' && row.lead_source !== 'meta') {
-      return;
-    }
-    unreadDmByLeadKey.set(
-      buildLeadKey(row.lead_source, row.lead_id),
-      Math.max(0, Number(row.unread_count) || 0)
-    );
-  });
-
-  const dmUnreadAssigned = new Set<string>();
-  dmRows.forEach((conversation) => {
-    if (!conversation.lead_id || !conversation.lead_source) return;
-    const leadKey = buildLeadKey(
-      conversation.lead_source,
-      conversation.lead_id
-    );
-    const lead = leadsByKey.get(leadKey);
-    if (!lead) return;
-
-    const key = `dm:${conversation.id}`;
-    const unreadCount = dmUnreadAssigned.has(leadKey)
-      ? 0
-      : unreadDmByLeadKey.get(leadKey) || 0;
-    dmUnreadAssigned.add(leadKey);
-    conversations.set(key, {
-      key,
-      channel: 'dm',
-      conversationId: conversation.id,
-      leadId: lead.id,
-      source: toThreadSource(lead.source),
-      leadName: getLeadDisplayName(lead),
-      leadEmail: lead.email,
-      platform: conversation.platform || lead.platform,
-      phone: lead.phone || '',
-      preview: conversation.participant_name
-        ? `Conversation with ${conversation.participant_name}`
-        : 'Direct message conversation',
-      latestMessageAt:
-        conversation.last_message_at || new Date(0).toISOString(),
-      latestDirection: null,
-      unreadCount,
-      isAutomated: false,
-      smsOptIn: lead.sms_opt_in,
-      smsOptedOut: lead.sms_opted_out,
-    });
-  });
-
-  const scenariosByLeadKey = new Map<string, PendingScenarioUpdate[]>();
-  pendingScenarioUpdates.forEach((submission) => {
-    if (
-      submission.status !== 'pending' ||
-      (submission.leadSource !== 'organic' && submission.leadSource !== 'meta')
-    ) {
-      return;
-    }
-    const leadKey = buildLeadKey(submission.leadSource, submission.leadId);
-    if (!leadsByKey.has(leadKey)) return;
-    const updates = scenariosByLeadKey.get(leadKey) || [];
-    updates.push(submission);
-    scenariosByLeadKey.set(leadKey, updates);
-  });
-
-  scenariosByLeadKey.forEach((updates, leadKey) => {
-    const sortedUpdates = [...updates].sort(
+  const normalizedSearch = search.trim().toLowerCase();
+  const digitSearch = search.replace(/\D/g, '');
+  const conversations: ConversationSummary[] = [];
+  updatesByLead.forEach((updates, leadKey) => {
+    const ordered = [...updates].sort(
       (left, right) =>
         new Date(right.submittedAt).getTime() -
         new Date(left.submittedAt).getTime()
     );
-    const latest = sortedUpdates[0];
-    const lead = leadsByKey.get(leadKey);
-    if (!latest || !lead) return;
+    const latest = ordered[0];
+    if (!latest) return;
+    const leadSummary = latest.leadSummary || {};
+    const unreadCount = ordered.filter(
+      (update) => !readIds.has(update.id)
+    ).length;
+    if (unreadOnly && unreadCount === 0) return;
 
-    const key = `scenario_update:${leadKey}`;
-    conversations.set(key, {
-      key,
+    const preview = getScenarioUpdatePreview(ordered);
+    const leadName = leadSummary.name?.trim() || 'Unknown lead';
+    const phone = leadSummary.phone?.trim() || '';
+    if (
+      normalizedSearch &&
+      !leadName.toLowerCase().includes(normalizedSearch) &&
+      !preview.toLowerCase().includes(normalizedSearch) &&
+      !phone.toLowerCase().includes(normalizedSearch) &&
+      !(
+        digitSearch.length > 0 && phone.replace(/\D/g, '').includes(digitSearch)
+      )
+    ) {
+      return;
+    }
+
+    conversations.push({
+      key: `scenario_update:${leadKey}`,
       channel: 'scenario_update',
       conversationId: null,
-      leadId: lead.id,
-      source: toThreadSource(lead.source),
-      leadName: getLeadDisplayName(lead),
-      leadEmail: lead.email,
-      platform: lead.platform,
-      phone: lead.phone || '',
-      preview: getScenarioUpdatePreview(sortedUpdates),
+      leadId: latest.leadId,
+      source: toThreadSource(latest.leadSource),
+      leadName,
+      leadEmail: leadSummary.email || null,
+      platform: leadSummary.platform || null,
+      phone,
+      preview,
       latestMessageAt: latest.submittedAt,
       latestDirection: 'inbound',
-      unreadCount: sortedUpdates.filter(
-        (update) => !readScenarioUpdateIds.has(update.id)
-      ).length,
+      unreadCount,
       isAutomated: false,
-      smsOptIn: lead.sms_opt_in,
-      smsOptedOut: lead.sms_opted_out,
-      scenarioUpdates: sortedUpdates,
+      smsOptIn: leadSummary.smsOptIn ?? null,
+      smsOptedOut: leadSummary.smsOptedOut ?? null,
+      scenarioUpdates: ordered,
     });
   });
+  return conversations;
+}
 
-  return sortConversations(Array.from(conversations.values()));
+export async function fetchMessageInboxPage(
+  query: MessageInboxQuery,
+  options: {
+    cursor: string | null;
+    includeScenarioUpdates: boolean;
+    signal?: AbortSignal;
+    request?: Requester;
+  }
+): Promise<MessageInboxPage> {
+  throwIfAborted(options.signal);
+  const request = options.request ?? authenticatedFetch;
+  const params = new URLSearchParams({
+    limit: String(MESSAGE_INBOX_PAGE_SIZE),
+    unreadOnly: query.unreadOnly ? '1' : '0',
+  });
+  const search = query.search.trim();
+  if (search.length >= 2) params.set('search', search);
+  if (options.cursor) params.set('cursor', options.cursor);
+
+  const pagePromise = request(
+    `${CRM_API_BASE_URL}/api/messages/conversations?${params.toString()}`,
+    {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: options.signal,
+    }
+  ).then(async (response) => {
+    const payload: unknown = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw new Error(
+        isRecord(payload) && typeof payload.error === 'string'
+          ? payload.error
+          : 'Failed to load conversations.'
+      );
+    }
+    return parseMessageInboxPage(payload);
+  });
+  const scenariosPromise = options.includeScenarioUpdates
+    ? fetchPendingScenarioUpdates({
+        userId: query.userId,
+        search,
+        unreadOnly: query.unreadOnly,
+        signal: options.signal,
+        request,
+      })
+    : Promise.resolve([] as ConversationSummary[]);
+
+  const [page, scenarioUpdates] = await Promise.all([
+    pagePromise,
+    scenariosPromise,
+  ]);
+  throwIfAborted(options.signal);
+  return {
+    ...page,
+    items: sortConversationSummaries([...page.items, ...scenarioUpdates]),
+    totalCount: page.totalCount + scenarioUpdates.length,
+  };
 }

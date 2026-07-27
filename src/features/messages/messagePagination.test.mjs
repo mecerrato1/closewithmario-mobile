@@ -1,24 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  CRM_SUMMARY_ID_CHUNK_SIZE,
   LatestRequestGate,
-  chunkValues,
   getOldestHistoryCursor,
   mergeChronologicalMessages,
   parseDescendingHistoryPage,
 } from './messagePagination.ts';
-
-test('summary ID chunks never exceed the server contract', () => {
-  const values = Array.from({ length: 4_501 }, (_, index) => String(index));
-  const chunks = chunkValues(values, CRM_SUMMARY_ID_CHUNK_SIZE);
-
-  assert.deepEqual(
-    chunks.map((chunk) => chunk.length),
-    [2_000, 2_000, 501]
-  );
-  assert.equal(chunks.flat().length, values.length);
-});
 
 test('descending history pages are bounded and returned chronologically', () => {
   const rows = Array.from({ length: 51 }, (_, index) => ({

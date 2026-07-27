@@ -1,5 +1,4 @@
 export const MESSAGE_HISTORY_PAGE_SIZE = 50;
-export const CRM_SUMMARY_ID_CHUNK_SIZE = 2000;
 
 export type HistoryMessageIdentity = {
   id: string;
@@ -15,18 +14,6 @@ export type HistoryPage<T> = {
   items: T[];
   hasOlder: boolean;
 };
-
-export function chunkValues<T>(values: T[], size: number): T[][] {
-  if (!Number.isSafeInteger(size) || size <= 0) {
-    throw new Error('Chunk size must be a positive integer.');
-  }
-
-  const chunks: T[][] = [];
-  for (let index = 0; index < values.length; index += size) {
-    chunks.push(values.slice(index, index + size));
-  }
-  return chunks;
-}
 
 export function mergeChronologicalMessages<T extends HistoryMessageIdentity>(
   existing: T[],

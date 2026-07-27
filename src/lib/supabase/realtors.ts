@@ -11,7 +11,10 @@ import type {
   RelationshipStage,
   LanguageCode,
 } from '../types/realtors';
-import { filterAndSortRealtors } from '../../features/realtors/realtorDirectoryState';
+import {
+  filterAndSortRealtors,
+  getRealtorDirectoryPageState,
+} from '../../features/realtors/realtorDirectoryState';
 
 // ============================================================================
 // Fetch Assigned Realtors
@@ -43,16 +46,20 @@ interface RealtorDirectoryRow {
   secondary_language: string | null;
   county_filter: string[] | null;
   notes: string | null;
+  realtor_created_at: string | null;
+  assignment_id: string | null;
+  assignment_lo_user_id: string | null;
+  assignment_stage: string | null;
+  assignment_notes: string | null;
+  assignment_last_touched_at: string | null;
+  assignment_created_at: string | null;
+  lead_count: number | string | null;
+  relationship_stage: string | null;
 }
 
-interface RealtorAssignmentRow {
-  id: string;
-  realtor_id: string;
-  lo_user_id: string;
-  relationship_stage: RelationshipStage | null;
-  notes: string | null;
-  last_touched_at: string | null;
-  created_at: string;
+interface RealtorDirectoryResponse {
+  items?: unknown;
+  totalCount?: unknown;
 }
 
 export interface RealtorDirectoryPage {
@@ -60,6 +67,7 @@ export interface RealtorDirectoryPage {
   offset: number;
   nextOffset: number;
   hasMore: boolean;
+  totalCount: number;
 }
 
 const DEFAULT_DIRECTORY_PAGE_SIZE = 50;
@@ -69,6 +77,29 @@ function getStageFromLeadCount(count: number): RelationshipStage {
   if (count >= 2) return 'hot';
   if (count === 1) return 'warm';
   return 'cold';
+}
+
+function normalizeRelationshipStage(
+  value: string | null,
+  leadCount: number
+): RelationshipStage {
+  return value === 'hot' || value === 'warm' || value === 'cold'
+    ? value
+    : getStageFromLeadCount(leadCount);
+}
+
+function normalizeNonNegativeNumber(value: unknown, fallback: number): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : fallback;
+}
+
+function isRealtorDirectoryRow(value: unknown): value is RealtorDirectoryRow {
+  return (
+    Boolean(value) &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    typeof (value as { id?: unknown }).id === 'string'
+  );
 }
 
 function normalizeLanguage(
@@ -81,25 +112,32 @@ function normalizeLanguage(
 }
 
 /**
- * Fetch one caller-authorized, projected directory page. Counts and assignment
- * metadata are requested only for the realtor IDs in that page.
+ * Fetch one caller-authorized directory page. The RPC applies search and stage
+ * filters and returns assignment metadata, counts, and exact pagination totals.
  */
 export async function fetchRealtorDirectoryPage({
   loUserId,
   includeAll,
+  search,
+  stage = 'all',
   offset = 0,
   pageSize = DEFAULT_DIRECTORY_PAGE_SIZE,
   signal,
 }: {
   loUserId: string;
   includeAll: boolean;
+  search?: string;
+  stage?: RelationshipStage | 'all';
   offset?: number;
   pageSize?: number;
   signal?: AbortSignal;
 }): Promise<{ data: RealtorDirectoryPage | null; error: Error | null }> {
   try {
-    let directoryQuery = supabase.rpc('get_crm_realtor_directory', {
+    let directoryQuery = supabase.rpc('get_crm_realtor_directory_page', {
       p_include_all: includeAll,
+      p_search: search?.trim() || null,
+      p_stage: stage,
+      p_active_only: includeAll,
       p_page_size: pageSize,
       p_offset: offset,
     });
@@ -113,91 +151,78 @@ export async function fetchRealtorDirectoryPage({
       return { data: null, error: new Error('Request cancelled') };
     }
 
-    const rows = (directoryData || []) as RealtorDirectoryRow[];
-    const realtorIds = rows.map((row) => row.id);
-    let assignments: RealtorAssignmentRow[] = [];
-    const leadCountMap: Record<string, number> = {};
-
-    if (realtorIds.length > 0) {
-      let assignmentQuery = supabase
-        .from('realtor_assignments')
-        .select(
-          'id, realtor_id, lo_user_id, relationship_stage, notes, last_touched_at, created_at'
-        )
-        .in('realtor_id', realtorIds)
-        .eq('lo_user_id', loUserId);
-      if (signal) assignmentQuery = assignmentQuery.abortSignal(signal);
-
-      let countQuery = includeAll
-        ? supabase.rpc('get_realtor_lead_counts', { realtor_ids: realtorIds })
-        : supabase.rpc('get_realtor_lead_counts_for_lo', {
-            realtor_ids: realtorIds,
-            lo_user_id: loUserId,
-          });
-      if (signal) countQuery = countQuery.abortSignal(signal);
-
-      const [assignmentResult, countResult] = await Promise.all([
-        assignmentQuery,
-        countQuery,
-      ]);
-      if (assignmentResult.error) {
-        return { data: null, error: new Error(assignmentResult.error.message) };
-      }
-      if (countResult.error) {
-        return { data: null, error: new Error(countResult.error.message) };
-      }
-      assignments = (assignmentResult.data || []) as RealtorAssignmentRow[];
-      (countResult.data || []).forEach((row: any) => {
-        if (row.realtor_id)
-          leadCountMap[row.realtor_id] = Number(row.lead_count) || 0;
-      });
+    if (
+      !directoryData ||
+      typeof directoryData !== 'object' ||
+      Array.isArray(directoryData)
+    ) {
+      return {
+        data: null,
+        error: new Error('Invalid realtor directory response'),
+      };
     }
 
-    const assignmentByRealtor = new Map(
-      assignments.map((assignment) => [assignment.realtor_id, assignment])
+    const response = directoryData as RealtorDirectoryResponse;
+    if (
+      !Array.isArray(response.items) ||
+      !response.items.every(isRealtorDirectoryRow)
+    ) {
+      return {
+        data: null,
+        error: new Error('Invalid realtor directory response'),
+      };
+    }
+
+    const rows = response.items as RealtorDirectoryRow[];
+    const mapped = rows.map((row): AssignedRealtor => {
+      const leadCount = normalizeNonNegativeNumber(row.lead_count, 0);
+      return {
+        assignment_id: row.assignment_id || null,
+        lo_user_id: row.assignment_lo_user_id || loUserId,
+        relationship_stage: normalizeRelationshipStage(
+          row.relationship_stage || row.assignment_stage,
+          leadCount
+        ),
+        assignment_notes: row.assignment_notes || null,
+        last_touched_at:
+          row.assignment_last_touched_at || row.assignment_created_at || '',
+        assigned_at: row.assignment_created_at || '',
+        realtor_id: row.id,
+        first_name: row.first_name || '',
+        last_name: row.last_name || '',
+        phone: row.phone,
+        email: row.email,
+        brokerage: row.brokerage,
+        active: row.active ?? true,
+        lead_eligible: row.lead_eligible ?? false,
+        campaign_eligible: row.campaign_eligible ?? true,
+        email_opt_out: row.email_opt_out ?? false,
+        preferred_language:
+          normalizeLanguage(row.preferred_language, 'en') || 'en',
+        secondary_language: normalizeLanguage(row.secondary_language, null),
+        county_filter: row.county_filter,
+        profile_picture_url: row.profile_picture_url,
+        ai_draft_access: row.ai_draft_access ?? false,
+        notes: row.notes,
+        realtor_created_at: row.realtor_created_at || '',
+        lead_count: leadCount,
+      };
+    });
+    const totalCount = normalizeNonNegativeNumber(
+      response.totalCount,
+      offset + mapped.length
     );
-    const mapped = rows
-      .filter((row) => !includeAll || row.active !== false)
-      .map((row): AssignedRealtor => {
-        const assignment = assignmentByRealtor.get(row.id);
-        const leadCount = leadCountMap[row.id] || 0;
-        return {
-          assignment_id: assignment?.id || null,
-          lo_user_id: assignment?.lo_user_id || loUserId,
-          relationship_stage:
-            assignment?.relationship_stage || getStageFromLeadCount(leadCount),
-          assignment_notes: assignment?.notes || null,
-          last_touched_at:
-            assignment?.last_touched_at || assignment?.created_at || '',
-          assigned_at: assignment?.created_at || '',
-          realtor_id: row.id,
-          first_name: row.first_name || '',
-          last_name: row.last_name || '',
-          phone: row.phone,
-          email: row.email,
-          brokerage: row.brokerage,
-          active: row.active ?? true,
-          lead_eligible: row.lead_eligible ?? false,
-          campaign_eligible: row.campaign_eligible ?? true,
-          email_opt_out: row.email_opt_out ?? false,
-          preferred_language:
-            normalizeLanguage(row.preferred_language, 'en') || 'en',
-          secondary_language: normalizeLanguage(row.secondary_language, null),
-          county_filter: row.county_filter,
-          profile_picture_url: row.profile_picture_url,
-          ai_draft_access: row.ai_draft_access ?? false,
-          notes: row.notes,
-          realtor_created_at: assignment?.created_at || '',
-          lead_count: leadCount,
-        };
-      });
+    const pageState = getRealtorDirectoryPageState(
+      offset,
+      mapped.length,
+      totalCount
+    );
 
     return {
       data: {
         data: mapped,
         offset,
-        nextOffset: offset + rows.length,
-        hasMore: rows.length === pageSize,
+        ...pageState,
       },
       error: null,
     };
@@ -216,6 +241,8 @@ export async function fetchAssignedRealtors(
   const result = await fetchRealtorDirectoryPage({
     loUserId,
     includeAll: false,
+    search: options.search,
+    stage: options.stage,
     offset: options.offset,
     pageSize: options.pageSize,
     signal: options.signal,
@@ -241,6 +268,8 @@ export async function fetchAllRealtors(
   const result = await fetchRealtorDirectoryPage({
     loUserId,
     includeAll: true,
+    search: options.search,
+    stage: options.stage,
     offset: options.offset,
     pageSize: options.pageSize,
     signal: options.signal,

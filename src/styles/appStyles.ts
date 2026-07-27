@@ -278,6 +278,12 @@ export const styles = StyleSheet.create({
     paddingVertical: 12,
     marginLeft: 10,
   },
+  listSearchHint: {
+    marginTop: 6,
+    marginLeft: 4,
+    fontSize: 12,
+    color: '#64748B',
+  },
   listPrimaryFilterRow: {
     marginTop: 10,
   },

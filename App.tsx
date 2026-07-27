@@ -51,6 +51,7 @@ import * as WebBrowser from 'expo-web-browser';
 import QuickCaptureTab from './src/features/quickCapture/QuickCaptureTab';
 import { usePaginatedLeads } from './src/features/leads/usePaginatedLeads';
 import {
+  getCrmLeadSourceKey,
   toMobileLead,
   toCrmLeadSummary,
   type CrmLeadListQuery,
@@ -205,26 +206,23 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         : userRole === 'loan_officer'
           ? 'loan_officer'
           : 'realtor';
-    const serverStatus = attentionFilter
-      ? 'needs_attention'
-      : unreadFilter
-        ? 'unread_sms'
-        : trackedFilter
-          ? 'tracked'
-          : selectedStatusFilter;
     return {
       scope,
       limit: 50,
       search: debouncedSearch.length >= 2 ? debouncedSearch : '',
-      status: serverStatus || 'all',
+      status: selectedStatusFilter || 'all',
       platform:
         activeTab === 'leads' ? 'organic' : activeTab === 'meta' ? 'meta' : 'all',
       ownerLoId:
-        selectedLOFilter && selectedLOFilter !== 'unassigned' ? selectedLOFilter : null,
-      ad:
-        activeTab === 'meta' && selectedSourceFilter !== 'all'
+        selectedLOFilter || null,
+      sourceKey:
+        userRole === 'super_admin' && selectedSourceFilter !== 'all'
           ? selectedSourceFilter
           : undefined,
+      excludeUnqualified: selectedStatusFilter === 'all',
+      needsAttention: attentionFilter,
+      unreadOnly: unreadFilter,
+      trackedOnly: trackedFilter,
       importSource: 'all',
       sort: 'last_contact',
       direction: 'desc',
@@ -300,22 +298,31 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   // Calculate unique sources for the filter
   const uniqueSources = React.useMemo(() => {
     const sources = new Set<string>(
-      Object.keys(leadDirectory.facets?.ads || {})
+      [
+        ...Object.keys(leadDirectory.facets?.metaSourceKeys || {}),
+        ...Object.keys(leadDirectory.facets?.organicSourceKeys || {}),
+        ...Object.keys(leadDirectory.facets?.ads || {}),
+        ...Object.keys(leadDirectory.facets?.sourceDetails || {}),
+      ]
     );
     
-    // Add sources from meta leads (ad_name)
     metaLeads.forEach(l => {
-      if (l.ad_name) sources.add(l.ad_name);
-      else if (l.campaign_name) sources.add(l.campaign_name);
+      sources.add(getCrmLeadSourceKey(l, 'meta'));
     });
     
-    // Add sources from organic leads (source_detail)
     leads.forEach(l => {
-      if (l.source_detail) sources.add(l.source_detail);
+      sources.add(getCrmLeadSourceKey(l, 'organic'));
     });
     
     return Array.from(sources).sort();
-  }, [leadDirectory.facets?.ads, leads, metaLeads]);
+  }, [
+    leadDirectory.facets?.ads,
+    leadDirectory.facets?.metaSourceKeys,
+    leadDirectory.facets?.organicSourceKeys,
+    leadDirectory.facets?.sourceDetails,
+    leads,
+    metaLeads,
+  ]);
 
   // Collapsing header animation for leads view
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -1232,26 +1239,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     }
   };
 
-  // Search filter function
-  const matchesSearch = (lead: Lead | MetaLead) => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query || query.length >= 2) return true;
-
-    // The endpoint intentionally ignores one-character searches. Preserve the
-    // existing quick filter for the currently loaded page without issuing a
-    // wider read; two-character and longer searches remain server-owned so
-    // related-contact and co-borrower matches are not discarded locally.
-    const fullName = [lead.first_name, lead.last_name]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase();
-    return (
-      fullName.includes(query) ||
-      (lead.email?.toLowerCase() || '').includes(query) ||
-      (lead.phone?.toLowerCase() || '').includes(query)
-    );
-  };
-
   // LO filter function (for super admins only)
   const matchesLOFilter = (lead: Lead | MetaLead) => {
     // Only apply filter for super admins
@@ -1288,31 +1275,30 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   };
 
   // Source filter (for super admins only)
-  const matchesSourceFilter = (lead: Lead | MetaLead) => {
+  const matchesSourceFilter = (
+    lead: Lead | MetaLead,
+    source: 'organic' | 'meta'
+  ) => {
     // Only apply filter for super admins
     if (userRole !== 'super_admin') return true;
     
     if (selectedSourceFilter === 'all') return true;
-    
-    const src = (lead as MetaLead).ad_name || 
-                (lead as Lead).source_detail || 
-                (lead as MetaLead).campaign_name || 
-                (lead as Lead).source;
-                
-    return src === selectedSourceFilter;
+
+    return getCrmLeadSourceKey(lead, source) === selectedSourceFilter;
   };
 
-  const matchesLeadListBase = (lead: Lead | MetaLead) => {
+  const matchesLeadListBase = (
+    lead: Lead | MetaLead,
+    source: 'organic' | 'meta'
+  ) => {
     const statusMatch = selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter;
-    const searchMatch = matchesSearch(lead);
     const loMatch = matchesLOFilter(lead);
     const attentionMatch = matchesAttentionFilter(lead);
-    const sourceMatch = matchesSourceFilter(lead);
+    const sourceMatch = matchesSourceFilter(lead, source);
     const trackedMatch = matchesTrackedFilter(lead);
     const unreadMatch = matchesUnreadFilter(lead);
 
     return statusMatch
-      && searchMatch
       && loMatch
       && attentionMatch
       && sourceMatch
@@ -1321,7 +1307,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   };
 
   const matchesMetaLeadList = (lead: MetaLead) => {
-    return matchesLeadListBase(lead);
+    return matchesLeadListBase(lead, 'meta');
   };
 
   const formatLeadListTimestamp = (lead: Lead | MetaLead) => {
@@ -1778,25 +1764,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   if (selectedLead) {
     // Apply the same filters to leads/metaLeads that are used in the list view
-    let filteredLeads = leads.filter(lead => {
-      const statusMatch = selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter;
-      const searchMatch = matchesSearch(lead);
-      const loMatch = matchesLOFilter(lead);
-      const attentionMatch = matchesAttentionFilter(lead);
-      const sourceMatch = matchesSourceFilter(lead);
-      const trackedMatch = matchesTrackedFilter(lead);
-      return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch && trackedMatch;
-    });
+    let filteredLeads = leads.filter(lead =>
+      matchesLeadListBase(lead, 'organic')
+    );
 
-    let filteredMetaLeads = metaLeads.filter(lead => {
-      const statusMatch = selectedStatusFilter === 'all' ? lead.status !== 'unqualified' : lead.status === selectedStatusFilter;
-      const searchMatch = matchesSearch(lead);
-      const loMatch = matchesLOFilter(lead);
-      const attentionMatch = matchesAttentionFilter(lead);
-      const sourceMatch = matchesSourceFilter(lead);
-      const trackedMatch = matchesTrackedFilter(lead);
-      return statusMatch && searchMatch && loMatch && attentionMatch && sourceMatch && trackedMatch;
-    });
+    let filteredMetaLeads = metaLeads.filter(matchesMetaLeadList);
 
     // Keep the currently selected lead available in detail view even if a state update
     // (e.g. logging a call + invalidating attention) causes it to fall out of filters.
@@ -2707,7 +2679,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const hasLeads = (leadDirectory.facets?.organic ?? 0) > 0 || leads.length > 0;
   const hasMetaLeads = (leadDirectory.facets?.meta ?? 0) > 0 || metaLeads.length > 0;
   const filteredWebsiteLeads = sortLeadsByLastTouchedDesc(
-    leads.filter(matchesLeadListBase)
+    leads.filter((lead) => matchesLeadListBase(lead, 'organic'))
   );
   const filteredMetaListLeads = sortLeadsByLastTouchedDesc(
     metaLeads.filter(matchesMetaLeadList)
@@ -2968,7 +2940,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               <Ionicons name="search-outline" size={18} color="#64748B" />
               <TextInput
                 style={styles.listSearchInput}
-                placeholder="Search leads, phones, or emails"
+                placeholder="Search leads (2+ characters)"
                 placeholderTextColor="#94A3B8"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -2983,6 +2955,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 </TouchableOpacity>
               )}
             </View>
+            {searchQuery.trim().length === 1 && (
+              <Text style={styles.listSearchHint}>
+                Enter at least 2 characters to search.
+              </Text>
+            )}
 
             <View style={styles.listPrimaryFilterRow}>
               <TouchableOpacity
@@ -3306,13 +3283,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                         <Text style={[
                           styles.statusPickerItemCount,
                           selectedLOFilter === null && styles.statusPickerItemCountActive,
-                        ]}>({
-                          [...metaLeads, ...leads].filter(l => {
-                             const statusMatch = selectedStatusFilter === 'all' ? l.status !== 'unqualified' : l.status === selectedStatusFilter;
-                             const sourceMatch = matchesSourceFilter(l);
-                             return statusMatch && sourceMatch;
-                          }).length
-                        })</Text>
+                        ]}>({leadDirectory.facets?.ownerTotal ?? metaLeads.length + leads.length})</Text>
                       </View>
                       {selectedLOFilter === null && (
                         <Text style={styles.statusPickerCheck}>✓</Text>
@@ -3340,11 +3311,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                           styles.statusPickerItemCount,
                           selectedLOFilter === 'unassigned' && styles.statusPickerItemCountActive,
                         ]}>({
-                          [...metaLeads, ...leads].filter(l => {
-                             const statusMatch = selectedStatusFilter === 'all' ? l.status !== 'unqualified' : l.status === selectedStatusFilter;
-                             const sourceMatch = matchesSourceFilter(l);
-                             return statusMatch && sourceMatch && !l.lo_id;
-                          }).length
+                          leadDirectory.facets?.unassignedOwner
+                          ?? [...metaLeads, ...leads].filter((lead) => !lead.lo_id).length
                         })</Text>
                       </View>
                       {selectedLOFilter === 'unassigned' && (
@@ -3354,11 +3322,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
                     {/* Individual LOs */}
                     {loanOfficers.map((lo) => {
-                      const count = [...metaLeads, ...leads].filter(l => {
-                         const statusMatch = selectedStatusFilter === 'all' ? l.status !== 'unqualified' : l.status === selectedStatusFilter;
-                         const sourceMatch = matchesSourceFilter(l);
-                         return statusMatch && sourceMatch && l.lo_id === lo.id;
-                      }).length;
+                      const count =
+                        leadDirectory.facets?.loanOfficers[lo.id]
+                        ?? [...metaLeads, ...leads].filter(
+                          (lead) => lead.lo_id === lo.id
+                        ).length;
 
                       return (
                         <TouchableOpacity
@@ -3440,21 +3408,25 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
                     {/* Individual Sources */}
                     {uniqueSources.map((source) => {
-                      // Calculate count for this source
-                      const loadedCount = [...metaLeads, ...leads].filter(l => {
-                         // Check if lead matches current status and LO filters
-                         const statusMatch = selectedStatusFilter === 'all' ? l.status !== 'unqualified' : l.status === selectedStatusFilter;
-                         const loMatch = matchesLOFilter(l);
-                         
-                         if (!statusMatch || !loMatch) return false;
-
-                         const src = (l as MetaLead).ad_name || 
-                                     (l as Lead).source_detail || 
-                                     (l as MetaLead).campaign_name || 
-                                     (l as Lead).source;
-                         return src === source;
-                      }).length;
-                      const count = leadDirectory.facets?.ads[source] ?? loadedCount;
+                      const loadedMetaCount = metaLeads.filter(
+                        (lead) =>
+                          getCrmLeadSourceKey(lead, 'meta') === source
+                      ).length;
+                      const loadedOrganicCount = leads.filter(
+                        (lead) =>
+                          getCrmLeadSourceKey(lead, 'organic') === source
+                      ).length;
+                      const metaFacetCount =
+                        leadDirectory.facets?.metaSourceKeys[source]
+                        ?? leadDirectory.facets?.ads[source];
+                      const organicFacetCount =
+                        leadDirectory.facets?.organicSourceKeys[source]
+                        ?? leadDirectory.facets?.sourceDetails[source];
+                      const count =
+                        metaFacetCount !== undefined
+                          || organicFacetCount !== undefined
+                          ? (metaFacetCount ?? 0) + (organicFacetCount ?? 0)
+                          : loadedMetaCount + loadedOrganicCount;
                       
                       return (
                         <TouchableOpacity
@@ -3469,8 +3441,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                             setShowSourcePicker(false);
 
                             // Auto-switch tab based on source type
-                            const hasMeta = metaLeads.some(l => (l.ad_name || l.campaign_name) === source);
-                            const hasOrganic = leads.some(l => (l.source_detail || l.source) === source);
+                            const hasMeta =
+                              (metaFacetCount ?? 0) > 0 || loadedMetaCount > 0;
+                            const hasOrganic =
+                              (organicFacetCount ?? 0) > 0
+                              || loadedOrganicCount > 0;
 
                             if (hasMeta && !hasOrganic) {
                               setActiveTab('meta');
