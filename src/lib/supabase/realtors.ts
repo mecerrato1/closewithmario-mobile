@@ -620,69 +620,6 @@ export async function fetchRealtorActivity(
 }
 
 // ============================================================================
-// Fetch Leads by Realtor
-// ============================================================================
-
-export async function fetchLeadsByRealtor(
-  realtorId: string,
-  pageSize: number = 25
-): Promise<{ data: any[] | null; error: Error | null }> {
-  try {
-    const boundedPageSize = Math.min(50, Math.max(1, pageSize));
-    // The lead-list endpoint does not currently accept realtorId. Keep this
-    // focused relationship view bounded per source instead of restoring an
-    // unbounded directory/count read.
-    const [leadsResult, metaResult] = await Promise.all([
-      supabase
-        .from('leads')
-        .select('id, first_name, last_name, email, phone, status, created_at')
-        .eq('realtor_id', realtorId)
-        .order('created_at', { ascending: false })
-        .limit(boundedPageSize),
-      supabase
-        .from('meta_ads')
-        .select('id, first_name, last_name, email, phone, status, created_at')
-        .eq('realtor_id', realtorId)
-        .order('created_at', { ascending: false })
-        .limit(boundedPageSize),
-    ]);
-
-    if (leadsResult.error) {
-      console.error(
-        '[realtors] fetchLeadsByRealtor leads error:',
-        leadsResult.error.message
-      );
-    }
-    if (metaResult.error) {
-      console.error(
-        '[realtors] fetchLeadsByRealtor meta_ads error:',
-        metaResult.error.message
-      );
-    }
-
-    // Combine and sort by created_at
-    const combined = [
-      ...(leadsResult.data || []).map((l) => ({
-        ...l,
-        source: 'lead' as const,
-      })),
-      ...(metaResult.data || []).map((m) => ({
-        ...m,
-        source: 'meta' as const,
-      })),
-    ].sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
-
-    return { data: combined, error: null };
-  } catch (err: any) {
-    console.error('[realtors] fetchLeadsByRealtor exception:', err);
-    return { data: null, error: err };
-  }
-}
-
-// ============================================================================
 // Get "Needs Love" Realtors (oldest last_touched_at)
 // ============================================================================
 

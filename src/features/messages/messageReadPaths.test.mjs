@@ -23,6 +23,9 @@ test('message inbox uses authorized compact summaries instead of row scans', asy
   assert.match(client, /authenticatedFetch/);
   assert.match(client, /cursor/);
   assert.match(client, /unreadOnly/);
+  assert.match(client, /compact: '1'/);
+  assert.match(client, /SCENARIO_INBOX_PAGE_SIZE/);
+  assert.doesNotMatch(client, /pending=1&limit=1000/);
   assert.doesNotMatch(client, /\/api\/leads\/list/);
   assert.doesNotMatch(client, /get_crm_sms_conversation_summaries/);
   assert.doesNotMatch(client, /get_unread_meta_dm_counts/);
@@ -31,6 +34,9 @@ test('message inbox uses authorized compact summaries instead of row scans', asy
   assert.doesNotMatch(client, /from\(["']meta_dm_messages["']\)/);
   assert.doesNotMatch(screen, /\.from\('leads'\)[\s\S]*\.select/);
   assert.doesNotMatch(screen, /\.from\('meta_ads'\)[\s\S]*\.select/);
+  assert.match(screen, /reload\(isScenarioUpdate\)/);
+  assert.equal((screen.match(/reload\(false\)/g) || []).length, 2);
+  assert.doesNotMatch(screen, /void reload\(\)/);
 });
 
 test('opened SMS and DM histories use explicit bounded page queries', async () => {

@@ -167,6 +167,38 @@ test('keeps scenario updates in a stable section ahead of paginated messages', a
   assert.equal(controller.getState().totalCount, 3);
 });
 
+test('keeps the last scenario cards when only their refresh fails', async () => {
+  const scenario = conversation('scenario_update:organic:one', {
+    channel: 'scenario_update',
+    unreadCount: 1,
+  });
+  let calls = 0;
+  const controller = new MessageInboxPaginationController(QUERY, async () => {
+    calls += 1;
+    if (calls === 1) {
+      return {
+        ...page([scenario, conversation('sms:organic:old')]),
+        totalCount: 2,
+        scenarioUpdatesLoaded: true,
+      };
+    }
+    return {
+      ...page([conversation('sms:organic:fresh')]),
+      scenarioUpdatesLoaded: false,
+    };
+  });
+
+  await controller.loadFirst();
+  await controller.refresh();
+
+  assert.equal(controller.getState().error, null);
+  assert.deepEqual(
+    controller.getState().items.map((item) => item.key),
+    ['scenario_update:organic:one', 'sms:organic:fresh']
+  );
+  assert.equal(controller.getState().totalCount, 2);
+});
+
 test('coalesces repeated end-reached calls while loading more', async () => {
   const continuation = deferred<MessageInboxPage>();
   let continuationCalls = 0;

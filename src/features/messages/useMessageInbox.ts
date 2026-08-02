@@ -103,7 +103,11 @@ export function useMessageInbox(
   }, [controller, enabled]);
 
   const refresh = useCallback(() => controller.refresh(), [controller]);
-  const reload = useCallback(() => controller.reload(), [controller]);
+  const reload = useCallback(
+    (includeScenarioUpdates = true) =>
+      controller.reload(includeScenarioUpdates),
+    [controller]
+  );
   const retry = useCallback(() => controller.retry(), [controller]);
   const loadMore = useCallback(() => controller.loadMore(), [controller]);
   const markLocallyRead = useCallback(

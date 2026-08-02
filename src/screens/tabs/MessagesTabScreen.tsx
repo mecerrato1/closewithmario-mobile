@@ -300,7 +300,7 @@ export default function MessagesTabScreen({
               style={styles.threadBackButton}
               onPress={() => {
                 setScreenState({ screen: 'list' });
-                void reload();
+                void reload(isScenarioUpdate);
               }}
             >
               <Ionicons name="chevron-back" size={22} color={ACCENT} />
@@ -465,7 +465,7 @@ export default function MessagesTabScreen({
               initialSmsOptIn={conversation.smsOptIn}
               initialSmsOptedOut={conversation.smsOptedOut}
               onMessageSent={() => {
-                void reload();
+                void reload(false);
               }}
               showHeader={false}
             />
@@ -478,7 +478,7 @@ export default function MessagesTabScreen({
               leadPhone={conversation.phone || null}
               leadEmail={conversation.leadEmail || null}
               onMessageSent={() => {
-                void reload();
+                void reload(false);
               }}
             />
           )}

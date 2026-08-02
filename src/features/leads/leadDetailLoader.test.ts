@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   parseLeadDetailBootstrap,
@@ -36,6 +37,7 @@ function parsedBootstrap(): LeadDetailBootstrap {
           has_audio: false,
         },
       ],
+      activitiesNextCursor: null,
       contacts: [
         {
           id: 'contact-1',
@@ -45,7 +47,6 @@ function parsedBootstrap(): LeadDetailBootstrap {
         },
       ],
       realtorRoles: [],
-      documentRequests: [],
     },
     { leadId: LEAD_ID, leadSource: 'organic' }
   );
@@ -61,6 +62,21 @@ test('parses bootstrap data and maps the organic db_source for mobile', () => {
   assert.equal(bootstrap.activities[0].has_audio, false);
   assert.equal(bootstrap.contacts[0].name, 'Related Person');
   assert.deepEqual(bootstrap.realtorRoles, []);
+});
+
+test('summary audio metadata preserves the voice-note presentation path', () => {
+  const source = readFileSync(
+    new URL('../../screens/LeadDetailScreen.tsx', import.meta.url),
+    'utf8'
+  );
+  assert.match(
+    source,
+    /activity\.audio_url \|\| activity\.has_audio \? 'mic-outline'/
+  );
+  assert.match(
+    source,
+    /activity\.audio_url \|\| activity\.has_audio\s+\? 'Voice note'/
+  );
 });
 
 test('uses detail bootstrap as the primary out-of-page/deep-link retrieval', async () => {
@@ -127,9 +143,9 @@ test('rejects a mismatched detail response instead of trusting it', () => {
           leadSource: 'organic',
           lead: rawLead,
           activities: [],
+          activitiesNextCursor: null,
           contacts: [],
           realtorRoles: [],
-          documentRequests: [],
         },
         { leadId: LEAD_ID, leadSource: 'organic' }
       ),

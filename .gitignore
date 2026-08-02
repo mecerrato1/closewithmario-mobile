@@ -17,6 +17,8 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+docs/*Apple*Auth*Key*
+docs/*Apple*Oauth*Secret*Key*
 
 # Metro
 .metro-health-check*

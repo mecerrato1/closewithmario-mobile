@@ -105,16 +105,24 @@ export type LeadDetailContact = {
   is_primary?: boolean | null;
 };
 
-export type LeadDetailDocumentSummary = Record<string, unknown>;
-
 export type LeadDetailBootstrap = {
   leadId: string;
   leadSource: CrmLeadSource;
   lead: Lead | MetaLead;
   activities: Activity[];
+  activitiesNextCursor: string | null;
   contacts: LeadDetailContact[];
   realtorRoles: LeadRealtorRole[] | null;
-  documentRequests: LeadDetailDocumentSummary[];
+};
+
+export type LeadDetailActivityPage = {
+  activities: Activity[];
+  nextCursor: string | null;
+};
+
+export type LeadActivityBody = {
+  activityId: string;
+  body: string | null;
 };
 
 type Requester = (input: string, init?: RequestInit) => Promise<Response>;
@@ -357,14 +365,37 @@ function parseActivity(value: unknown): Activity {
     typeof value.activity_type !== 'string' ||
     typeof value.notes !== 'string' ||
     typeof value.created_at !== 'string' ||
-    typeof value.has_audio !== 'boolean'
+    typeof value.has_audio !== 'boolean' ||
+    (value.has_body !== undefined && typeof value.has_body !== 'boolean')
   ) {
     throw new Error('The lead detail response was invalid.');
   }
+  const summary = { ...value };
+  delete summary.body;
+  delete summary.audio_url;
   return {
-    ...(value as unknown as Activity),
+    ...(summary as unknown as Activity),
     activity_type: value.activity_type as Activity['activity_type'],
     has_audio: value.has_audio,
+    has_body: value.has_body === true,
+  };
+}
+
+function parseActivityCursor(value: unknown) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error('The lead activity cursor response was invalid.');
+  }
+  return value;
+}
+
+export function parseLeadDetailActivityPage(value: unknown): LeadDetailActivityPage {
+  if (!isRecord(value) || !Array.isArray(value.activities)) {
+    throw new Error('The lead activity response was invalid.');
+  }
+  return {
+    activities: value.activities.map(parseActivity),
+    nextCursor: parseActivityCursor(value.nextCursor),
   };
 }
 
@@ -389,7 +420,6 @@ export function parseLeadDetailBootstrap(
     value.leadSource !== expected.leadSource ||
     !Array.isArray(value.activities) ||
     !Array.isArray(value.contacts) ||
-    !Array.isArray(value.documentRequests) ||
     (value.realtorRoles !== null && !Array.isArray(value.realtorRoles))
   ) {
     throw new Error('The lead detail response was invalid.');
@@ -401,9 +431,9 @@ export function parseLeadDetailBootstrap(
     leadSource: expected.leadSource,
     lead: parseLeadRecord(value.lead, expected),
     activities: value.activities.map(parseActivity),
+    activitiesNextCursor: parseActivityCursor(value.activitiesNextCursor),
     contacts: value.contacts.map(parseContact),
     realtorRoles: roles === null ? null : (roles as LeadRealtorRole[]),
-    documentRequests: value.documentRequests as LeadDetailDocumentSummary[],
   };
 }
 
@@ -412,7 +442,12 @@ export async function fetchCrmLeadDetailBootstrap(
   leadSource: CrmLeadSource,
   options: { signal?: AbortSignal; request?: Requester } = {}
 ) {
-  const params = new URLSearchParams({ leadId, leadSource });
+  const params = new URLSearchParams({
+    leadId,
+    leadSource,
+    profile: 'mobile',
+    activityBodyMode: 'summary',
+  });
   const response = await (options.request ?? defaultRequester)(
     `${CRM_API_BASE_URL}/api/leads/detail-bootstrap?${params.toString()}`,
     {
@@ -425,6 +460,73 @@ export async function fetchCrmLeadDetailBootstrap(
   if (!response.ok)
     throw new Error(errorFromPayload(payload, 'Could not load lead details.'));
   return parseLeadDetailBootstrap(payload, { leadId, leadSource });
+}
+
+export async function fetchCrmLeadActivitiesPage(
+  leadId: string,
+  leadSource: CrmLeadSource,
+  options: {
+    cursor?: string | null;
+    limit?: number;
+    signal?: AbortSignal;
+    request?: Requester;
+  } = {}
+) {
+  const params = new URLSearchParams({
+    leadId,
+    leadSource,
+    profile: 'mobile',
+    activityBodyMode: 'summary',
+    limit: String(Math.min(50, Math.max(1, options.limit ?? 20))),
+  });
+  if (options.cursor) params.set('cursor', options.cursor);
+  const response = await (options.request ?? defaultRequester)(
+    `${CRM_API_BASE_URL}/api/leads/activities?${params.toString()}`,
+    {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: options.signal,
+    }
+  );
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(errorFromPayload(payload, 'Could not load lead activity.'));
+  }
+  return parseLeadDetailActivityPage(payload);
+}
+
+export async function fetchCrmLeadActivityBody(
+  leadId: string,
+  leadSource: CrmLeadSource,
+  activityId: string,
+  options: { signal?: AbortSignal; request?: Requester } = {}
+): Promise<LeadActivityBody> {
+  const params = new URLSearchParams({
+    leadId,
+    leadSource,
+    activityId,
+    profile: 'mobile',
+  });
+  const response = await (options.request ?? defaultRequester)(
+    `${CRM_API_BASE_URL}/api/leads/activity-body?${params.toString()}`,
+    {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: options.signal,
+    }
+  );
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(errorFromPayload(payload, 'Could not load the email body.'));
+  }
+  if (
+    !isRecord(payload) ||
+    payload.activityId !== activityId ||
+    (payload.body !== null && typeof payload.body !== 'string')
+  ) {
+    throw new Error('The email body response was invalid.');
+  }
+  return { activityId, body: payload.body };
 }
 
 export function crmLeadKey(lead: Pick<CrmLeadSummary, 'id' | 'source'>) {

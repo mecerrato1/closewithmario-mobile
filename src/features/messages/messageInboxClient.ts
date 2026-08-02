@@ -1,5 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authenticatedFetch } from '../../lib/authenticatedFetch';
+import {
+  collectBoundedScenarioPages,
+  loadOptionalScenariosWithDeadline,
+} from './messageInboxOptionalScenarios';
 import type {
   ConversationSummary,
   PendingScenarioUpdate,
@@ -10,6 +14,9 @@ const CRM_API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_BASE_URL || 'https://www.closewithmario.com'
 ).replace(/\/$/, '');
 export const MESSAGE_INBOX_PAGE_SIZE = 50;
+const SCENARIO_INBOX_PAGE_SIZE = 250;
+const MAX_SCENARIO_INBOX_PAGES = 4;
+const SCENARIO_INBOX_DEADLINE_MS = 1_000;
 const SCENARIO_UPDATE_READ_STORAGE_PREFIX = 'messages.scenarioUpdateReadIds.v1';
 
 export type MessageInboxQuery = {
@@ -23,6 +30,7 @@ export type MessageInboxPage = {
   nextCursor: string | null;
   hasMore: boolean;
   totalCount: number;
+  scenarioUpdatesLoaded?: boolean;
 };
 
 type Requester = (input: string, init?: RequestInit) => Promise<Response>;
@@ -284,30 +292,56 @@ async function fetchPendingScenarioUpdates({
   signal?: AbortSignal;
   request: Requester;
 }) {
-  const [response, readIds] = await Promise.all([
-    request(
-      `${CRM_API_BASE_URL}/api/leads/qualification-submissions?pending=1&limit=1000`,
-      {
-        headers: { Accept: 'application/json' },
-        signal,
+  const readIdsPromise = loadReadScenarioUpdateIds(userId);
+  const result = await collectBoundedScenarioPages(
+    async (cursor) => {
+      const params = new URLSearchParams({
+        pending: '1',
+        compact: '1',
+        limit: String(SCENARIO_INBOX_PAGE_SIZE),
+      });
+      if (cursor) params.set('cursor', cursor);
+      const response = await request(
+        `${CRM_API_BASE_URL}/api/leads/qualification-submissions?${params.toString()}`,
+        {
+          headers: { Accept: 'application/json' },
+          signal,
+        }
+      );
+      const payload: unknown = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(
+          isRecord(payload) && typeof payload.error === 'string'
+            ? payload.error
+            : 'Failed to load scenario updates.'
+        );
       }
-    ),
-    loadReadScenarioUpdateIds(userId),
-  ]);
-  const payload: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(
-      isRecord(payload) && typeof payload.error === 'string'
-        ? payload.error
-        : 'Failed to load scenario updates.'
-    );
-  }
-  if (!isRecord(payload) || !Array.isArray(payload.submissions)) {
-    throw new Error('The scenario update response was invalid.');
+      if (!isRecord(payload) || !Array.isArray(payload.submissions)) {
+        throw new Error('The scenario update response was invalid.');
+      }
+      return {
+        items: payload.submissions.filter(
+          (submission): submission is Record<string, unknown> =>
+            isRecord(submission) && typeof submission.id === 'string'
+        ),
+        hasMore: payload.hasMore === true,
+        nextCursor:
+          typeof payload.nextCursor === 'string' && payload.nextCursor.length > 0
+            ? payload.nextCursor
+            : null,
+      };
+    },
+    (submission) => String(submission.id),
+    MAX_SCENARIO_INBOX_PAGES
+  );
+  if (result.truncated) {
+    console.warn('Scenario updates were truncated to the bounded mobile limit.');
   }
 
+  const readIds = await readIdsPromise;
+
   const updatesByLead = new Map<string, PendingScenarioUpdateWithLead[]>();
-  payload.submissions.forEach((value) => {
+  result.items.forEach((value) => {
     if (
       !isRecord(value) ||
       typeof value.id !== 'string' ||
@@ -418,23 +452,40 @@ export async function fetchMessageInboxPage(
     return parseMessageInboxPage(payload);
   });
   const scenariosPromise = options.includeScenarioUpdates
-    ? fetchPendingScenarioUpdates({
-        userId: query.userId,
-        search,
-        unreadOnly: query.unreadOnly,
-        signal: options.signal,
-        request,
-      })
-    : Promise.resolve([] as ConversationSummary[]);
+    ? loadOptionalScenariosWithDeadline(
+        (scenarioSignal) =>
+          fetchPendingScenarioUpdates({
+            userId: query.userId,
+            search,
+            unreadOnly: query.unreadOnly,
+            signal: scenarioSignal,
+            request,
+          }),
+        {
+          signal: options.signal,
+          timeoutMs: SCENARIO_INBOX_DEADLINE_MS,
+        }
+      )
+    : Promise.resolve({
+        items: [] as ConversationSummary[],
+        loaded: false,
+      });
 
-  const [page, scenarioUpdates] = await Promise.all([
+  const [page, scenarioLoad] = await Promise.all([
     pagePromise,
     scenariosPromise,
   ]);
   throwIfAborted(options.signal);
+  if (options.includeScenarioUpdates && !scenarioLoad.loaded) {
+    console.warn(
+      'Scenario updates could not be loaded; continuing with message summaries.'
+    );
+  }
   return {
     ...page,
-    items: sortConversationSummaries([...page.items, ...scenarioUpdates]),
-    totalCount: page.totalCount + scenarioUpdates.length,
+    items: sortConversationSummaries([...page.items, ...scenarioLoad.items]),
+    totalCount: page.totalCount + scenarioLoad.items.length,
+    scenarioUpdatesLoaded:
+      options.includeScenarioUpdates && scenarioLoad.loaded,
   };
 }

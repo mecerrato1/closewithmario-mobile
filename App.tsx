@@ -56,6 +56,15 @@ import {
   toCrmLeadSummary,
   type CrmLeadListQuery,
 } from './src/features/leads/crmLeadApi';
+import {
+  DASHBOARD_LEAD_FILTERS,
+  getLeadTabCount,
+  getSourceOptionCount,
+  getStatusOptionCount,
+  shouldOpenNotificationLead,
+  type LeadCountContext,
+} from './src/features/leads/leadListPresentation';
+import { queryIncompleteTodayCallbacks } from './src/features/leads/todayCallbacksQuery';
 
 // Enable LayoutAnimation on Android
 if (
@@ -524,19 +533,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
         // Fetch today's callbacks for the current user (only incomplete)
         if (session?.user?.id) {
-          const todayStart = new Date();
-          todayStart.setHours(0, 0, 0, 0);
-          const todayEnd = new Date();
-          todayEnd.setHours(23, 59, 59, 999);
-
-          const { data: callbacksData, error: callbacksError } = await supabase
-            .from('lead_callbacks')
-            .select('id, scheduled_for, title, notes, lead_id, meta_ad_id, completed_at')
-            .gte('scheduled_for', todayStart.toISOString())
-            .lte('scheduled_for', todayEnd.toISOString())
-            .eq('created_by', session.user.id)
-            .is('completed_at', null)
-            .order('scheduled_for', { ascending: true });
+          const { data: callbacksData, error: callbacksError } =
+            await queryIncompleteTodayCallbacks(supabase, session.user.id);
 
           if (callbacksError) {
             console.error('Error loading today callbacks:', callbacksError);
@@ -681,7 +679,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   // Handle notification tap to navigate to lead
   useEffect(() => {
-    if (notificationLead && !loading) {
+    if (notificationLead && shouldOpenNotificationLead(notificationLead, roleReady)) {
       console.log('📱 Notification tap received:', notificationLead);
       // Navigate directly to the lead using the source from notification
       setSelectedLead({ source: notificationLead.source, id: notificationLead.id });
@@ -690,7 +688,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       setNotificationTargetLead({ source: notificationLead.source, id: notificationLead.id });
       onNotificationHandled?.();
     }
-  }, [notificationLead, loading, onNotificationHandled]);
+  }, [notificationLead, onNotificationHandled, roleReady]);
 
   // Skip dashboard when user clicks Leads tab (not on initial login)
   useEffect(() => {
@@ -751,17 +749,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       }
 
       // Refresh today's callbacks as well
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayEnd = new Date();
-      todayEnd.setHours(23, 59, 59, 999);
-      const callbacksPromise = supabase
-        .from('lead_callbacks')
-        .select('id, scheduled_for, title, notes, lead_id, meta_ad_id')
-        .gte('scheduled_for', todayStart.toISOString())
-        .lte('scheduled_for', todayEnd.toISOString())
-        .eq('created_by', session.user.id)
-        .order('scheduled_for', { ascending: true });
+      const callbacksPromise = queryIncompleteTodayCallbacks(
+        supabase,
+        session.user.id
+      );
 
       const [, callbacksResult] = await Promise.all([
         refreshLeadDirectory(),
@@ -940,12 +931,25 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     setShowAddLeadModal(true);
   };
 
+  const returnToLeadDashboard = () => {
+    setActiveTab(DASHBOARD_LEAD_FILTERS.activeTab);
+    setHasManuallySelectedTab(true);
+    setSelectedLOFilter(DASHBOARD_LEAD_FILTERS.ownerLoId);
+    setSelectedStatusFilter(DASHBOARD_LEAD_FILTERS.status);
+    setSelectedSourceFilter(DASHBOARD_LEAD_FILTERS.source);
+    setAttentionFilter(DASHBOARD_LEAD_FILTERS.needsAttention);
+    setUnreadFilter(DASHBOARD_LEAD_FILTERS.unreadOnly);
+    setTrackedFilter(DASHBOARD_LEAD_FILTERS.trackedOnly);
+    setSearchQuery(DASHBOARD_LEAD_FILTERS.search);
+    setShowDashboard(true);
+  };
+
   const closeAddLeadModal = () => {
     setShowAddLeadModal(false);
     setAddLeadError(null);
 
     if (returnToDashboardAfterAddLead) {
-      setShowDashboard(true);
+      returnToLeadDashboard();
       setReturnToDashboardAfterAddLead(false);
     }
   };
@@ -1144,19 +1148,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     if (!session?.user?.id) return;
 
     try {
-      const todayStart = new Date();
-      todayStart.setHours(0, 0, 0, 0);
-      const todayEnd = new Date();
-      todayEnd.setHours(23, 59, 59, 999);
-
-      const { data: callbacksData, error: callbacksError } = await supabase
-        .from('lead_callbacks')
-        .select('id, scheduled_for, title, notes, lead_id, meta_ad_id, completed_at')
-        .gte('scheduled_for', todayStart.toISOString())
-        .lte('scheduled_for', todayEnd.toISOString())
-        .eq('created_by', session.user.id)
-        .is('completed_at', null)
-        .order('scheduled_for', { ascending: true });
+      const { data: callbacksData, error: callbacksError } =
+        await queryIncompleteTodayCallbacks(supabase, session.user.id);
 
       if (callbacksError) {
         console.error('Error refreshing today callbacks:', callbacksError);
@@ -2689,6 +2682,19 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     ...filteredWebsiteLeads.map((lead) => ({ ...lead, _tableType: 'lead' as const })),
   ]);
   const totalVisibleLeadCount = leadDirectory.totalCount;
+  const leadCountContext: LeadCountContext = {
+    activeTab,
+    selectedStatus: selectedStatusFilter,
+    selectedSource: selectedSourceFilter,
+    selectedOwnerLoId: selectedLOFilter,
+    needsAttention: attentionFilter,
+    unreadOnly: unreadFilter,
+    trackedOnly: trackedFilter,
+    totalCount: totalVisibleLeadCount,
+    facets: leadDirectory.facets,
+  };
+  const allStatusesCount = getStatusOptionCount('all', leadCountContext);
+  const allSourcesCount = getSourceOptionCount('all', leadCountContext);
   const renderLeadListFooter = () => {
     if (leadDirectory.loadingMore) {
       return <ActivityIndicator style={{ padding: 20 }} />;
@@ -2809,15 +2815,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           { transform: [{ scale: headerTitleScale }] }
         ]}>
           <TouchableOpacity 
-            onPress={() => {
-              setShowDashboard(true);
-              setSelectedLOFilter(null);
-              setSelectedStatusFilter('all');
-              setSelectedSourceFilter('all');
-              setAttentionFilter(false);
-              setUnreadFilter(false);
-              setSearchQuery('');
-            }} 
+            onPress={returnToLeadDashboard}
             style={styles.homeButton}
           >
             <Text style={styles.homeButtonText}>← Dashboard</Text>
@@ -2913,11 +2911,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           <View style={styles.listUtilityPanel}>
             <View style={styles.listTabBar}>
               {[
-                { key: 'all' as const, label: 'All', count: totalVisibleLeadCount },
-                { key: 'leads' as const, label: 'My Leads', count: leadDirectory.facets?.organic ?? filteredWebsiteLeads.length },
-                { key: 'meta' as const, label: 'Meta Ads', count: leadDirectory.facets?.meta ?? filteredMetaListLeads.length },
+                { key: 'all' as const, label: 'All' },
+                { key: 'leads' as const, label: 'My Leads' },
+                { key: 'meta' as const, label: 'Meta Ads' },
               ].map((tab) => {
                 const isActive = activeTab === tab.key;
+                const count = getLeadTabCount(tab.key, leadCountContext);
                 return (
                   <TouchableOpacity
                     key={tab.key}
@@ -2926,7 +2925,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                     activeOpacity={0.85}
                   >
                     <Text style={[styles.listTabCount, isActive && styles.listTabCountActive]}>
-                      {tab.count}
+                      {count ?? '—'}
                     </Text>
                     <Text style={[styles.listTabLabel, isActive && styles.listTabLabelActive]}>
                       {tab.label}
@@ -2970,7 +2969,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 <Text style={styles.filterButtonValue}>
                   {selectedStatusFilter === 'all'
                     ? `All (${totalVisibleLeadCount})`
-                    : `${formatStatus(selectedStatusFilter)} (${[...leads, ...metaLeads].filter(l => l.status === selectedStatusFilter && matchesLOFilter(l)).length})`
+                    : `${formatStatus(selectedStatusFilter)} (${totalVisibleLeadCount})`
                   }
                 </Text>
                 <Text style={styles.filterButtonIcon}>▼</Text>
@@ -3182,35 +3181,22 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                         styles.statusPickerItemText,
                         selectedStatusFilter === 'all' && styles.statusPickerItemTextActive,
                       ]}>All Statuses</Text>
-                      <Text style={[
-                        styles.statusPickerItemCount,
-                        selectedStatusFilter === 'all' && styles.statusPickerItemCountActive,
-                      ]}>({
-                        selectedLOFilter === null && leadDirectory.facets
-                          ? Math.max(
-                              0,
-                              leadDirectory.facets.total
-                                - (leadDirectory.facets.statuses.unqualified || 0)
-                            )
-                          : [...leads, ...metaLeads].filter(
-                              (lead) => matchesLOFilter(lead) && lead.status !== 'unqualified'
-                            ).length
-                      })</Text>
+                      {allStatusesCount !== null && (
+                        <Text style={[
+                          styles.statusPickerItemCount,
+                          selectedStatusFilter === 'all' && styles.statusPickerItemCountActive,
+                        ]}>({allStatusesCount})</Text>
+                      )}
                     </View>
                     {selectedStatusFilter === 'all' && (
                       <Text style={styles.statusPickerCheck}>✓</Text>
                     )}
                   </TouchableOpacity>
                   {STATUSES.map((status) => {
-                    const count =
-                      selectedLOFilter === null
-                        ? leadDirectory.facets?.statuses[status]
-                          ?? [...leads, ...metaLeads].filter(
-                            (lead) => lead.status === status && matchesLOFilter(lead)
-                          ).length
-                        : [...leads, ...metaLeads].filter(
-                          (lead) => lead.status === status && matchesLOFilter(lead)
-                        ).length;
+                    const count = getStatusOptionCount(
+                      status,
+                      leadCountContext
+                    );
                     return (
                       <TouchableOpacity
                         key={status}
@@ -3231,10 +3217,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                             styles.statusPickerItemText,
                             selectedStatusFilter === status && styles.statusPickerItemTextActive,
                           ]}>{formatStatus(status)}</Text>
-                          <Text style={[
-                            styles.statusPickerItemCount,
-                            selectedStatusFilter === status && styles.statusPickerItemCountActive,
-                          ]}>({count})</Text>
+                          {count !== null && (
+                            <Text style={[
+                              styles.statusPickerItemCount,
+                              selectedStatusFilter === status && styles.statusPickerItemCountActive,
+                            ]}>({count})</Text>
+                          )}
                         </View>
                         {selectedStatusFilter === status && (
                           <Text style={styles.statusPickerCheck}>✓</Text>
@@ -3280,10 +3268,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                           styles.statusPickerItemText,
                           selectedLOFilter === null && styles.statusPickerItemTextActive,
                         ]}>All Loan Officers</Text>
-                        <Text style={[
-                          styles.statusPickerItemCount,
-                          selectedLOFilter === null && styles.statusPickerItemCountActive,
-                        ]}>({leadDirectory.facets?.ownerTotal ?? metaLeads.length + leads.length})</Text>
+                        {leadDirectory.facets && (
+                          <Text style={[
+                            styles.statusPickerItemCount,
+                            selectedLOFilter === null && styles.statusPickerItemCountActive,
+                          ]}>({leadDirectory.facets.ownerTotal})</Text>
+                        )}
                       </View>
                       {selectedLOFilter === null && (
                         <Text style={styles.statusPickerCheck}>✓</Text>
@@ -3307,13 +3297,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                           styles.statusPickerItemText,
                           selectedLOFilter === 'unassigned' && styles.statusPickerItemTextActive,
                         ]}>Unassigned</Text>
-                        <Text style={[
-                          styles.statusPickerItemCount,
-                          selectedLOFilter === 'unassigned' && styles.statusPickerItemCountActive,
-                        ]}>({
-                          leadDirectory.facets?.unassignedOwner
-                          ?? [...metaLeads, ...leads].filter((lead) => !lead.lo_id).length
-                        })</Text>
+                        {leadDirectory.facets && (
+                          <Text style={[
+                            styles.statusPickerItemCount,
+                            selectedLOFilter === 'unassigned' && styles.statusPickerItemCountActive,
+                          ]}>({leadDirectory.facets.unassignedOwner})</Text>
+                        )}
                       </View>
                       {selectedLOFilter === 'unassigned' && (
                         <Text style={styles.statusPickerCheck}>✓</Text>
@@ -3322,11 +3311,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
                     {/* Individual LOs */}
                     {loanOfficers.map((lo) => {
-                      const count =
-                        leadDirectory.facets?.loanOfficers[lo.id]
-                        ?? [...metaLeads, ...leads].filter(
-                          (lead) => lead.lo_id === lo.id
-                        ).length;
+                      const count = leadDirectory.facets
+                        ? leadDirectory.facets.loanOfficers[lo.id] ?? 0
+                        : null;
 
                       return (
                         <TouchableOpacity
@@ -3346,10 +3333,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                               styles.statusPickerItemText,
                               selectedLOFilter === lo.id && styles.statusPickerItemTextActive,
                             ]}>{lo.name}</Text>
-                            <Text style={[
-                              styles.statusPickerItemCount,
-                              selectedLOFilter === lo.id && styles.statusPickerItemCountActive,
-                            ]}>({count})</Text>
+                            {count !== null && (
+                              <Text style={[
+                                styles.statusPickerItemCount,
+                                selectedLOFilter === lo.id && styles.statusPickerItemCountActive,
+                              ]}>({count})</Text>
+                            )}
                           </View>
                           {selectedLOFilter === lo.id && (
                             <Text style={styles.statusPickerCheck}>✓</Text>
@@ -3396,10 +3385,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                           styles.statusPickerItemText,
                           selectedSourceFilter === 'all' && styles.statusPickerItemTextActive,
                         ]}>All Sources</Text>
-                        <Text style={[
-                          styles.statusPickerItemCount,
-                          selectedSourceFilter === 'all' && styles.statusPickerItemCountActive,
-                        ]}>({leadDirectory.searchTotal || metaLeads.length + leads.length})</Text>
+                        {allSourcesCount !== null && (
+                          <Text style={[
+                            styles.statusPickerItemCount,
+                            selectedSourceFilter === 'all' && styles.statusPickerItemCountActive,
+                          ]}>({allSourcesCount})</Text>
+                        )}
                       </View>
                       {selectedSourceFilter === 'all' && (
                         <Text style={styles.statusPickerCheck}>✓</Text>
@@ -3422,11 +3413,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                       const organicFacetCount =
                         leadDirectory.facets?.organicSourceKeys[source]
                         ?? leadDirectory.facets?.sourceDetails[source];
-                      const count =
-                        metaFacetCount !== undefined
-                          || organicFacetCount !== undefined
-                          ? (metaFacetCount ?? 0) + (organicFacetCount ?? 0)
-                          : loadedMetaCount + loadedOrganicCount;
+                      const count = getSourceOptionCount(
+                        source,
+                        leadCountContext
+                      );
                       
                       return (
                         <TouchableOpacity
@@ -3459,10 +3449,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                               styles.statusPickerItemText,
                               selectedSourceFilter === source && styles.statusPickerItemTextActive,
                             ]} numberOfLines={1}>{source}</Text>
-                            <Text style={[
-                              styles.statusPickerItemCount,
-                              selectedSourceFilter === source && styles.statusPickerItemCountActive,
-                            ]}>({count})</Text>
+                            {count !== null && (
+                              <Text style={[
+                                styles.statusPickerItemCount,
+                                selectedSourceFilter === source && styles.statusPickerItemCountActive,
+                              ]}>({count})</Text>
+                            )}
                           </View>
                           {selectedSourceFilter === source && (
                             <Text style={styles.statusPickerCheck}>✓</Text>

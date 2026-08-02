@@ -220,6 +220,7 @@ export type Activity = {
   user_email?: string;
   audio_url?: string | null; // 👈 NEW - for voice notes
   has_audio?: boolean;
+  has_body?: boolean;
   body?: string | null; // Email body from inbound emails
   subject?: string | null;
   from_email?: string | null;

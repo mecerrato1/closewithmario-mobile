@@ -43,10 +43,10 @@ import {
   updateRealtor,
   logRealtorActivity,
   fetchRealtorActivity,
-  fetchLeadsByRealtor,
   touchRealtor,
   deleteRealtor,
 } from '../../lib/supabase/realtors';
+import { useRealtorLeads } from '../../features/realtors/useRealtorLeads';
 import { LanguageCode } from '../../lib/types/realtors';
 import RealtorStageBadge from '../../components/realtors/RealtorStageBadge';
 import { saveContact } from '../../utils/vcard';
@@ -111,9 +111,21 @@ export default function RealtorDetailScreen({
   const [saving, setSaving] = useState(false);
   const [activities, setActivities] = useState<RealtorActivity[]>([]);
   const [loadingActivities, setLoadingActivities] = useState(true);
-  const [leads, setLeads] = useState<any[]>([]);
-  const [loadingLeads, setLoadingLeads] = useState(true);
   const [showAllLeads, setShowAllLeads] = useState(false);
+  const {
+    items: leads,
+    loading: loadingLeads,
+    loadingMore: loadingMoreLeads,
+    hasMore: hasMoreLeads,
+    totalCount: leadCount,
+    error: leadError,
+    loadMore: loadMoreLeads,
+    retry: retryLeads,
+  } = useRealtorLeads(realtor.realtor_id);
+
+  useEffect(() => {
+    setShowAllLeads(false);
+  }, [realtor.realtor_id]);
 
   // Editable realtor settings
   const [active, setActive] = useState(realtor.active);
@@ -151,18 +163,12 @@ export default function RealtorDetailScreen({
     }
   };
 
-  // Fetch activity and leads on mount
+  // Fetch activity on mount. Linked leads use the focused paginated API hook.
   useEffect(() => {
     const loadData = async () => {
-      // Load activities
       const { data: activityData } = await fetchRealtorActivity(realtor.realtor_id, userId);
       setActivities(activityData || []);
       setLoadingActivities(false);
-
-      // Load leads
-      const { data: leadsData } = await fetchLeadsByRealtor(realtor.realtor_id);
-      setLeads(leadsData || []);
-      setLoadingLeads(false);
     };
     loadData();
   }, [realtor.realtor_id, userId]);
@@ -1229,10 +1235,21 @@ export default function RealtorDetailScreen({
         {/* Linked Leads */}
         <View style={[styles.section, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
-            Linked Leads
+            Linked Leads{leadCount > 0 ? ` (${leadCount})` : ''}
           </Text>
           {loadingLeads ? (
             <ActivityIndicator size="small" color={PLUM} />
+          ) : leadError && leads.length === 0 ? (
+            <View style={{ alignItems: 'center', gap: 10 }}>
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                {leadError}
+              </Text>
+              <TouchableOpacity onPress={() => void retryLeads()}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: PLUM }}>
+                  Retry
+                </Text>
+              </TouchableOpacity>
+            </View>
           ) : leads.length === 0 ? (
             <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
               No leads linked to this realtor yet
@@ -1241,7 +1258,7 @@ export default function RealtorDetailScreen({
             <>
               {(showAllLeads ? leads : leads.slice(0, 5)).map((lead) => (
                 <TouchableOpacity 
-                  key={lead.id} 
+                  key={`${lead.source}:${lead.id}`}
                   style={styles.leadItem}
                   onPress={() => onLeadSelect?.(lead.id, lead.source || 'lead')}
                   disabled={!onLeadSelect}
@@ -1267,14 +1284,41 @@ export default function RealtorDetailScreen({
                   )}
                 </TouchableOpacity>
               ))}
-              {leads.length > 5 && (
+              {!showAllLeads && leadCount > 5 && (
                 <TouchableOpacity
-                  onPress={() => setShowAllLeads(!showAllLeads)}
+                  onPress={() => setShowAllLeads(true)}
                   style={{ paddingVertical: 10, alignItems: 'center' }}
                   activeOpacity={0.7}
                 >
                   <Text style={{ fontSize: 13, fontWeight: '600', color: PLUM }}>
-                    {showAllLeads ? 'Show Less' : `Show All ${leads.length} Leads`}
+                    Show All {leadCount} Leads
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {showAllLeads && hasMoreLeads && (
+                <TouchableOpacity
+                  onPress={() => void loadMoreLeads()}
+                  disabled={loadingMoreLeads}
+                  style={{ paddingVertical: 10, alignItems: 'center' }}
+                  activeOpacity={0.7}
+                >
+                  {loadingMoreLeads ? (
+                    <ActivityIndicator size="small" color={PLUM} />
+                  ) : (
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: PLUM }}>
+                      Load More ({leads.length} of {leadCount})
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+              {showAllLeads && leads.length > 5 && (
+                <TouchableOpacity
+                  onPress={() => setShowAllLeads(false)}
+                  style={{ paddingVertical: 8, alignItems: 'center' }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: PLUM }}>
+                    Show Less
                   </Text>
                 </TouchableOpacity>
               )}

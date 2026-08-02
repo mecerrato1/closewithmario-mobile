@@ -62,7 +62,11 @@ import { MetaAdPreviewModal } from '../components/MetaAdPreviewModal';
 import { ApprovalRecipeSection } from '../components/ApprovalRecipeSection';
 import { LeadRealtorRolesSection } from '../components/LeadRealtorRolesSection';
 import { useLeadDetailBootstrap } from '../features/leads/useLeadDetailBootstrap';
-import type { LeadDetailContact } from '../features/leads/crmLeadApi';
+import {
+  fetchCrmLeadActivitiesPage,
+  type LeadDetailContact,
+} from '../features/leads/crmLeadApi';
+import { useLeadActivityBodies } from '../features/leads/useLeadActivityBodies';
 import { searchActiveRealtors } from '../lib/supabase/leadRealtorRoles';
 
 const PLUM = '#4C1D95';
@@ -73,8 +77,6 @@ const SCENARIO_VIEWING_NOW_WINDOW_MS = 3 * 60 * 1000;
 const HTML_TAG_PATTERN = /<[a-z][\s\S]*>/i;
 const HTML_TABLE_PATTERN = /<table[\s>]/i;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ACTIVITY_FIELDS =
-  'id, activity_type, notes, created_at, created_by, user_email, audio_url, body, subject, from_email, to_email, to_emails, cc_email, cc_emails, recipients, direction';
 const ACTIVITY_PAGE_SIZE = 20;
 
 const EMAIL_HTML_IGNORED_TAGS = ['head', 'script', 'iframe', 'object', 'embed', 'form'];
@@ -2462,8 +2464,7 @@ export function LeadDetailView({
   const [loadingActivities, setLoadingActivities] = useState(true);
   const [loadingMoreActivities, setLoadingMoreActivities] = useState(false);
   const [activitiesHasMore, setActivitiesHasMore] = useState(false);
-  const activityCursorRef = useRef<{ id: string; createdAt: string } | null>(null);
-  const activityCursorReadyRef = useRef(false);
+  const activityCursorRef = useRef<string | null>(null);
   const activityLoadMoreInFlightRef = useRef(false);
   const activityLoadMoreAbortRef = useRef<AbortController | null>(null);
   const [savingActivity, setSavingActivity] = useState(false);
@@ -2639,6 +2640,10 @@ export function LeadDetailView({
   ];
   
   const isMeta = selected.source === 'meta';
+  const activityBodyState = useLeadActivityBodies({
+    leadId: selected.id,
+    leadSource: isMeta ? 'meta' : 'organic',
+  });
   
   // Helper functions to match the same filters as the list view
   const matchesSearch = (lead: Lead | MetaLead) => {
@@ -2693,7 +2698,6 @@ export function LeadDetailView({
     activeActivityRequest?.abort();
     activityLoadMoreInFlightRef.current = false;
     activityCursorRef.current = null;
-    activityCursorReadyRef.current = false;
     setActivities([]);
     setActivitiesHasMore(false);
     setLoadingActivities(true);
@@ -4735,8 +4739,8 @@ export function LeadDetailView({
     loadLOInfo();
   }, [session?.user?.id, session?.user?.email]);
 
-  // Bootstrap supplies the first bounded activity page. A bounded direct query is
-  // retained only as a fallback when the related-data portion of bootstrap fails.
+  // Bootstrap supplies the first bounded activity page. The focused endpoint is
+  // retained as a fallback and for opaque-cursor continuation.
   useEffect(() => {
     let cancelled = false;
     const request = new AbortController();
@@ -4756,10 +4760,9 @@ export function LeadDetailView({
               new Date(left.created_at).getTime() ||
             right.id.localeCompare(left.id)
         );
-        activityCursorRef.current = null;
-        activityCursorReadyRef.current = false;
+        activityCursorRef.current = detailLoad.bootstrap.activitiesNextCursor;
         setActivities(nextActivities);
-        setActivitiesHasMore(nextActivities.length >= ACTIVITY_PAGE_SIZE);
+        setActivitiesHasMore(Boolean(detailLoad.bootstrap.activitiesNextCursor));
         setDocsReceivedLogged(nextActivities.some((activity) => activity.activity_type === 'docs_received'));
         setLoadingActivities(false);
         return;
@@ -4767,34 +4770,18 @@ export function LeadDetailView({
 
       try {
         setLoadingActivities(true);
-        const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
-        const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
-
-        const { data, error } = await supabase
-          .from(tableName)
-          .select(ACTIVITY_FIELDS)
-          .eq(foreignKeyColumn, record.id)
-          .order('created_at', { ascending: false })
-          .order('id', { ascending: false })
-          .limit(ACTIVITY_PAGE_SIZE + 1)
-          .abortSignal(request.signal);
-
-        if (error) {
-          if (!cancelled && !request.signal.aborted) {
-            console.error('Error loading activities:', error);
-          }
-        } else if (!cancelled) {
-          const rows = (data || []) as Activity[];
-          const firstPage = rows.slice(0, ACTIVITY_PAGE_SIZE);
-          const oldest = firstPage[firstPage.length - 1];
-          activityCursorRef.current = oldest?.created_at
-            ? { id: oldest.id, createdAt: oldest.created_at }
-            : null;
-          activityCursorReadyRef.current = true;
-          setActivities(firstPage);
-          setActivitiesHasMore(rows.length > ACTIVITY_PAGE_SIZE);
-          setDocsReceivedLogged(rows.some((activity) => activity.activity_type === 'docs_received'));
-        }
+        const page = await fetchCrmLeadActivitiesPage(
+          record.id,
+          isMeta ? 'meta' : 'organic',
+          { limit: ACTIVITY_PAGE_SIZE, signal: request.signal }
+        );
+        if (cancelled || request.signal.aborted) return;
+        activityCursorRef.current = page.nextCursor;
+        setActivities(page.activities);
+        setActivitiesHasMore(Boolean(page.nextCursor));
+        setDocsReceivedLogged(
+          page.activities.some((activity) => activity.activity_type === 'docs_received')
+        );
       } catch (e) {
         if (!cancelled && !request.signal.aborted) {
           console.error('Unexpected error loading activities:', e);
@@ -4816,8 +4803,7 @@ export function LeadDetailView({
       !record ||
       activityLoadMoreInFlightRef.current ||
       loadingMoreActivities ||
-      !activitiesHasMore ||
-      activities.length === 0
+      !activitiesHasMore
     ) return;
 
     activityLoadMoreInFlightRef.current = true;
@@ -4826,62 +4812,20 @@ export function LeadDetailView({
     activityLoadMoreAbortRef.current = request;
     setLoadingMoreActivities(true);
     try {
-      const tableName = isMeta ? 'meta_ad_activities' : 'lead_activities';
-      const foreignKeyColumn = isMeta ? 'meta_ad_id' : 'lead_id';
-
-      const fetchPage = async (cursor: { id: string; createdAt: string } | null) => {
-        let query = supabase
-          .from(tableName)
-          .select(ACTIVITY_FIELDS)
-          .eq(foreignKeyColumn, record.id);
-        if (cursor) {
-          query = query.or(
-            `created_at.lt.${cursor.createdAt},and(created_at.eq.${cursor.createdAt},id.lt.${cursor.id})`
-          );
-        }
-        const { data, error } = await query
-          .order('created_at', { ascending: false })
-          .order('id', { ascending: false })
-          .limit(ACTIVITY_PAGE_SIZE + 1)
-          .abortSignal(request.signal);
-        if (error) throw error;
-        return (data || []) as Activity[];
-      };
-
-      // Bootstrap is intentionally bounded but does not expose its ordering
-      // cursor. Establish the deterministic created_at + id boundary lazily
-      // only when the user asks for older activity.
-      if (!activityCursorReadyRef.current) {
-        const seedRows = await fetchPage(null);
-        if (request.signal.aborted) return;
-        const seedPage = seedRows.slice(0, ACTIVITY_PAGE_SIZE);
-        const seedOldest = seedPage[seedPage.length - 1];
-        activityCursorRef.current = seedOldest?.created_at
-          ? { id: seedOldest.id, createdAt: seedOldest.created_at }
-          : null;
-        activityCursorReadyRef.current = true;
-        setActivities((current) => {
-          const merged = new Map(current.map((activity) => [activity.id, activity]));
-          seedPage.forEach((activity) => merged.set(activity.id, activity));
-          return Array.from(merged.values()).sort(
-            (a, b) =>
-              new Date(b.created_at).getTime() -
-                new Date(a.created_at).getTime() ||
-              b.id.localeCompare(a.id)
-          );
-        });
-        if (seedRows.length <= ACTIVITY_PAGE_SIZE || !activityCursorRef.current) {
-          setActivitiesHasMore(false);
-          return;
-        }
+      const cursor = activityCursorRef.current;
+      if (!cursor) {
+        setActivitiesHasMore(false);
+        return;
       }
-
-      const rows = await fetchPage(activityCursorRef.current);
+      const page = await fetchCrmLeadActivitiesPage(
+        record.id,
+        isMeta ? 'meta' : 'organic',
+        { cursor, limit: ACTIVITY_PAGE_SIZE, signal: request.signal }
+      );
       if (request.signal.aborted) return;
-      const page = rows.slice(0, ACTIVITY_PAGE_SIZE);
       setActivities((current) => {
         const merged = new Map(current.map((activity) => [activity.id, activity]));
-        page.forEach((activity) => merged.set(activity.id, activity));
+        page.activities.forEach((activity) => merged.set(activity.id, activity));
         return Array.from(merged.values()).sort(
           (a, b) =>
             new Date(b.created_at).getTime() -
@@ -4889,14 +4833,8 @@ export function LeadDetailView({
             b.id.localeCompare(a.id)
         );
       });
-      const oldest = page[page.length - 1];
-      if (oldest?.created_at) {
-        activityCursorRef.current = {
-          id: oldest.id,
-          createdAt: oldest.created_at,
-        };
-      }
-      setActivitiesHasMore(rows.length > ACTIVITY_PAGE_SIZE);
+      activityCursorRef.current = page.nextCursor;
+      setActivitiesHasMore(Boolean(page.nextCursor));
     } catch (error) {
       if (request.signal.aborted) return;
       console.error('Error loading older activities:', error);
@@ -4908,7 +4846,7 @@ export function LeadDetailView({
         setLoadingMoreActivities(false);
       }
     }
-  }, [activities, activitiesHasMore, isMeta, loadingMoreActivities, record]);
+  }, [activitiesHasMore, isMeta, loadingMoreActivities, record]);
 
   // Set default callback date when record changes
   useEffect(() => {
@@ -7563,13 +7501,13 @@ export function LeadDetailView({
                     <View style={styles.activityHistoryHeaderLeft}>
                       <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                         <Ionicons
-                          name={activity.audio_url ? 'mic-outline' : getActivityIconName(activity.activity_type)}
+                          name={activity.audio_url || activity.has_audio ? 'mic-outline' : getActivityIconName(activity.activity_type)}
                           size={14}
                           color={colors.textPrimary}
                           style={{ marginRight: 6 }}
                         />
                         <Text style={styles.activityHistoryType}>
-                          {activity.audio_url
+                          {activity.audio_url || activity.has_audio
                             ? 'Voice note'
                             : getActivityLabel(activity.activity_type)}
                         </Text>
@@ -7603,11 +7541,19 @@ export function LeadDetailView({
                   ) : null}
                   
                   {activity.activity_type === 'email' && (() => {
-                    const toRecipients = formatEmailRecipientList(getActivityRecipientList(activity, 'to'));
-                    const ccRecipients = formatEmailRecipientList(getActivityRecipientList(activity, 'cc'));
-                    const emailBody = getEmailBodyContent(activity);
-                    const hasHtmlBody = Boolean(activity.body && HTML_TAG_PATTERN.test(activity.body));
-                    const hasTableHtml = Boolean(activity.body && HTML_TABLE_PATTERN.test(activity.body));
+                    const hasLoadedBody = activityBodyState.bodies.has(activity.id);
+                    const loadedBody = activityBodyState.bodies.get(activity.id);
+                    const displayActivity = hasLoadedBody
+                      ? { ...activity, body: loadedBody ?? null }
+                      : activity;
+                    const toRecipients = formatEmailRecipientList(getActivityRecipientList(displayActivity, 'to'));
+                    const ccRecipients = formatEmailRecipientList(getActivityRecipientList(displayActivity, 'cc'));
+                    const emailBody = getEmailBodyContent(displayActivity);
+                    const hasHtmlBody = Boolean(displayActivity.body && HTML_TAG_PATTERN.test(displayActivity.body));
+                    const hasTableHtml = Boolean(displayActivity.body && HTML_TABLE_PATTERN.test(displayActivity.body));
+                    const isLoadingBody = activityBodyState.loadingIds.has(activity.id);
+                    const bodyError = activityBodyState.errors.get(activity.id);
+                    const canLoadBody = activity.has_body === true && !activity.body && !hasLoadedBody;
                     const showScrollHint = Boolean(
                       emailBody && (hasHtmlBody || emailBody.length > 220)
                     );
@@ -7618,7 +7564,7 @@ export function LeadDetailView({
                       ccRecipients
                     );
 
-                    if (!hasHeaders && !emailBody) return null;
+                    if (!hasHeaders && !emailBody && !canLoadBody && !bodyError) return null;
 
                     return (
                       <>
@@ -7647,6 +7593,35 @@ export function LeadDetailView({
                           </View>
                         ) : null}
 
+                        {canLoadBody || (bodyError && !hasLoadedBody) ? (
+                          <TouchableOpacity
+                            style={{
+                              alignSelf: 'flex-start',
+                              marginTop: 8,
+                              paddingHorizontal: 12,
+                              paddingVertical: 8,
+                              borderRadius: 8,
+                              backgroundColor: PLUM,
+                            }}
+                            onPress={() => void activityBodyState.load(activity.id)}
+                            disabled={isLoadingBody}
+                          >
+                            {isLoadingBody ? (
+                              <ActivityIndicator size="small" color="#FFFFFF" />
+                            ) : (
+                              <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>
+                                {bodyError ? 'Retry full email' : 'Load full email'}
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        ) : null}
+
+                        {bodyError ? (
+                          <Text style={[styles.activityHistoryNote, { marginTop: 6 }]}>
+                            {bodyError}
+                          </Text>
+                        ) : null}
+
                         {emailBody ? (
                           hasTableHtml ? (
                             <>
@@ -7654,7 +7629,7 @@ export function LeadDetailView({
                                 <WebView
                                   style={styles.emailWebView}
                                   originWhitelist={['*']}
-                                  source={{ html: buildEmailHtmlDocument(activity.body || '') }}
+                                  source={{ html: buildEmailHtmlDocument(displayActivity.body || '') }}
                                   javaScriptEnabled={false}
                                   scrollEnabled={true}
                                   showsVerticalScrollIndicator={true}
@@ -7685,7 +7660,7 @@ export function LeadDetailView({
                                 {hasHtmlBody ? (
                                 <RenderHTML
                                   contentWidth={emailContentWidth}
-                                  source={{ html: sanitizeEmailHtml(activity.body || '') }}
+                                  source={{ html: sanitizeEmailHtml(displayActivity.body || '') }}
                                   ignoredDomTags={EMAIL_HTML_IGNORED_TAGS}
                                   baseStyle={emailHtmlBaseStyle}
                                   tagsStyles={emailHtmlTagStyles}
@@ -7769,6 +7744,23 @@ export function LeadDetailView({
                   )}
                 </TouchableOpacity>
               ) : null}
+            </View>
+          ) : activitiesHasMore ? (
+            <View style={{ alignItems: 'center', marginTop: 12 }}>
+              <Text style={styles.noTasksText}>No recent activity to show</Text>
+              <TouchableOpacity
+                style={{ paddingHorizontal: 18, paddingVertical: 10 }}
+                onPress={() => void loadOlderActivities()}
+                disabled={loadingMoreActivities}
+              >
+                {loadingMoreActivities ? (
+                  <ActivityIndicator size="small" color={PLUM} />
+                ) : (
+                  <Text style={{ color: PLUM, fontWeight: '700' }}>
+                    Load older activity
+                  </Text>
+                )}
+              </TouchableOpacity>
             </View>
           ) : (
             <Text style={styles.noTasksText}>No activity logged yet</Text>

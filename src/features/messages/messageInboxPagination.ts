@@ -212,7 +212,8 @@ export class MessageInboxPaginationController {
         return;
       }
       const retainedScenarioItems =
-        !includeScenarioUpdates && mode !== 'first'
+        mode !== 'first' &&
+        (!includeScenarioUpdates || page.scenarioUpdatesLoaded === false)
           ? this.state.items.filter(
               (conversation) => conversation.channel === 'scenario_update'
             )

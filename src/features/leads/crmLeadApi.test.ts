@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
+  fetchCrmLeadActivitiesPage,
+  fetchCrmLeadActivityBody,
+  fetchCrmLeadDetailBootstrap,
   fetchCrmLeadListPage,
   getCrmLeadSourceKey,
   parseCrmLeadListPage,
@@ -130,4 +134,99 @@ test('source keys use the same source-specific fallbacks as the server', () => {
     'Organic Import'
   );
   assert.equal(getCrmLeadSourceKey({}, 'organic'), 'organic');
+});
+
+test('mobile detail bootstrap requests the bounded profile and accepts the focused response', async () => {
+  let requestedUrl = '';
+  const bootstrap = await fetchCrmLeadDetailBootstrap(LEAD_ID, 'organic', {
+    request: async (url) => {
+      requestedUrl = url;
+      return new Response(JSON.stringify({
+        leadId: LEAD_ID,
+        leadSource: 'organic',
+        lead: {
+          id: LEAD_ID,
+          source: 'organic',
+          db_source: 'My Lead',
+          created_at: '2026-01-01T00:00:00.000Z',
+          first_name: 'Mobile',
+          last_name: 'Lead',
+          email: null,
+          phone: null,
+          status: 'new',
+        },
+        activities: [],
+        activitiesNextCursor: null,
+        contacts: [],
+        realtorRoles: [],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    },
+  });
+
+  const url = new URL(requestedUrl);
+  assert.equal(url.searchParams.get('profile'), 'mobile');
+  assert.equal(url.searchParams.get('activityBodyMode'), 'summary');
+  assert.equal(bootstrap.activitiesNextCursor, null);
+  assert.equal(Object.hasOwn(bootstrap, 'documentRequests'), false);
+});
+
+test('mobile activity continuation stays on the summary API contract', async () => {
+  let requestedUrl = '';
+  const page = await fetchCrmLeadActivitiesPage(LEAD_ID, 'organic', {
+    cursor: 'opaque-cursor',
+    request: async (url) => {
+      requestedUrl = url;
+      return new Response(JSON.stringify({
+        activities: [{
+          id: 'activity-1',
+          activity_type: 'email',
+          notes: 'Email received',
+          created_at: '2026-01-02T00:00:00.000Z',
+          has_audio: false,
+          has_body: true,
+          subject: 'Hello',
+          body: '<p>Unexpected eager body</p>',
+        }],
+        nextCursor: null,
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    },
+  });
+
+  const url = new URL(requestedUrl);
+  assert.equal(url.searchParams.get('profile'), 'mobile');
+  assert.equal(url.searchParams.get('activityBodyMode'), 'summary');
+  assert.equal(url.searchParams.get('cursor'), 'opaque-cursor');
+  assert.equal(page.activities[0].has_body, true);
+  assert.equal(Object.hasOwn(page.activities[0], 'body'), false);
+});
+
+test('email bodies use the focused authenticated endpoint only when requested', async () => {
+  let requestedUrl = '';
+  const result = await fetchCrmLeadActivityBody(
+    LEAD_ID,
+    'organic',
+    'activity-1',
+    {
+      request: async (url) => {
+        requestedUrl = url;
+        return new Response(JSON.stringify({
+          activityId: 'activity-1',
+          body: '<p>Hello</p>',
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      },
+    }
+  );
+
+  const url = new URL(requestedUrl);
+  assert.equal(url.pathname, '/api/leads/activity-body');
+  assert.equal(url.searchParams.get('profile'), 'mobile');
+  assert.equal(result.body, '<p>Hello</p>');
+});
+
+test('lead detail activity history no longer selects full bodies directly', () => {
+  const screen = readFileSync('src/screens/LeadDetailScreen.tsx', 'utf8');
+  assert.match(screen, /fetchCrmLeadActivitiesPage/);
+  assert.match(screen, /useLeadActivityBodies/);
+  assert.doesNotMatch(screen, /const ACTIVITY_FIELDS/);
+  assert.doesNotMatch(screen, /\.select\([^\n]*body[^\n]*\)/);
 });
