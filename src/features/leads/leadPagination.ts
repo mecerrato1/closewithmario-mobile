@@ -14,6 +14,7 @@ export type LeadPaginationState = {
   searchTotal: number;
   facets: CrmLeadFacets | null;
   loading: boolean;
+  searching: boolean;
   refreshing: boolean;
   loadingMore: boolean;
   error: string | null;
@@ -36,6 +37,7 @@ const EMPTY_STATE: LeadPaginationState = {
   searchTotal: 0,
   facets: null,
   loading: false,
+  searching: false,
   refreshing: false,
   loadingMore: false,
   error: null,
@@ -65,7 +67,7 @@ export class LeadPaginationController {
   private generation = 0;
   private activeRequest: AbortController | null = null;
   private disposed = false;
-  private failedMode: 'first' | 'refresh' | 'more' = 'first';
+  private failedMode: 'first' | 'search' | 'refresh' | 'more' = 'first';
   private listeners = new Set<(state: LeadPaginationState) => void>();
 
   constructor(query: CrmLeadListQuery, private readonly loadPage: PageLoader) {
@@ -86,8 +88,13 @@ export class LeadPaginationController {
 
   async setQuery(query: CrmLeadListQuery) {
     if (JSON.stringify(query) === JSON.stringify(this.query)) return false;
+    // Keep results visible only when the search text changes. A different
+    // scope or filter must still discard the previous directory immediately.
+    const searchOnly =
+      JSON.stringify({ ...query, search: undefined }) ===
+      JSON.stringify({ ...this.query, search: undefined });
     this.query = query;
-    await this.loadFirst();
+    await this.run(searchOnly ? 'search' : 'first');
     return true;
   }
 
@@ -100,6 +107,7 @@ export class LeadPaginationController {
   }
 
   retry() {
+    if (this.failedMode === 'search') return this.run('search');
     if (this.failedMode === 'more' && this.state.nextCursor) {
       return this.run('more');
     }
@@ -112,6 +120,7 @@ export class LeadPaginationController {
     if (
       this.disposed ||
       this.state.loading ||
+      this.state.searching ||
       this.state.refreshing ||
       this.state.loadingMore ||
       !this.state.hasMore ||
@@ -181,7 +190,7 @@ export class LeadPaginationController {
     this.listeners.forEach((listener) => listener(this.state));
   }
 
-  private async run(mode: 'first' | 'refresh' | 'more') {
+  private async run(mode: 'first' | 'search' | 'refresh' | 'more') {
     if (this.disposed) return;
     if (mode === 'more' && this.state.loadingMore) return;
 
@@ -193,6 +202,7 @@ export class LeadPaginationController {
 
     this.setState({
       loading: mode === 'first',
+      searching: mode === 'search',
       refreshing: mode === 'refresh',
       loadingMore: mode === 'more',
       error: null,
@@ -205,7 +215,7 @@ export class LeadPaginationController {
             searchTotal: 0,
             facets: null,
           }
-        : mode === 'refresh'
+        : mode === 'refresh' || mode === 'search'
         ? { nextCursor: null, hasMore: false }
         : {}),
     });
@@ -230,6 +240,7 @@ export class LeadPaginationController {
         searchTotal: page.searchTotal,
         facets: page.facets ?? this.state.facets,
         loading: false,
+        searching: false,
         refreshing: false,
         loadingMore: false,
       });
@@ -243,6 +254,7 @@ export class LeadPaginationController {
       this.failedMode = mode;
       this.setState({
         loading: false,
+        searching: false,
         refreshing: false,
         loadingMore: false,
         error: messageFromError(error),

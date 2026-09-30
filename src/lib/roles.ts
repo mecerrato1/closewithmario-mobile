@@ -1,6 +1,10 @@
 // src/lib/roles.ts
 // Role detection and permission management
 import { supabase } from './supabase';
+import {
+  resolveCrmLeadScopeForRole,
+  type CrmLeadScopeResolution,
+} from './crmLeadScope';
 
 export type UserRole =
   | 'super_admin'
@@ -9,10 +13,13 @@ export type UserRole =
   | 'realtor'
   | 'buyer';
 
+export type UserCrmLeadScope = CrmLeadScopeResolution;
+
 const SESSION_CACHE_TTL_MS = 5 * 60 * 1000;
 type CacheEntry<T> = { value: T; expiresAt: number };
 const roleCache = new Map<string, CacheEntry<UserRole>>();
 const teamMemberCache = new Map<string, CacheEntry<string>>();
+const crmLeadScopeCache = new Map<string, CacheEntry<UserCrmLeadScope>>();
 
 function readSessionCache<T>(
   cache: Map<string, CacheEntry<T>>,
@@ -40,6 +47,10 @@ function writeSessionCache<T>(
 
 function roleCacheKey(userId: string, email: string) {
   return `${userId}:${email.trim().toLowerCase()}`;
+}
+
+function assistantCacheKey(userId: string) {
+  return `${userId}:assistant`;
 }
 
 // Super Admins have full access to everything
@@ -160,6 +171,116 @@ export async function getUserRole(
 
   // Default to buyer
   return remember('buyer');
+}
+
+async function hasAssistantAssignments(assistantId: string): Promise<boolean> {
+  const { count, error } = await supabase
+    .from('loan_officer_assistant_assignments')
+    .select('id', { count: 'exact', head: true })
+    .eq('assistant_id', assistantId)
+    .eq('active', true);
+
+  if (error) {
+    console.warn('Unable to load assistant assignments:', error.message);
+    return false;
+  }
+
+  return (count || 0) > 0;
+}
+
+async function getAssistantProfileId(
+  userId: string,
+  emailLower: string
+): Promise<string | null> {
+  const cacheKey = assistantCacheKey(userId);
+  const cachedAssistantId = readSessionCache(teamMemberCache, cacheKey);
+  if (cachedAssistantId) return cachedAssistantId;
+
+  const { data: assistantData, error: assistantError } = await supabase
+    .from('crm_assistants')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('active', true)
+    .maybeSingle();
+
+  if (assistantError) {
+    console.warn('Unable to load assistant profile:', assistantError.message);
+  } else if (assistantData?.id) {
+    writeSessionCache(teamMemberCache, cacheKey, assistantData.id);
+    return assistantData.id;
+  }
+
+  const { data: unlinkedAssistant, error: unlinkedAssistantError } =
+    await supabase
+      .from('crm_assistants')
+      .select('id')
+      .eq('email', emailLower)
+      .is('user_id', null)
+      .eq('active', true)
+      .maybeSingle();
+
+  if (unlinkedAssistantError) {
+    console.warn(
+      'Unable to load unlinked assistant profile:',
+      unlinkedAssistantError.message
+    );
+    return null;
+  }
+
+  if (!unlinkedAssistant?.id) {
+    return null;
+  }
+
+  if (!(await hasAssistantAssignments(unlinkedAssistant.id))) {
+    return null;
+  }
+
+  const { error: linkError } = await supabase
+    .from('crm_assistants')
+    .update({ user_id: userId })
+    .eq('id', unlinkedAssistant.id);
+
+  if (linkError) {
+    console.error(
+      `❌ Failed to auto-link assistant ${unlinkedAssistant.id}:`,
+      linkError.message
+    );
+    return null;
+  }
+
+  console.log(
+    `✅ Auto-linked user ${userId} to assistant ${unlinkedAssistant.id}`
+  );
+  writeSessionCache(teamMemberCache, cacheKey, unlinkedAssistant.id);
+  return unlinkedAssistant.id;
+}
+
+export async function getUserCrmLeadScope(
+  userId: string,
+  email: string,
+  role?: UserRole
+): Promise<UserCrmLeadScope> {
+  const emailLower = email.toLowerCase();
+  const cacheKey = roleCacheKey(userId, emailLower);
+  const cachedScope = readSessionCache(crmLeadScopeCache, cacheKey);
+  if (cachedScope) return cachedScope;
+
+  const resolvedRole = role ?? (await getUserRole(userId, emailLower));
+  const remember = (scope: UserCrmLeadScope) => {
+    writeSessionCache(crmLeadScopeCache, cacheKey, scope);
+    return scope;
+  };
+
+  if (resolvedRole !== 'loan_officer') {
+    return remember(resolveCrmLeadScopeForRole(resolvedRole));
+  }
+
+  const assistantId = await getAssistantProfileId(userId, emailLower);
+  if (assistantId && (await hasAssistantAssignments(assistantId))) {
+    return remember(resolveCrmLeadScopeForRole(resolvedRole, true));
+  }
+
+  return remember(resolveCrmLeadScopeForRole(resolvedRole));
 }
 
 /**

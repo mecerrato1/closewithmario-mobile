@@ -76,6 +76,7 @@ const CRM_API_BASE_URL = (
 const SCENARIO_VIEWING_NOW_WINDOW_MS = 3 * 60 * 1000;
 const HTML_TAG_PATTERN = /<[a-z][\s\S]*>/i;
 const HTML_TABLE_PATTERN = /<table[\s>]/i;
+const OFFICE_WORD_HTML_PATTERN = /\bmso-|class=(["'])?Mso|xmlns:o=|<o:p\b|<!\[if/iu;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ACTIVITY_PAGE_SIZE = 20;
 
@@ -170,26 +171,117 @@ const getEmailBodyContent = (activity: Activity) => {
   return notes || null;
 };
 
-const sanitizeEmailHtml = (html: string) =>
-  html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+const stripOfficeConditionalMarkup = (html: string) => html
+  .replace(/<!--\[if[\s\S]*?<!\[endif\]-->/gi, '')
+  .replace(/<!\[if[\s\S]*?<!\[endif\]>/gi, '');
 
-const buildEmailHtmlDocument = (html: string) => `<!DOCTYPE html>
+const sanitizeInlineEmailStyles = (html: string) => html.replace(
+  /\sstyle=(["'])([\s\S]*?)\1/gi,
+  (_match, quote: string, styleValue: string) => {
+    const sanitizedStyle = styleValue
+      .replace(/\bmso-[^:;]+:[^;"]*;?/gi, '')
+      .replace(/\btab-stops:[^;"]*;?/gi, '')
+      .replace(/\bpage:[^;"]*;?/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/\s*;\s*/g, '; ')
+      .trim()
+      .replace(/;$/, '');
+
+    return sanitizedStyle.length > 0 ? ` style=${quote}${sanitizedStyle}${quote}` : '';
+  }
+);
+
+const normalizeOfficeTableLayout = (html: string) => html
+  .replace(/<table([^>]*?)\swidth=(["'])0\2([^>]*)>/gi, '<table$1$3>')
+  .replace(/\snowrap=(["']).*?\1/gi, '')
+  .replace(/<table\b([^>]*)>/gi, (match, attrs: string) => {
+    if (/\sstyle=/i.test(attrs)) {
+      return match.replace(
+        /\sstyle=(["'])([\s\S]*?)\1/i,
+        (_styleMatch, quote: string, styleValue: string) => {
+          const nextStyleValue = styleValue
+            .replace(/\bwidth\s*:\s*0(?:pt|px|in|cm|mm|%)?;?/gi, '')
+            .trim();
+          const normalizedStyle = /(?:^|;)\s*width\s*:/i.test(nextStyleValue)
+            ? nextStyleValue
+            : `${nextStyleValue}${nextStyleValue ? '; ' : ''}width:100%; table-layout:auto;`;
+          return ` style=${quote}${normalizedStyle}${quote}`;
+        }
+      );
+    }
+
+    return `<table${attrs} style="width:100%; table-layout:auto;">`;
+  });
+
+const sanitizeEmailHtml = (html: string) => {
+  const withoutScripts = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  const extractedBody = withoutScripts.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i)?.[1] ?? withoutScripts;
+  const withoutOfficeMarkup = normalizeOfficeTableLayout(sanitizeInlineEmailStyles(
+    stripOfficeConditionalMarkup(extractedBody)
+      .replace(/<\/?(?:html|head|body)\b[^>]*>/gi, '')
+      .replace(/<\/?(?:o|v|w|m):[^>]*>/gi, '')
+      .replace(/<\/?xml\b[^>]*>/gi, '')
+      .replace(/<\?xml[\s\S]*?\?>/gi, '')
+      .replace(/\sclass=(["'])?Mso[^"'>\s]*\1?/gi, '')
+  ));
+
+  return withoutOfficeMarkup
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<!doctype[^>]*>/gi, '')
+    .replace(/&nbsp;/gi, ' ')
+    .trim();
+};
+
+const extractEmailStyleBlocks = (html: string) => {
+  const withoutScripts = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  if (OFFICE_WORD_HTML_PATTERN.test(withoutScripts)) {
+    return '';
+  }
+  return (withoutScripts.match(/<style\b[^>]*>[\s\S]*?<\/style>/gi) || []).join('\n');
+};
+
+const buildEmailHtmlDocument = (
+  html: string,
+  options?: {
+    backgroundColor?: string;
+    textColor?: string;
+    linkColor?: string;
+  }
+) => {
+  const backgroundColor = options?.backgroundColor || '#F3F4F6';
+  const textColor = options?.textColor || '#4B5563';
+  const linkColor = options?.linkColor || '#2563EB';
+  const styleBlocks = extractEmailStyleBlocks(html);
+  const sanitizedBody = sanitizeEmailHtml(html);
+
+  return `<!DOCTYPE html>
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+    <meta name="color-scheme" content="light only" />
+    ${styleBlocks}
     <style>
+      :root {
+        color-scheme: light !important;
+      }
       html, body {
         margin: 0;
         padding: 0;
-        background: #F3F4F6;
-        color: #4B5563;
+        background: ${backgroundColor} !important;
+        color: ${textColor} !important;
         font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
         font-size: 14px;
         line-height: 1.5;
         word-break: break-word;
       }
       body {
-        padding: 12px;
+        padding: 12px !important;
+      }
+      body, div, p, span, font, td, th, li {
+        color: ${textColor} !important;
+      }
+      table, tbody, thead, tr, td, th {
+        background-color: transparent !important;
       }
       table {
         width: 100% !important;
@@ -206,12 +298,13 @@ const buildEmailHtmlDocument = (html: string) => `<!DOCTYPE html>
         height: auto !important;
       }
       a {
-        color: #2563EB;
+        color: ${linkColor} !important;
       }
     </style>
   </head>
-  <body>${sanitizeEmailHtml(html)}</body>
+  <body>${sanitizedBody}</body>
 </html>`;
+};
 
 type DetailSummaryRow = {
   label: string;
@@ -571,6 +664,25 @@ type QualificationLinkSubmission = {
   changedSummary: QualificationSubmissionChange[];
   status: QualificationSubmissionStatus;
   submittedAt: string;
+};
+
+type MobileDetailSectionKey =
+  | 'details'
+  | 'scenarios'
+  | 'team'
+  | 'tracking'
+  | 'partnerUpdate'
+  | 'incomeAnalysis'
+  | 'logActivity';
+
+const MOBILE_DETAIL_SECTION_DEFAULTS: Record<MobileDetailSectionKey, boolean> = {
+  details: false,
+  scenarios: false,
+  team: false,
+  tracking: false,
+  partnerUpdate: false,
+  incomeAnalysis: false,
+  logActivity: false,
 };
 
 type SavedIncomeAnalysisSummary = {
@@ -2454,6 +2566,7 @@ export function LeadDetailView({
 }: LeadDetailViewProps) {
   const { colors, isDark } = useThemeColors();
   const { width: windowWidth } = useWindowDimensions();
+  const isMobileSectionCollapseEnabled = Platform.OS === 'ios' || Platform.OS === 'android';
   const [activeDetailTab, setActiveDetailTab] = useState<'details' | 'messages' | 'dm'>('details');
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const [dmUnreadCount, setDmUnreadCount] = useState(0);
@@ -2521,11 +2634,12 @@ export function LeadDetailView({
   const [scenarioActionKey, setScenarioActionKey] = useState<string | null>(null);
   const [qualificationSubmissions, setQualificationSubmissions] = useState<QualificationLinkSubmission[]>([]);
   const [qualificationSubmissionActionKey, setQualificationSubmissionActionKey] = useState<string | null>(null);
-  const [scenarioSectionExpanded, setScenarioSectionExpanded] = useState(true);
   const [scenarioActivityClock, setScenarioActivityClock] = useState(Date.now());
-  const scenarioSectionTouchedRef = useRef(false);
   const [savedIncomeAnalyses, setSavedIncomeAnalyses] = useState<SavedIncomeAnalysisSummary[]>([]);
   const [loadingIncomeAnalyses, setLoadingIncomeAnalyses] = useState(false);
+  const [expandedSections, setExpandedSections] = useState<Record<MobileDetailSectionKey, boolean>>({
+    ...MOBILE_DETAIL_SECTION_DEFAULTS,
+  });
   
   // Licensed realtor flag (for referral agreements visibility gate)
   const [isLicensedRealtor, setIsLicensedRealtor] = useState(false);
@@ -2552,7 +2666,18 @@ export function LeadDetailView({
   // Micro animation for "Log Activity" button
   const logButtonScale = useRef(new Animated.Value(1)).current;
   const emailContentWidth = Math.max(windowWidth - 72, 200);
-  const emailHtmlBaseStyle = StyleSheet.flatten(styles.emailBodyText) || {};
+  const activityCardSurface = isDark ? '#0F172A' : '#F8FAFC';
+  const emailBodySurface = isDark ? '#111827' : '#F3F4F6';
+  const emailTableSurface = '#FFFFFF';
+  const emailTableTextColor = '#374151';
+  const emailHtmlBaseStyle = {
+    ...(StyleSheet.flatten(styles.emailBodyText) || {}),
+    color: colors.textPrimary,
+  };
+
+  useEffect(() => {
+    setExpandedSections({ ...MOBILE_DETAIL_SECTION_DEFAULTS });
+  }, [selected.id, selected.source]);
   const emailHtmlTagStyles = {
     body: emailHtmlBaseStyle,
     p: {
@@ -2572,9 +2697,9 @@ export function LeadDetailView({
       textDecorationLine: 'underline' as const,
     },
     blockquote: {
-      borderLeftColor: '#CBD5E1',
+      borderLeftColor: colors.border,
       borderLeftWidth: 3,
-      color: '#475569',
+      color: colors.textSecondary,
       marginLeft: 0,
       marginVertical: 8,
       paddingLeft: 12,
@@ -2583,7 +2708,7 @@ export function LeadDetailView({
       marginBottom: 6,
     },
     table: {
-      borderColor: '#CBD5E1',
+      borderColor: colors.border,
     },
     td: {
       borderColor: '#CBD5E1',
@@ -2974,8 +3099,6 @@ export function LeadDetailView({
       setLeadScenarios([]);
       setScenarioLinks([]);
       setQualificationSubmissions([]);
-      setScenarioSectionExpanded(true);
-      scenarioSectionTouchedRef.current = false;
       return;
     }
 
@@ -2984,8 +3107,6 @@ export function LeadDetailView({
       setScenarioLinks([]);
       setQualificationSubmissions([]);
       setScenarioError('Sign in again to load saved scenarios.');
-      setScenarioSectionExpanded(true);
-      scenarioSectionTouchedRef.current = false;
       return;
     }
 
@@ -3005,9 +3126,6 @@ export function LeadDetailView({
       setScenarioLinks(Array.isArray(linkPayload.links) ? linkPayload.links : []);
       setQualificationSubmissions(Array.isArray(submissionPayload.submissions) ? submissionPayload.submissions : []);
       setScenarioActivityClock(Date.now());
-      if (!scenarioSectionTouchedRef.current) {
-        setScenarioSectionExpanded(nextScenarios.length <= 2);
-      }
     } catch (error: any) {
       console.error('[LeadDetail] Failed to load scenarios:', error);
       setLeadScenarios([]);
@@ -3018,11 +3136,6 @@ export function LeadDetailView({
       setLoadingScenarios(false);
     }
   }, [crmLeadSource, fetchCrmApi, record?.id, session?.access_token]);
-
-  useEffect(() => {
-    scenarioSectionTouchedRef.current = false;
-    setScenarioSectionExpanded(true);
-  }, [selected.id, selected.source]);
 
   useEffect(() => {
     if (activeDetailTab !== 'details') {
@@ -3282,16 +3395,8 @@ export function LeadDetailView({
 
   const renderScenarioSharingSection = () => {
     const scenarioCountLabel = leadScenarios.length === 1 ? '1 saved scenario' : `${leadScenarios.length} saved scenarios`;
-    const hasCollapsibleScenarios = leadScenarios.length > 2;
-    const showScenarioList = !hasCollapsibleScenarios || scenarioSectionExpanded;
-    const featuredScenario = leadScenarios.find((scenario) => scenario.isPrimary) || leadScenarios[0] || null;
-    const featuredSnapshot = featuredScenario ? getRecordValue(featuredScenario.resultSnapshot) || {} : {};
-    const featuredScenarioData = featuredScenario ? getRecordValue(featuredScenario.scenarioData) || {} : {};
-    const featuredPaymentBreakdown = getRecordValue(featuredSnapshot.paymentBreakdown) || {};
-    const featuredCashToCloseDetails = getRecordValue(featuredSnapshot.cashToCloseDetails) || {};
-    const featuredPayment = getScenarioCurrencyDisplay(featuredSnapshot.totalPayment, featuredPaymentBreakdown.totalPayment);
-    const featuredCashToClose = getScenarioCurrencyDisplay(featuredCashToCloseDetails.cashToClose, featuredSnapshot.cashToClose);
-    const featuredSalesPrice = getScenarioCurrencyDisplay(featuredSnapshot.salesPrice, featuredScenarioData.salesPrice);
+    const showScenarioList = !isMobileSectionCollapseEnabled || isSectionExpanded('scenarios');
+    const scenarioTitle = leadScenarios.length > 0 ? `Scenarios (${leadScenarios.length})` : 'Scenarios';
     const scenarioNow = scenarioActivityClock;
     const buyerViewingNow = scenarioLinks.some((link) => (
       link.recipientType === 'borrower' && isScenarioLinkViewingNow(link, scenarioNow)
@@ -3302,33 +3407,12 @@ export function LeadDetailView({
     const hasViewingNow = buyerViewingNow || partnerViewingNow;
     const pendingSubmissions = qualificationSubmissions.filter((submission) => submission.status === 'pending');
 
-    const toggleScenarioSection = () => {
-      if (!hasCollapsibleScenarios) return;
-      scenarioSectionTouchedRef.current = true;
-      setScenarioSectionExpanded((expanded) => !expanded);
-    };
-
     return (
       <View style={scenarioShareStyles.container}>
-        <View style={scenarioShareStyles.headerRow}>
-          <TouchableOpacity
-            style={scenarioShareStyles.headerTitleRow}
-            onPress={toggleScenarioSection}
-            disabled={!hasCollapsibleScenarios}
-            activeOpacity={0.75}
-          >
-            <Ionicons name="albums-outline" size={17} color={PLUM} />
-            <Text style={[scenarioShareStyles.title, { color: colors.textPrimary }]}>
-              {leadScenarios.length > 0 ? `Scenarios (${leadScenarios.length})` : 'Scenarios'}
-            </Text>
-            {hasCollapsibleScenarios && (
-              <Ionicons
-                name={scenarioSectionExpanded ? 'chevron-up' : 'chevron-down'}
-                size={16}
-                color={PLUM}
-              />
-            )}
-          </TouchableOpacity>
+        {renderCollapsibleSectionHeader(
+          'scenarios',
+          scenarioTitle,
+          'albums-outline',
           <View style={scenarioShareStyles.headerActions}>
             <TouchableOpacity
               style={scenarioShareStyles.iconButton}
@@ -3341,192 +3425,137 @@ export function LeadDetailView({
                 <Ionicons name="refresh" size={16} color={PLUM} />
               )}
             </TouchableOpacity>
-          </View>
-        </View>
-
-        <Text style={[scenarioShareStyles.subtitle, { color: colors.textSecondary }]}>
-          {leadScenarios.length > 0
-            ? `${scenarioCountLabel}. ${hasCollapsibleScenarios && !scenarioSectionExpanded ? 'Expand to manage tracked borrower or partner links.' : 'Generate and manage tracked borrower or partner links from the saved web scenarios.'}`
-            : 'Saved scenarios are created from the desktop CRM calculator.'}
-        </Text>
-
-        {hasViewingNow && (
-          <View style={scenarioShareStyles.viewingNowRow}>
-            {buyerViewingNow && (
-              <View style={scenarioShareStyles.viewingNowPill}>
-                <View style={scenarioShareStyles.viewingNowDot} />
-                <Text style={scenarioShareStyles.viewingNowText}>Buyer viewing now</Text>
-              </View>
-            )}
-            {partnerViewingNow && (
-              <View style={scenarioShareStyles.viewingNowPill}>
-                <View style={scenarioShareStyles.viewingNowDot} />
-                <Text style={scenarioShareStyles.viewingNowText}>Partner viewing now</Text>
-              </View>
-            )}
-          </View>
+          </View>,
+          { containerStyle: { marginTop: 16 } }
         )}
 
-        {pendingSubmissions.length > 0 && (
-          <View style={scenarioShareStyles.pendingUpdatesBox}>
-            <View style={scenarioShareStyles.pendingUpdatesHeader}>
-              <View style={scenarioShareStyles.pendingUpdatesTitleRow}>
-                <Ionicons name="calculator-outline" size={16} color="#B45309" />
-                <Text style={scenarioShareStyles.pendingUpdatesTitle}>
-                  {pendingSubmissions.length} pending scenario update{pendingSubmissions.length === 1 ? '' : 's'}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={loadLeadScenarios} disabled={loadingScenarios}>
-                <Ionicons name="refresh" size={15} color="#B45309" />
-              </TouchableOpacity>
-            </View>
-
-            {pendingSubmissions.map((submission) => {
-              const actionBusy =
-                qualificationSubmissionActionKey === `apply:${submission.id}` ||
-                qualificationSubmissionActionKey === `dismiss:${submission.id}`;
-
-              return (
-                <View key={submission.id} style={scenarioShareStyles.pendingUpdateCard}>
-                  <View style={scenarioShareStyles.pendingUpdateHeader}>
-                    <View style={scenarioShareStyles.pendingUpdateTitleBlock}>
-                      <Text style={scenarioShareStyles.pendingUpdateSubmitter} numberOfLines={1}>
-                        {formatQualificationSubmitter(submission)}
-                      </Text>
-                      <Text style={scenarioShareStyles.pendingUpdateMeta} numberOfLines={2}>
-                        {[submission.scenarioName || 'Saved scenario', formatScenarioDateTime(submission.submittedAt)].filter(Boolean).join(' · ')}
-                      </Text>
-                    </View>
-                    <View style={scenarioShareStyles.pendingPill}>
-                      <Text style={scenarioShareStyles.pendingPillText}>Pending</Text>
-                    </View>
-                  </View>
-
-                  <View style={scenarioShareStyles.pendingChangeList}>
-                    {submission.changedSummary.length > 0 ? (
-                      submission.changedSummary.map((change, changeIndex) => (
-                        <View key={`${submission.id}:${change.key || changeIndex}`} style={scenarioShareStyles.pendingChangeRow}>
-                          <Text style={scenarioShareStyles.pendingChangeLabel} numberOfLines={1}>
-                            {change.label || change.key || 'Changed field'}
-                          </Text>
-                          <Text style={scenarioShareStyles.pendingChangeValue} numberOfLines={2}>
-                            {formatQualificationChangeValue(change, 'before')} → {formatQualificationChangeValue(change, 'after')}
-                          </Text>
-                        </View>
-                      ))
-                    ) : (
-                      <Text style={scenarioShareStyles.pendingUpdateMeta}>No field summary was included.</Text>
-                    )}
-                  </View>
-
-                  <View style={scenarioShareStyles.pendingActionRow}>
-                    <TouchableOpacity
-                      style={[scenarioShareStyles.dismissButton, actionBusy && scenarioShareStyles.actionButtonDisabled]}
-                      onPress={() => reviewQualificationSubmission(submission, 'dismiss')}
-                      disabled={Boolean(qualificationSubmissionActionKey)}
-                    >
-                      <Text style={scenarioShareStyles.dismissButtonText}>Dismiss</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[scenarioShareStyles.applyButton, actionBusy && scenarioShareStyles.actionButtonDisabled]}
-                      onPress={() => reviewQualificationSubmission(submission, 'apply')}
-                      disabled={Boolean(qualificationSubmissionActionKey)}
-                    >
-                      {qualificationSubmissionActionKey === `apply:${submission.id}` ? (
-                        <ActivityIndicator size="small" color="#FFFFFF" />
-                      ) : (
-                        <Text style={scenarioShareStyles.applyButtonText}>Apply</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-        )}
-
-        {scenarioError && (
-          <View style={scenarioShareStyles.errorBox}>
-            <Ionicons name="alert-circle-outline" size={15} color="#B91C1C" />
-            <Text style={scenarioShareStyles.errorText}>{scenarioError}</Text>
-          </View>
-        )}
-
-        {loadingScenarios && leadScenarios.length === 0 ? (
-          <View style={scenarioShareStyles.emptyBox}>
-            <ActivityIndicator size="small" color={PLUM} />
-            <Text style={[scenarioShareStyles.emptyText, { color: colors.textSecondary }]}>
-              Loading saved scenarios...
+        {showScenarioList ? (
+          <>
+            <Text style={[scenarioShareStyles.subtitle, { color: colors.textSecondary }]}>
+              {leadScenarios.length > 0
+                ? `${scenarioCountLabel}. Generate and manage tracked borrower or partner links from the saved web scenarios.`
+                : 'Saved scenarios are created from the desktop CRM calculator.'}
             </Text>
-          </View>
-        ) : leadScenarios.length === 0 ? (
-          <View style={scenarioShareStyles.emptyBox}>
-            <Ionicons name="calculator-outline" size={18} color="#64748B" />
-            <Text style={[scenarioShareStyles.emptyText, { color: colors.textSecondary }]}>
-              No saved scenarios yet. Create one from the desktop CRM, then refresh this section.
-            </Text>
-          </View>
-        ) : !showScenarioList && featuredScenario ? (
-          <TouchableOpacity
-            style={[
-              scenarioShareStyles.scenarioCard,
-              scenarioShareStyles.collapsedScenarioCard,
-              { backgroundColor: colors.cardBackground, borderColor: colors.border },
-            ]}
-            onPress={toggleScenarioSection}
-            activeOpacity={0.75}
-          >
-            <View style={scenarioShareStyles.scenarioHeader}>
-              <View style={scenarioShareStyles.scenarioTitleBlock}>
-                <View style={scenarioShareStyles.scenarioNameRow}>
-                  <Text style={[scenarioShareStyles.scenarioIndex, { color: colors.textSecondary }]}>
-                    {featuredScenario.isPrimary ? 'Primary Scenario' : 'Latest Scenario'}
-                  </Text>
-                  {featuredScenario.isPrimary && (
-                    <View style={scenarioShareStyles.primaryPill}>
-                      <Text style={scenarioShareStyles.primaryPillText}>Primary</Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={[scenarioShareStyles.scenarioName, { color: colors.textPrimary }]} numberOfLines={2}>
-                  {featuredScenario.name || 'Saved scenario'}
-                </Text>
-                {formatScenarioDateTime(featuredScenario.updatedAt) && (
-                  <Text style={[scenarioShareStyles.scenarioUpdated, { color: colors.textSecondary }]}>
-                    Updated {formatScenarioDateTime(featuredScenario.updatedAt)}
-                  </Text>
+
+            {hasViewingNow && (
+              <View style={scenarioShareStyles.viewingNowRow}>
+                {buyerViewingNow && (
+                  <View style={scenarioShareStyles.viewingNowPill}>
+                    <View style={scenarioShareStyles.viewingNowDot} />
+                    <Text style={scenarioShareStyles.viewingNowText}>Buyer viewing now</Text>
+                  </View>
+                )}
+                {partnerViewingNow && (
+                  <View style={scenarioShareStyles.viewingNowPill}>
+                    <View style={scenarioShareStyles.viewingNowDot} />
+                    <Text style={scenarioShareStyles.viewingNowText}>Partner viewing now</Text>
+                  </View>
                 )}
               </View>
-              <Ionicons name="chevron-down" size={18} color={PLUM} />
-            </View>
+            )}
 
-            <View style={scenarioShareStyles.metricGrid}>
-              <View style={scenarioShareStyles.metricItem}>
-                <Text style={[scenarioShareStyles.metricLabel, { color: colors.textSecondary }]}>Payment</Text>
-                <Text style={[scenarioShareStyles.metricValue, { color: colors.textPrimary }]}>
-                  {featuredPayment || '-'}
+            {pendingSubmissions.length > 0 && (
+              <View style={scenarioShareStyles.pendingUpdatesBox}>
+                <View style={scenarioShareStyles.pendingUpdatesHeader}>
+                  <View style={scenarioShareStyles.pendingUpdatesTitleRow}>
+                    <Ionicons name="calculator-outline" size={16} color="#B45309" />
+                    <Text style={scenarioShareStyles.pendingUpdatesTitle}>
+                      {pendingSubmissions.length} pending scenario update{pendingSubmissions.length === 1 ? '' : 's'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={loadLeadScenarios} disabled={loadingScenarios}>
+                    <Ionicons name="refresh" size={15} color="#B45309" />
+                  </TouchableOpacity>
+                </View>
+
+                {pendingSubmissions.map((submission) => {
+                  const actionBusy =
+                    qualificationSubmissionActionKey === `apply:${submission.id}` ||
+                    qualificationSubmissionActionKey === `dismiss:${submission.id}`;
+
+                  return (
+                    <View key={submission.id} style={scenarioShareStyles.pendingUpdateCard}>
+                      <View style={scenarioShareStyles.pendingUpdateHeader}>
+                        <View style={scenarioShareStyles.pendingUpdateTitleBlock}>
+                          <Text style={scenarioShareStyles.pendingUpdateSubmitter} numberOfLines={1}>
+                            {formatQualificationSubmitter(submission)}
+                          </Text>
+                          <Text style={scenarioShareStyles.pendingUpdateMeta} numberOfLines={2}>
+                            {[submission.scenarioName || 'Saved scenario', formatScenarioDateTime(submission.submittedAt)].filter(Boolean).join(' · ')}
+                          </Text>
+                        </View>
+                        <View style={scenarioShareStyles.pendingPill}>
+                          <Text style={scenarioShareStyles.pendingPillText}>Pending</Text>
+                        </View>
+                      </View>
+
+                      <View style={scenarioShareStyles.pendingChangeList}>
+                        {submission.changedSummary.length > 0 ? (
+                          submission.changedSummary.map((change, changeIndex) => (
+                            <View key={`${submission.id}:${change.key || changeIndex}`} style={scenarioShareStyles.pendingChangeRow}>
+                              <Text style={scenarioShareStyles.pendingChangeLabel} numberOfLines={1}>
+                                {change.label || change.key || 'Changed field'}
+                              </Text>
+                              <Text style={scenarioShareStyles.pendingChangeValue} numberOfLines={2}>
+                                {formatQualificationChangeValue(change, 'before')} → {formatQualificationChangeValue(change, 'after')}
+                              </Text>
+                            </View>
+                          ))
+                        ) : (
+                          <Text style={scenarioShareStyles.pendingUpdateMeta}>No field summary was included.</Text>
+                        )}
+                      </View>
+
+                      <View style={scenarioShareStyles.pendingActionRow}>
+                        <TouchableOpacity
+                          style={[scenarioShareStyles.dismissButton, actionBusy && scenarioShareStyles.actionButtonDisabled]}
+                          onPress={() => reviewQualificationSubmission(submission, 'dismiss')}
+                          disabled={Boolean(qualificationSubmissionActionKey)}
+                        >
+                          <Text style={scenarioShareStyles.dismissButtonText}>Dismiss</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[scenarioShareStyles.applyButton, actionBusy && scenarioShareStyles.actionButtonDisabled]}
+                          onPress={() => reviewQualificationSubmission(submission, 'apply')}
+                          disabled={Boolean(qualificationSubmissionActionKey)}
+                        >
+                          {qualificationSubmissionActionKey === `apply:${submission.id}` ? (
+                            <ActivityIndicator size="small" color="#FFFFFF" />
+                          ) : (
+                            <Text style={scenarioShareStyles.applyButtonText}>Apply</Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+
+            {scenarioError && (
+              <View style={scenarioShareStyles.errorBox}>
+                <Ionicons name="alert-circle-outline" size={15} color="#B91C1C" />
+                <Text style={scenarioShareStyles.errorText}>{scenarioError}</Text>
+              </View>
+            )}
+
+            {loadingScenarios && leadScenarios.length === 0 ? (
+              <View style={scenarioShareStyles.emptyBox}>
+                <ActivityIndicator size="small" color={PLUM} />
+                <Text style={[scenarioShareStyles.emptyText, { color: colors.textSecondary }]}>
+                  Loading saved scenarios...
                 </Text>
               </View>
-              <View style={scenarioShareStyles.metricItem}>
-                <Text style={[scenarioShareStyles.metricLabel, { color: colors.textSecondary }]}>Cash to Close</Text>
-                <Text style={[scenarioShareStyles.metricValue, { color: colors.textPrimary }]}>
-                  {featuredCashToClose || '-'}
+            ) : leadScenarios.length === 0 ? (
+              <View style={scenarioShareStyles.emptyBox}>
+                <Ionicons name="calculator-outline" size={18} color="#64748B" />
+                <Text style={[scenarioShareStyles.emptyText, { color: colors.textSecondary }]}>
+                  No saved scenarios yet. Create one from the desktop CRM, then refresh this section.
                 </Text>
               </View>
-              <View style={scenarioShareStyles.metricItem}>
-                <Text style={[scenarioShareStyles.metricLabel, { color: colors.textSecondary }]}>Price</Text>
-                <Text style={[scenarioShareStyles.metricValue, { color: colors.textPrimary }]}>
-                  {featuredSalesPrice || '-'}
-                </Text>
-              </View>
-            </View>
-            <Text style={[scenarioShareStyles.collapsedHint, { color: colors.textSecondary }]}>
-              Tap to show all scenarios.
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={scenarioShareStyles.scenarioList}>
-            {leadScenarios.map((scenario, index) => {
+            ) : (
+              <View style={scenarioShareStyles.scenarioList}>
+                {leadScenarios.map((scenario, index) => {
               const snapshot = getRecordValue(scenario.resultSnapshot) || {};
               const scenarioData = getRecordValue(scenario.scenarioData) || {};
               const paymentBreakdown = getRecordValue(snapshot.paymentBreakdown) || {};
@@ -3728,19 +3757,27 @@ export function LeadDetailView({
                   </View>
                 </View>
               );
-            })}
-          </View>
-        )}
+                })}
+              </View>
+            )}
+          </>
+        ) : null}
       </View>
     );
   };
 
   const renderIncomeAnalysisSection = () => {
     const latestIncomeAnalysis = savedIncomeAnalyses[0] || null;
+    const incomeAnalysisExpanded = isSectionExpanded('incomeAnalysis');
 
     return (
       <View style={incomeAnalysisStyles.container}>
-        <View style={incomeAnalysisStyles.headerRow}>
+        <TouchableOpacity
+          style={incomeAnalysisStyles.headerRow}
+          onPress={() => toggleSectionExpanded('incomeAnalysis')}
+          activeOpacity={0.75}
+          disabled={!isMobileSectionCollapseEnabled}
+        >
           <View style={incomeAnalysisStyles.titleRow}>
             <View style={incomeAnalysisStyles.iconWrap}>
               <Ionicons name="cash-outline" size={16} color="#047857" />
@@ -3757,16 +3794,26 @@ export function LeadDetailView({
             </View>
           </View>
 
-          {latestIncomeAnalysis && (
-            <View style={[incomeAnalysisStyles.statusPill, getIncomeAnalysisStatusStyle(latestIncomeAnalysis.status)]}>
-              <Text style={incomeAnalysisStyles.statusPillText}>
-                {getIncomeAnalysisStatusLabel(latestIncomeAnalysis.status)}
-              </Text>
-            </View>
-          )}
-        </View>
+          <View style={collapsibleSectionStyles.inlineHeaderRight}>
+            {latestIncomeAnalysis && (
+              <View style={[incomeAnalysisStyles.statusPill, getIncomeAnalysisStatusStyle(latestIncomeAnalysis.status)]}>
+                <Text style={incomeAnalysisStyles.statusPillText}>
+                  {getIncomeAnalysisStatusLabel(latestIncomeAnalysis.status)}
+                </Text>
+              </View>
+            )}
+            {isMobileSectionCollapseEnabled ? (
+              <Ionicons
+                name={incomeAnalysisExpanded ? 'chevron-up' : 'chevron-down'}
+                size={18}
+                color={colors.textSecondary}
+              />
+            ) : null}
+          </View>
+        </TouchableOpacity>
 
-        {loadingIncomeAnalyses ? (
+        {incomeAnalysisExpanded ? (
+          loadingIncomeAnalyses ? (
           <View style={incomeAnalysisStyles.emptyBox}>
             <ActivityIndicator size="small" color="#047857" />
             <Text style={[incomeAnalysisStyles.emptyText, { color: colors.textSecondary }]}>Loading saved income...</Text>
@@ -3816,7 +3863,8 @@ export function LeadDetailView({
             <Ionicons name="document-text-outline" size={16} color="#64748B" />
             <Text style={[incomeAnalysisStyles.emptyText, { color: colors.textSecondary }]}>No saved income analysis yet.</Text>
           </View>
-        )}
+        )
+        ) : null}
       </View>
     );
   };
@@ -3865,6 +3913,55 @@ export function LeadDetailView({
   const sourceDetail = !isMeta ? (record as Lead | undefined)?.source_detail || null : (record as MetaLead | undefined)?.source_detail || null;
   const dealSnapshotSourceLabel = record ? getDealSnapshotSourceLabel(record, isMeta, previewPlatform) : null;
   const formatTabBadgeCount = (count: number) => (count > 99 ? '99+' : String(count));
+  const isSectionExpanded = (sectionKey: MobileDetailSectionKey) => (
+    !isMobileSectionCollapseEnabled || expandedSections[sectionKey]
+  );
+  const toggleSectionExpanded = (sectionKey: MobileDetailSectionKey) => {
+    if (!isMobileSectionCollapseEnabled) return;
+    setExpandedSections((current) => ({
+      ...current,
+      [sectionKey]: !current[sectionKey],
+    }));
+  };
+  const renderCollapsibleSectionHeader = (
+    sectionKey: MobileDetailSectionKey,
+    title: string,
+    iconName: keyof typeof Ionicons.glyphMap,
+    trailing?: React.ReactNode,
+    options?: { containerStyle?: object }
+  ) => {
+    const expanded = isSectionExpanded(sectionKey);
+
+    return (
+      <View style={[collapsibleSectionStyles.headerRow, options?.containerStyle]}>
+        <TouchableOpacity
+          style={collapsibleSectionStyles.headerButton}
+          onPress={() => toggleSectionExpanded(sectionKey)}
+          activeOpacity={0.75}
+          disabled={!isMobileSectionCollapseEnabled}
+        >
+          <View style={collapsibleSectionStyles.headerTitleRow}>
+            <Ionicons name={iconName} size={17} color={PLUM} />
+            <Text style={[collapsibleSectionStyles.headerTitle, { color: colors.textPrimary }]}>
+              {title}
+            </Text>
+          </View>
+          {isMobileSectionCollapseEnabled ? (
+            <Ionicons
+              name={expanded ? 'chevron-up' : 'chevron-down'}
+              size={18}
+              color={colors.textSecondary}
+            />
+          ) : null}
+        </TouchableOpacity>
+        {trailing ? (
+          <View style={collapsibleSectionStyles.headerTrailing}>
+            {trailing}
+          </View>
+        ) : null}
+      </View>
+    );
+  };
 
   const loadDetailMessageIndicators = useCallback(async () => {
     let nextMessageUnreadCount = 0;
@@ -5983,7 +6080,7 @@ export function LeadDetailView({
                         styles.pipelineLabel,
                         isCurrent && { color: stageColors.text, fontWeight: '700' },
                         isCompleted && { color: stageColors.text },
-                        isFuture && { color: isDark ? '#64748B' : '#94A3B8' },
+                        isFuture && { color: isDark ? colors.textSecondary : '#94A3B8' },
                       ]} numberOfLines={1}>{stage.label}</Text>
                     </TouchableOpacity>
                   </React.Fragment>
@@ -6562,30 +6659,34 @@ export function LeadDetailView({
           </Modal>
 
           {/* Basic fields */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginBottom: 0 }]}>ℹ️ Details</Text>
-            {hasAdAttribution && (previewAdId || adImage) ? (
+          {renderCollapsibleSectionHeader(
+            'details',
+            'Details',
+            'information-circle-outline',
+            hasAdAttribution && (previewAdId || adImage) ? (
               <TouchableOpacity
                 style={[styles.viewAdButton, { marginBottom: 0, marginTop: 0, paddingHorizontal: 12, paddingVertical: 7 }]}
                 onPress={() => setShowAdImage(true)}
               >
                 <Text style={styles.viewAdButtonText}>📸 View Ad</Text>
               </TouchableOpacity>
-            ) : null}
-          </View>
-          <Text style={[styles.detailFieldBlock, { color: colors.textPrimary }]} selectable={true}>
-            Email: {email || 'N/A'}{'\n'}
-            Phone: {phone ? formatPhoneNumber(phone) : 'N/A'}
-          </Text>
-
-          {!isMeta && (record as Lead).source && (
-            <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
-              Source: {(record as Lead).source}
-            </Text>
+            ) : null
           )}
-
-          {!isMeta && (
+          {isSectionExpanded('details') && (
             <>
+              <Text style={[styles.detailFieldBlock, { color: colors.textPrimary }]} selectable={true}>
+                Email: {email || 'N/A'}{'\n'}
+                Phone: {phone ? formatPhoneNumber(phone) : 'N/A'}
+              </Text>
+
+              {!isMeta && (record as Lead).source && (
+                <Text style={[styles.detailField, { color: colors.textPrimary }]} selectable={true}>
+                  Source: {(record as Lead).source}
+                </Text>
+              )}
+
+              {!isMeta && (
+                <>
               {(record as Lead).source === 'My Lead' && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                   <View style={{
@@ -6837,11 +6938,11 @@ export function LeadDetailView({
                   colors={leadSummaryColors}
                 />
               )}
-            </>
-          )}
+                </>
+              )}
 
-          {isMeta && (
-            <>
+              {isMeta && (
+                <>
               {linkedCaptureId && onNavigateToCapture && (
                 <TouchableOpacity
                   style={{
@@ -7083,6 +7184,8 @@ export function LeadDetailView({
                   colors={leadSummaryColors}
                 />
               )}
+                </>
+              )}
             </>
           )}
 
@@ -7092,140 +7195,159 @@ export function LeadDetailView({
             leadSource={isMeta ? 'meta' : 'organic'}
           />
 
-          {/* LO Assignment */}
-          {(propUserRole === 'super_admin' || propUserRole === 'realtor') && (
-            <View style={styles.statusLORow}>
-              <TouchableOpacity
-                style={styles.loDropdownButton}
-                onPress={() => setShowLOPicker(true)}
-                disabled={updatingLO}
-              >
-                <Ionicons name="person-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
-                <Text style={styles.loDropdownLabel}>LO:</Text>
-                <Text style={styles.loDropdownValue} numberOfLines={1}>
-                  {record.lo_id 
-                    ? loanOfficers.find(lo => lo.id === record.lo_id)?.name || 'Unknown'
-                    : 'Unassigned'
-                  }
-                </Text>
-                <Text style={styles.statusDropdownArrow}>▼</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {propUserRole !== 'realtor' && !detailLoad.loading && (
-            <LeadRealtorRolesSection
-              leadId={record.id}
-              leadSource={crmLeadSource}
-              initialRoles={detailLoad.bootstrap ? detailLoad.bootstrap.realtorRoles : null}
-              onBuyerAgentUpdated={(updatedRecord) => {
-                if (updatedRecord) {
-                  onLeadUpdate(updatedRecord as Lead | MetaLead, isMeta ? 'meta' : 'lead');
-                }
-              }}
-            />
-          )}
-
-          {/* Tracking Section */}
-          <View style={trackingStyles.container}>
-            <View style={trackingStyles.headerRow}>
-              <TouchableOpacity 
-                style={[
-                  trackingStyles.trackButton,
-                  isTracked && trackingStyles.trackButtonActive
-                ]}
-                onPress={handleToggleTracking}
-                disabled={updatingTracking}
-              >
-                {updatingTracking ? (
-                  <ActivityIndicator size="small" color={isTracked ? '#FFFFFF' : PLUM} />
-                ) : (
-                  <>
-                    <Ionicons 
-                      name={isTracked ? 'pin' : 'pin-outline'} 
-                      size={16} 
-                      color={isTracked ? '#FFFFFF' : PLUM}
-                    />
-                    <Text style={[
-                      trackingStyles.trackButtonText,
-                      isTracked && trackingStyles.trackButtonTextActive
-                    ]}>
-                      {isTracked ? 'Tracked' : 'Track'}
-                    </Text>
-                  </>
+          <View style={{ marginTop: 16 }}>
+            {renderCollapsibleSectionHeader('team', 'Assignments & Roles', 'people-outline')}
+            {isSectionExpanded('team') && (
+              <>
+                {/* LO Assignment */}
+                {(propUserRole === 'super_admin' || propUserRole === 'realtor') && (
+                  <View style={styles.statusLORow}>
+                    <TouchableOpacity
+                      style={styles.loDropdownButton}
+                      onPress={() => setShowLOPicker(true)}
+                      disabled={updatingLO}
+                    >
+                      <Ionicons name="person-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
+                      <Text style={styles.loDropdownLabel}>LO:</Text>
+                      <Text style={styles.loDropdownValue} numberOfLines={1}>
+                        {record.lo_id 
+                          ? loanOfficers.find(lo => lo.id === record.lo_id)?.name || 'Unknown'
+                          : 'Unassigned'
+                        }
+                      </Text>
+                      <Text style={styles.statusDropdownArrow}>▼</Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={trackingStyles.infoButton}
-                onPress={() => setShowTrackingInfo(true)}
-              >
-                <Ionicons name="information-circle-outline" size={18} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-            {isTracked && trackingReason && (
-              <Text style={trackingStyles.reasonText}>
-                {getTrackingReasonLabel(trackingReason)}
-              </Text>
-            )}
-            {isTracked && (
-              <View style={trackingStyles.noteContainer}>
-                <TextInput
-                  style={[trackingStyles.noteInput, { color: colors.textPrimary, borderColor: colors.border }]}
-                  placeholder="Add a tracking note..."
-                  placeholderTextColor="#94A3B8"
-                  value={trackingNote}
-                  onChangeText={setTrackingNote}
-                  multiline
-                  numberOfLines={2}
-                />
-                <TouchableOpacity 
-                  style={[
-                    trackingStyles.saveNoteButton,
-                    savingTrackingNote && trackingStyles.saveNoteButtonDisabled
-                  ]}
-                  onPress={handleSaveTrackingNote}
-                  disabled={savingTrackingNote}
-                >
-                  {savingTrackingNote ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
-                  ) : (
-                    <Text style={trackingStyles.saveNoteButtonText}>Save</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
+
+                {propUserRole !== 'realtor' && !detailLoad.loading && (
+                  <LeadRealtorRolesSection
+                    leadId={record.id}
+                    leadSource={crmLeadSource}
+                    initialRoles={detailLoad.bootstrap ? detailLoad.bootstrap.realtorRoles : null}
+                    onBuyerAgentUpdated={(updatedRecord) => {
+                      if (updatedRecord) {
+                        onLeadUpdate(updatedRecord as Lead | MetaLead, isMeta ? 'meta' : 'lead');
+                      }
+                    }}
+                  />
+                )}
+              </>
             )}
           </View>
 
-          {/* Partner Update Section */}
-          {hasPartnerEmail && (
-            <View style={partnerUpdateStyles.container}>
-              <View style={partnerUpdateStyles.headerRow}>
-                <View style={partnerUpdateStyles.labelRow}>
-                  <Ionicons name="people-outline" size={16} color={PLUM} />
-                  <Text style={[partnerUpdateStyles.label, { color: colors.textPrimary }]}>
-                    Partner: {partnerName}
-                  </Text>
-                </View>
+          {/* Tracking Section */}
+          {renderCollapsibleSectionHeader('tracking', 'Tracking', 'pin-outline', undefined, {
+            containerStyle: { marginTop: 16 },
+          })}
+          {isSectionExpanded('tracking') && (
+            <View style={trackingStyles.container}>
+              <View style={trackingStyles.headerRow}>
                 <TouchableOpacity 
-                  style={partnerUpdateStyles.sendButton}
-                  onPress={() => setShowPartnerUpdateModal(true)}
+                  style={[
+                    trackingStyles.trackButton,
+                    isTracked && trackingStyles.trackButtonActive
+                  ]}
+                  onPress={handleToggleTracking}
+                  disabled={updatingTracking}
                 >
-                  <Ionicons name="mail-outline" size={16} color="#FFFFFF" />
-                  <Text style={partnerUpdateStyles.sendButtonText}>Send Update</Text>
+                  {updatingTracking ? (
+                    <ActivityIndicator size="small" color={isTracked ? '#FFFFFF' : PLUM} />
+                  ) : (
+                    <>
+                      <Ionicons 
+                        name={isTracked ? 'pin' : 'pin-outline'} 
+                        size={16} 
+                        color={isTracked ? '#FFFFFF' : PLUM}
+                      />
+                      <Text style={[
+                        trackingStyles.trackButtonText,
+                        isTracked && trackingStyles.trackButtonTextActive
+                      ]}>
+                        {isTracked ? 'Tracked' : 'Track'}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={trackingStyles.infoButton}
+                  onPress={() => setShowTrackingInfo(true)}
+                >
+                  <Ionicons name="information-circle-outline" size={18} color="#64748B" />
                 </TouchableOpacity>
               </View>
-              {record?.last_referral_update_at && (
-                <Text style={[partnerUpdateStyles.lastUpdate, { color: colors.textSecondary }]}>
-                  Last update: {new Date(record.last_referral_update_at).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit'
-                  })}
+              {isTracked && trackingReason && (
+                <Text style={trackingStyles.reasonText}>
+                  {getTrackingReasonLabel(trackingReason)}
                 </Text>
               )}
+              {isTracked && (
+                <View style={trackingStyles.noteContainer}>
+                  <TextInput
+                    style={[trackingStyles.noteInput, { color: colors.textPrimary, borderColor: colors.border }]}
+                    placeholder="Add a tracking note..."
+                    placeholderTextColor="#94A3B8"
+                    value={trackingNote}
+                    onChangeText={setTrackingNote}
+                    multiline
+                    numberOfLines={2}
+                  />
+                  <TouchableOpacity 
+                    style={[
+                      trackingStyles.saveNoteButton,
+                      savingTrackingNote && trackingStyles.saveNoteButtonDisabled
+                    ]}
+                    onPress={handleSaveTrackingNote}
+                    disabled={savingTrackingNote}
+                  >
+                    {savingTrackingNote ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Text style={trackingStyles.saveNoteButtonText}>Save</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
+          )}
+
+          {/* Partner Update Section */}
+          {hasPartnerEmail && (
+            <>
+              {renderCollapsibleSectionHeader('partnerUpdate', 'Partner Update', 'people-outline', undefined, {
+                containerStyle: { marginTop: 16 },
+              })}
+              {isSectionExpanded('partnerUpdate') && (
+                <View style={partnerUpdateStyles.container}>
+                  <View style={partnerUpdateStyles.headerRow}>
+                    <View style={partnerUpdateStyles.labelRow}>
+                      <Ionicons name="people-outline" size={16} color={PLUM} />
+                      <Text style={[partnerUpdateStyles.label, { color: colors.textPrimary }]}>
+                        Partner: {partnerName}
+                      </Text>
+                    </View>
+                    <TouchableOpacity 
+                      style={partnerUpdateStyles.sendButton}
+                      onPress={() => setShowPartnerUpdateModal(true)}
+                    >
+                      <Ionicons name="mail-outline" size={16} color="#FFFFFF" />
+                      <Text style={partnerUpdateStyles.sendButtonText}>Send Update</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {record?.last_referral_update_at && (
+                    <Text style={[partnerUpdateStyles.lastUpdate, { color: colors.textSecondary }]}>
+                      Last update: {new Date(record.last_referral_update_at).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit'
+                      })}
+                    </Text>
+                  )}
+                </View>
+              )}
+            </>
           )}
 
           {renderScenarioSharingSection()}
@@ -7248,234 +7370,235 @@ export function LeadDetailView({
           <View style={styles.sectionDivider} />
 
           {/* Tasks / Logging Section */}
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>✍️ Log Activity</Text>
-          
-          {/* Activity Type Buttons */}
-          <View style={styles.activityTypeRow}>
-            <TouchableOpacity
-              style={[
-                styles.activityTypeButton,
-                selectedActivityType === 'call' && styles.activityTypeButtonActive,
-              ]}
-              onPress={() => setSelectedActivityType('call')}
-            >
-              <Text style={[
-                styles.activityTypeText,
-                selectedActivityType === 'call' && styles.activityTypeTextActive,
-              ]}>
-                <Ionicons
-                  name="call-outline"
-                  size={14}
-                  color={selectedActivityType === 'call' ? '#059669' : '#64748B'}
-                />{' '}
-                Call
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.activityTypeButton,
-                selectedActivityType === 'text' && styles.activityTypeButtonActive,
-              ]}
-              onPress={() => setSelectedActivityType('text')}
-            >
-              <Text style={[
-                styles.activityTypeText,
-                selectedActivityType === 'text' && styles.activityTypeTextActive,
-              ]}>
-                <Ionicons
-                  name="chatbubble-ellipses-outline"
-                  size={14}
-                  color={selectedActivityType === 'text' ? '#059669' : '#64748B'}
-                />{' '}
-                Text
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.activityTypeButton,
-                selectedActivityType === 'email' && styles.activityTypeButtonActive,
-              ]}
-              onPress={() => setSelectedActivityType('email')}
-            >
-              <Text style={[
-                styles.activityTypeText,
-                selectedActivityType === 'email' && styles.activityTypeTextActive,
-              ]}>
-                <Ionicons
-                  name="mail-outline"
-                  size={14}
-                  color={selectedActivityType === 'email' ? '#059669' : '#64748B'}
-                />{' '}
-                Email
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.activityTypeButton,
-                selectedActivityType === 'note' && styles.activityTypeButtonActive,
-              ]}
-              onPress={() => setSelectedActivityType('note')}
-            >
-              <Text style={[
-                styles.activityTypeText,
-                selectedActivityType === 'note' && styles.activityTypeTextActive,
-              ]}>
-                <Ionicons
-                  name="document-text-outline"
-                  size={14}
-                  color={selectedActivityType === 'note' ? '#059669' : '#64748B'}
-                />{' '}
-                Note
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Quick Phrases Button */}
-          <TouchableOpacity
-            style={styles.quickPhrasesButton}
-            onPress={() => setShowQuickPhrases(!showQuickPhrases)}
-          >
-            <Text style={styles.quickPhrasesButtonText}>
-              <Ionicons name="list-circle-outline" size={16} color="#0F172A" />{' '}
-              Quick Phrases {showQuickPhrases ? '▲' : '▼'}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Quick Phrases List */}
-          {showQuickPhrases && (
-            <View style={styles.quickPhrasesList}>
-              {quickPhrases.map((phrase, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.quickPhraseItem}
-                  onPress={() => handleQuickPhrase(phrase)}
-                >
-                  <Text style={styles.quickPhraseText}>{phrase}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-          
-          {/* Activity Input */}
-          <View style={[styles.activityInputCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-            <TextInput
-              style={styles.activityInput}
-              placeholder={`Enter ${selectedActivityType} details...`}
-              placeholderTextColor="#999"
-              value={taskNote}
-              onChangeText={setTaskNote}
-              multiline
-            />
-            
-            {/* Voice Note Section */}
-            {pendingVoiceNoteUri ? (
-              // Preview UI - after recording, before saving
-              <View style={styles.voiceNotePreviewContainer}>
-                <View style={styles.voiceNotePreviewRow}>
-                  <TouchableOpacity
-                    style={styles.voiceNotePlayButton}
-                    onPress={togglePreviewPlayback}
-                  >
-                    <Ionicons 
-                      name={isPlayingPreview ? 'pause' : 'play'} 
-                      size={20} 
-                      color={PLUM}
-                    />
-                  </TouchableOpacity>
-                  <Text style={styles.voiceNotePreviewText}>
-                    {isPlayingPreview ? 'Playing...' : 'Voice note ready'}
-                  </Text>
-                </View>
-                <View style={styles.voiceNotePreviewActions}>
-                  <TouchableOpacity
-                    style={styles.voiceNoteDiscardButton}
-                    onPress={discardVoiceNote}
-                  >
-                    <Ionicons name="trash-outline" size={16} color="#DC2626" />
-                    <Text style={styles.voiceNoteDiscardText}>Discard</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.voiceNoteSaveButton,
-                      uploadingVoiceNote && { opacity: 0.6 },
-                    ]}
-                    onPress={confirmAndSaveVoiceNote}
-                    disabled={uploadingVoiceNote}
-                  >
-                    <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
-                    <Text style={styles.voiceNoteSaveText}>
-                      {uploadingVoiceNote ? 'Saving...' : 'Log Voice Note'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : (
-              // Recording UI
-              <View style={styles.voiceNoteRow}>
+          {renderCollapsibleSectionHeader('logActivity', 'Log Activity', 'create-outline')}
+          {isSectionExpanded('logActivity') && (
+            <>
+              {/* Activity Type Buttons */}
+              <View style={styles.activityTypeRow}>
                 <TouchableOpacity
                   style={[
-                    styles.voiceNoteRecordButton,
-                    isRecording && styles.voiceNoteRecordButtonActive,
+                    styles.activityTypeButton,
+                    selectedActivityType === 'call' && styles.activityTypeButtonActive,
                   ]}
-                  onPress={() => {
-                    if (isRecording) {
-                      stopRecordingForPreview();
-                    } else {
-                      startVoiceRecording();
-                    }
-                  }}
-                  disabled={uploadingVoiceNote}
+                  onPress={() => setSelectedActivityType('call')}
                 >
-                  <Ionicons 
-                    name={isRecording ? 'stop-circle' : 'mic'} 
-                    size={18} 
-                    color="#FFFFFF" 
-                    style={{ marginRight: 6 }}
-                  />
-                  <Text style={styles.voiceNoteRecordButtonText}>
-                    {isRecording ? 'Stop' : 'Voice Note'}
+                  <Text style={[
+                    styles.activityTypeText,
+                    selectedActivityType === 'call' && styles.activityTypeTextActive,
+                  ]}>
+                    <Ionicons
+                      name="call-outline"
+                      size={14}
+                      color={selectedActivityType === 'call' ? '#059669' : '#64748B'}
+                    />{' '}
+                    Call
                   </Text>
                 </TouchableOpacity>
-
-                <Text style={styles.voiceNoteHint}>
-                  {isRecording
-                    ? 'Recording… tap to stop'
-                    : 'Optional: log a quick voice note'}
-                </Text>
-              </View>
-            )}
-            
-            <Animated.View style={{ transform: [{ scale: logButtonScale }] }}>
-              <TouchableOpacity
-                style={[
-                  styles.logActivityButton,
-                  (!taskNote.trim() || savingActivity) && styles.logActivityButtonDisabled,
-                ]}
-                onPress={() => {
-                  if (!taskNote.trim() || savingActivity) return;
-                  animateLogButton();
-                  handleAddTask();
-                }}
-                disabled={!taskNote.trim() || savingActivity}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                  {!savingActivity && (
+                <TouchableOpacity
+                  style={[
+                    styles.activityTypeButton,
+                    selectedActivityType === 'text' && styles.activityTypeButtonActive,
+                  ]}
+                  onPress={() => setSelectedActivityType('text')}
+                >
+                  <Text style={[
+                    styles.activityTypeText,
+                    selectedActivityType === 'text' && styles.activityTypeTextActive,
+                  ]}>
                     <Ionicons
-                      name={getActivityIconName(selectedActivityType)}
-                      size={16}
-                      color="#FFFFFF"
-                      style={{ marginRight: 6 }}
-                    />
-                  )}
-                  <Text style={styles.logActivityButtonText}>
-                    {savingActivity
-                      ? 'Saving...'
-                      : `Log ${getActivityLabel(selectedActivityType)}`}
+                      name="chatbubble-ellipses-outline"
+                      size={14}
+                      color={selectedActivityType === 'text' ? '#059669' : '#64748B'}
+                    />{' '}
+                    Text
                   </Text>
-                </View>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.activityTypeButton,
+                    selectedActivityType === 'email' && styles.activityTypeButtonActive,
+                  ]}
+                  onPress={() => setSelectedActivityType('email')}
+                >
+                  <Text style={[
+                    styles.activityTypeText,
+                    selectedActivityType === 'email' && styles.activityTypeTextActive,
+                  ]}>
+                    <Ionicons
+                      name="mail-outline"
+                      size={14}
+                      color={selectedActivityType === 'email' ? '#059669' : '#64748B'}
+                    />{' '}
+                    Email
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.activityTypeButton,
+                    selectedActivityType === 'note' && styles.activityTypeButtonActive,
+                  ]}
+                  onPress={() => setSelectedActivityType('note')}
+                >
+                  <Text style={[
+                    styles.activityTypeText,
+                    selectedActivityType === 'note' && styles.activityTypeTextActive,
+                  ]}>
+                    <Ionicons
+                      name="document-text-outline"
+                      size={14}
+                      color={selectedActivityType === 'note' ? '#059669' : '#64748B'}
+                    />{' '}
+                    Note
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Quick Phrases Button */}
+              <TouchableOpacity
+                style={styles.quickPhrasesButton}
+                onPress={() => setShowQuickPhrases(!showQuickPhrases)}
+              >
+                <Text style={styles.quickPhrasesButtonText}>
+                  <Ionicons name="list-circle-outline" size={16} color="#0F172A" />{' '}
+                  Quick Phrases {showQuickPhrases ? '▲' : '▼'}
+                </Text>
               </TouchableOpacity>
-            </Animated.View>
-          </View>
+
+              {/* Quick Phrases List */}
+              {showQuickPhrases && (
+                <View style={styles.quickPhrasesList}>
+                  {quickPhrases.map((phrase, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.quickPhraseItem}
+                      onPress={() => handleQuickPhrase(phrase)}
+                    >
+                      <Text style={styles.quickPhraseText}>{phrase}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              
+              {/* Activity Input */}
+              <View style={[styles.activityInputCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+                <TextInput
+                  style={styles.activityInput}
+                  placeholder={`Enter ${selectedActivityType} details...`}
+                  placeholderTextColor="#999"
+                  value={taskNote}
+                  onChangeText={setTaskNote}
+                  multiline
+                />
+                
+                {/* Voice Note Section */}
+                {pendingVoiceNoteUri ? (
+                  <View style={styles.voiceNotePreviewContainer}>
+                    <View style={styles.voiceNotePreviewRow}>
+                      <TouchableOpacity
+                        style={styles.voiceNotePlayButton}
+                        onPress={togglePreviewPlayback}
+                      >
+                        <Ionicons 
+                          name={isPlayingPreview ? 'pause' : 'play'} 
+                          size={20} 
+                          color={PLUM}
+                        />
+                      </TouchableOpacity>
+                      <Text style={styles.voiceNotePreviewText}>
+                        {isPlayingPreview ? 'Playing...' : 'Voice note ready'}
+                      </Text>
+                    </View>
+                    <View style={styles.voiceNotePreviewActions}>
+                      <TouchableOpacity
+                        style={styles.voiceNoteDiscardButton}
+                        onPress={discardVoiceNote}
+                      >
+                        <Ionicons name="trash-outline" size={16} color="#DC2626" />
+                        <Text style={styles.voiceNoteDiscardText}>Discard</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.voiceNoteSaveButton,
+                          uploadingVoiceNote && { opacity: 0.6 },
+                        ]}
+                        onPress={confirmAndSaveVoiceNote}
+                        disabled={uploadingVoiceNote}
+                      >
+                        <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
+                        <Text style={styles.voiceNoteSaveText}>
+                          {uploadingVoiceNote ? 'Saving...' : 'Log Voice Note'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.voiceNoteRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.voiceNoteRecordButton,
+                        isRecording && styles.voiceNoteRecordButtonActive,
+                      ]}
+                      onPress={() => {
+                        if (isRecording) {
+                          stopRecordingForPreview();
+                        } else {
+                          startVoiceRecording();
+                        }
+                      }}
+                      disabled={uploadingVoiceNote}
+                    >
+                      <Ionicons 
+                        name={isRecording ? 'stop-circle' : 'mic'} 
+                        size={18} 
+                        color="#FFFFFF" 
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text style={styles.voiceNoteRecordButtonText}>
+                        {isRecording ? 'Stop' : 'Voice Note'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <Text style={styles.voiceNoteHint}>
+                      {isRecording
+                        ? 'Recording… tap to stop'
+                        : 'Optional: log a quick voice note'}
+                    </Text>
+                  </View>
+                )}
+                
+                <Animated.View style={{ transform: [{ scale: logButtonScale }] }}>
+                  <TouchableOpacity
+                    style={[
+                      styles.logActivityButton,
+                      (!taskNote.trim() || savingActivity) && styles.logActivityButtonDisabled,
+                    ]}
+                    onPress={() => {
+                      if (!taskNote.trim() || savingActivity) return;
+                      animateLogButton();
+                      handleAddTask();
+                    }}
+                    disabled={!taskNote.trim() || savingActivity}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                      {!savingActivity && (
+                        <Ionicons
+                          name={getActivityIconName(selectedActivityType)}
+                          size={16}
+                          color="#FFFFFF"
+                          style={{ marginRight: 6 }}
+                        />
+                      )}
+                      <Text style={styles.logActivityButtonText}>
+                        {savingActivity
+                          ? 'Saving...'
+                          : `Log ${getActivityLabel(selectedActivityType)}`}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </Animated.View>
+              </View>
+            </>
+          )}
 
           {/* Divider */}
           <View style={styles.sectionDivider} />
@@ -7506,13 +7629,13 @@ export function LeadDetailView({
                           color={colors.textPrimary}
                           style={{ marginRight: 6 }}
                         />
-                        <Text style={styles.activityHistoryType}>
+                        <Text style={[styles.activityHistoryType, isDark && { color: '#60A5FA' }]}>
                           {activity.audio_url || activity.has_audio
                             ? 'Voice note'
                             : getActivityLabel(activity.activity_type)}
                         </Text>
                       </View>
-                      <Text style={styles.activityHistoryTimestamp}>
+                      <Text style={[styles.activityHistoryTimestamp, { color: colors.textSecondary }]}>
                         {formatTime(activity.created_at)}
                       </Text>
                     </View>
@@ -7537,7 +7660,9 @@ export function LeadDetailView({
                   </View>
                   
                   {activity.notes && activity.activity_type !== 'email' ? (
-                    <Text style={styles.activityHistoryNote}>{activity.notes}</Text>
+                    <Text style={[styles.activityHistoryNote, { color: colors.textPrimary }]}>
+                      {activity.notes}
+                    </Text>
                   ) : null}
                   
                   {activity.activity_type === 'email' && (() => {
@@ -7551,12 +7676,15 @@ export function LeadDetailView({
                     const emailBody = getEmailBodyContent(displayActivity);
                     const hasHtmlBody = Boolean(displayActivity.body && HTML_TAG_PATTERN.test(displayActivity.body));
                     const hasTableHtml = Boolean(displayActivity.body && HTML_TABLE_PATTERN.test(displayActivity.body));
+                    const isOfficeWordHtml = Boolean(
+                      displayActivity.body && OFFICE_WORD_HTML_PATTERN.test(displayActivity.body)
+                    );
+                    const sanitizedEmailHtml = displayActivity.body ? sanitizeEmailHtml(displayActivity.body) : '';
+                    const shouldUseEmailWebView = hasTableHtml && !(Platform.OS === 'android' && isOfficeWordHtml);
                     const isLoadingBody = activityBodyState.loadingIds.has(activity.id);
                     const bodyError = activityBodyState.errors.get(activity.id);
                     const canLoadBody = activity.has_body === true && !activity.body && !hasLoadedBody;
-                    const showScrollHint = Boolean(
-                      emailBody && (hasHtmlBody || emailBody.length > 220)
-                    );
+                    const showEmbeddedScrollHint = Boolean(emailBody && shouldUseEmailWebView);
                     const hasHeaders = Boolean(
                       activity.subject ||
                       activity.from_email ||
@@ -7569,25 +7697,30 @@ export function LeadDetailView({
                     return (
                       <>
                         {hasHeaders ? (
-                          <View style={styles.emailHeaderContainer}>
+                          <View
+                            style={[
+                              styles.emailHeaderContainer,
+                              { backgroundColor: activityCardSurface, borderColor: colors.border },
+                            ]}
+                          >
                             {activity.subject ? (
-                              <Text style={styles.emailHeaderText}>
-                                <Text style={styles.emailHeaderLabel}>Subject:</Text> {activity.subject}
+                              <Text style={[styles.emailHeaderText, { color: colors.textSecondary }]}>
+                                <Text style={[styles.emailHeaderLabel, { color: colors.textPrimary }]}>Subject:</Text> {activity.subject}
                               </Text>
                             ) : null}
                             {activity.from_email ? (
-                              <Text style={styles.emailHeaderText}>
-                                <Text style={styles.emailHeaderLabel}>From:</Text> {activity.from_email}
+                              <Text style={[styles.emailHeaderText, { color: colors.textSecondary }]}>
+                                <Text style={[styles.emailHeaderLabel, { color: colors.textPrimary }]}>From:</Text> {activity.from_email}
                               </Text>
                             ) : null}
                             {toRecipients ? (
-                              <Text style={styles.emailHeaderText}>
-                                <Text style={styles.emailHeaderLabel}>To:</Text> {toRecipients}
+                              <Text style={[styles.emailHeaderText, { color: colors.textSecondary }]}>
+                                <Text style={[styles.emailHeaderLabel, { color: colors.textPrimary }]}>To:</Text> {toRecipients}
                               </Text>
                             ) : null}
                             {ccRecipients ? (
-                              <Text style={styles.emailHeaderText}>
-                                <Text style={styles.emailHeaderLabel}>Cc:</Text> {ccRecipients}
+                              <Text style={[styles.emailHeaderText, { color: colors.textSecondary }]}>
+                                <Text style={[styles.emailHeaderLabel, { color: colors.textPrimary }]}>Cc:</Text> {ccRecipients}
                               </Text>
                             ) : null}
                           </View>
@@ -7617,23 +7750,36 @@ export function LeadDetailView({
                         ) : null}
 
                         {bodyError ? (
-                          <Text style={[styles.activityHistoryNote, { marginTop: 6 }]}>
+                          <Text style={[styles.activityHistoryNote, { marginTop: 6, color: colors.textPrimary }]}>
                             {bodyError}
                           </Text>
                         ) : null}
 
                         {emailBody ? (
-                          hasTableHtml ? (
+                          shouldUseEmailWebView ? (
                             <>
-                              <View style={styles.emailWebViewContainer}>
+                              <View
+                                style={[
+                                  styles.emailWebViewContainer,
+                                  { backgroundColor: emailTableSurface },
+                                ]}
+                              >
                                 <WebView
-                                  style={styles.emailWebView}
+                                  style={[styles.emailWebView, { backgroundColor: emailTableSurface }]}
                                   originWhitelist={['*']}
-                                  source={{ html: buildEmailHtmlDocument(displayActivity.body || '') }}
+                                  source={{
+                                    html: buildEmailHtmlDocument(displayActivity.body || '', {
+                                      backgroundColor: emailTableSurface,
+                                      textColor: emailTableTextColor,
+                                      linkColor: '#2563EB',
+                                    }),
+                                  }}
                                   javaScriptEnabled={false}
                                   scrollEnabled={true}
+                                  nestedScrollEnabled={true}
                                   showsVerticalScrollIndicator={true}
                                   setSupportMultipleWindows={false}
+                                  androidLayerType="software"
                                   onShouldStartLoadWithRequest={(request) => {
                                     if (request.url === 'about:blank') {
                                       return true;
@@ -7646,32 +7792,39 @@ export function LeadDetailView({
                                   }}
                                 />
                               </View>
-                              {showScrollHint ? (
-                                <Text style={styles.emailScrollHint}>Scroll for more</Text>
+                              {showEmbeddedScrollHint ? (
+                                <Text style={[styles.emailScrollHint, { color: colors.textSecondary }]}>
+                                  Scroll for more
+                                </Text>
                               ) : null}
                             </>
                           ) : (
                             <>
-                              <ScrollView
-                                style={styles.emailBodyContainer}
-                                contentContainerStyle={styles.emailBodyContent}
-                                nestedScrollEnabled={true}
+                              <View
+                                style={[
+                                  styles.emailBodyContainer,
+                                  {
+                                    backgroundColor: emailBodySurface,
+                                    borderColor: colors.border,
+                                    borderWidth: isDark ? 1 : 0,
+                                    maxHeight: undefined,
+                                  },
+                                ]}
                               >
                                 {hasHtmlBody ? (
                                 <RenderHTML
                                   contentWidth={emailContentWidth}
-                                  source={{ html: sanitizeEmailHtml(displayActivity.body || '') }}
+                                  source={{ html: sanitizedEmailHtml }}
                                   ignoredDomTags={EMAIL_HTML_IGNORED_TAGS}
                                   baseStyle={emailHtmlBaseStyle}
                                   tagsStyles={emailHtmlTagStyles}
                                 />
                                 ) : (
-                                  <Text style={styles.emailBodyText}>{emailBody}</Text>
+                                  <Text style={[styles.emailBodyText, { color: colors.textPrimary }]}>
+                                    {emailBody}
+                                  </Text>
                                 )}
-                              </ScrollView>
-                              {showScrollHint ? (
-                                <Text style={styles.emailScrollHint}>Scroll for more</Text>
-                              ) : null}
+                              </View>
                             </>
                           )
                         ) : null}
@@ -7720,7 +7873,9 @@ export function LeadDetailView({
                   })()}
                   
                   {activity.user_email && (
-                    <Text style={styles.activityUserEmail}>by {activity.user_email}</Text>
+                    <Text style={[styles.activityUserEmail, { color: colors.textSecondary }]}>
+                      by {activity.user_email}
+                    </Text>
                   )}
                 </View>
               ))}
@@ -7747,7 +7902,9 @@ export function LeadDetailView({
             </View>
           ) : activitiesHasMore ? (
             <View style={{ alignItems: 'center', marginTop: 12 }}>
-              <Text style={styles.noTasksText}>No recent activity to show</Text>
+              <Text style={[styles.noTasksText, { color: colors.textSecondary }]}>
+                No recent activity to show
+              </Text>
               <TouchableOpacity
                 style={{ paddingHorizontal: 18, paddingVertical: 10 }}
                 onPress={() => void loadOlderActivities()}
@@ -7763,7 +7920,9 @@ export function LeadDetailView({
               </TouchableOpacity>
             </View>
           ) : (
-            <Text style={styles.noTasksText}>No activity logged yet</Text>
+            <Text style={[styles.noTasksText, { color: colors.textSecondary }]}>
+              No activity logged yet
+            </Text>
           )}
         </View>
       </ScrollView>
@@ -9221,6 +9380,43 @@ const partnerUpdateStyles = StyleSheet.create({
   },
   emojiText: {
     fontSize: 18,
+  },
+});
+
+const collapsibleSectionStyles = StyleSheet.create({
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 8,
+  },
+  headerButton: {
+    flex: 1,
+    minHeight: 32,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  headerTitleRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingRight: 8,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  headerTrailing: {
+    flexShrink: 0,
+  },
+  inlineHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
 });
 

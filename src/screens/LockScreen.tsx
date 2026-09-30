@@ -22,10 +22,10 @@ const LockScreen: React.FC<LockScreenProps> = ({ appName = 'Close With Mario' })
         resizeMode="contain"
       />
       <Text style={styles.title}>App Locked</Text>
-      <Text style={styles.subtitle}>Use Face ID or Touch ID to continue</Text>
+      <Text style={styles.subtitle}>Use biometrics to continue</Text>
 
       <TouchableOpacity style={styles.button} onPress={onUnlockPress}>
-        <Text style={styles.buttonText}>Unlock with Face ID</Text>
+        <Text style={styles.buttonText}>Unlock</Text>
       </TouchableOpacity>
     </View>
   );

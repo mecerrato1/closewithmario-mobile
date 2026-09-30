@@ -1,8 +1,9 @@
 // src/lib/secure-auth-storage.ts
 // Secure storage for biometric sign-in using expo-secure-store.
-// Stores credentials in iOS Keychain so users can sign in with Face ID / Touch ID.
+// Stores credentials securely so users can sign in with biometrics.
 
 import * as LocalAuthentication from 'expo-local-authentication';
+import { Platform } from 'react-native';
 
 // Lazy-load SecureStore so the app doesn't hard-crash
 // if the native module hasn't been built yet.
@@ -17,23 +18,25 @@ const BIOMETRIC_EMAIL_KEY = 'cwm_biometric_email';
 const BIOMETRIC_PASSWORD_KEY = 'cwm_biometric_password';
 const BIOMETRIC_ENABLED_KEY = 'cwm_biometric_enabled';
 
+type BiometricType = 'Face ID' | 'Touch ID' | 'Fingerprint' | 'Biometrics';
+
 // ── Biometric capabilities ──
 
 export async function checkBiometricCapabilities(): Promise<{
   isAvailable: boolean;
   isEnrolled: boolean;
-  biometricType: 'Face ID' | 'Touch ID' | 'Biometrics';
+  biometricType: BiometricType;
 }> {
   const hasHardware = await LocalAuthentication.hasHardwareAsync();
   const isEnrolled = await LocalAuthentication.isEnrolledAsync();
   const supported = await LocalAuthentication.supportedAuthenticationTypesAsync();
   const canAuthenticate = hasHardware && supported.length > 0;
 
-  let biometricType: 'Face ID' | 'Touch ID' | 'Biometrics' = 'Biometrics';
+  let biometricType: BiometricType = 'Biometrics';
   if (supported.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
-    biometricType = 'Face ID';
+    biometricType = Platform.OS === 'ios' ? 'Face ID' : 'Biometrics';
   } else if (supported.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
-    biometricType = 'Touch ID';
+    biometricType = Platform.OS === 'ios' ? 'Touch ID' : 'Fingerprint';
   }
 
   return {
@@ -49,9 +52,11 @@ export async function saveBiometricCredentials(email: string, password: string):
   if (!SecureStore) return false;
   try {
     await SecureStore.setItemAsync(BIOMETRIC_EMAIL_KEY, email);
-    await SecureStore.setItemAsync(BIOMETRIC_PASSWORD_KEY, password, {
-      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-    });
+    const passwordOptions =
+      Platform.OS === 'ios'
+        ? { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY }
+        : undefined;
+    await SecureStore.setItemAsync(BIOMETRIC_PASSWORD_KEY, password, passwordOptions);
     await SecureStore.setItemAsync(BIOMETRIC_ENABLED_KEY, 'true');
     return true;
   } catch (error) {

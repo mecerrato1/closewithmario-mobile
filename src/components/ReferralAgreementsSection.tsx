@@ -63,7 +63,7 @@ export function ReferralAgreementsSection({ leadId, leadSource }: Props) {
     loadingSignerStatus,
   } = useReferralAgreements({ leadId, leadSource });
 
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [openingPdfKey, setOpeningPdfKey] = useState<string | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
 

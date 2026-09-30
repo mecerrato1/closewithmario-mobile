@@ -3,6 +3,8 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { supabase } from './supabase';
 
+const DEFAULT_ANDROID_CHANNEL_ID = 'default';
+
 // Configure how notifications appear when app is in foreground
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -24,6 +26,15 @@ export async function registerForPushNotifications(userId: string): Promise<stri
   console.log('📱 [Notifications] Starting registration for user:', userId);
 
   try {
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync(DEFAULT_ANDROID_CHANNEL_ID, {
+        name: 'Default',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#7C3AED',
+      });
+    }
+
     // Check existing permissions
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;

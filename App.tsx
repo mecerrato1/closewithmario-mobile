@@ -24,7 +24,15 @@ import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler'
 import { Ionicons } from '@expo/vector-icons';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './src/lib/supabase';
-import { getUserRole, getUserTeamMemberId, canManageTeam, canViewAdsLibrary, type UserRole } from './src/lib/roles';
+import {
+  getUserCrmLeadScope,
+  getUserRole,
+  getUserTeamMemberId,
+  canManageTeam,
+  canViewAdsLibrary,
+  type UserCrmLeadScope,
+  type UserRole,
+} from './src/lib/roles';
 import { TEXT_TEMPLATES, fillTemplate, getTemplateText, getTemplateName, type TemplateVariables } from './src/lib/textTemplates';
 import type { Lead, MetaLead, SelectedLeadRef, LoanOfficer, Realtor, Activity, AttentionBadge } from './src/lib/types/leads';
 import { STATUSES, STATUS_DISPLAY_MAP, STATUS_COLOR_MAP, getLeadAlert, formatStatus, getLeadLastTouchedValue, getTimeAgo, sortLeadsByLastTouchedDesc } from './src/lib/leadsHelpers';
@@ -156,6 +164,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [unreadFilter, setUnreadFilter] = useState(false);
   const [trackedFilter, setTrackedFilter] = useState(false);
   const [hasManuallySelectedTab, setHasManuallySelectedTab] = useState(false);
+  const hasAutoSelectedTabRef = useRef(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [loanOfficers, setLoanOfficers] = useState<Array<{ id: string; name: string }>>([]);
   const [userRole, setUserRole] = useState<UserRole>('buyer');
@@ -165,6 +174,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [teamMemberId, setTeamMemberId] = useState<string | null>(null);
+  const [crmLeadScope, setCrmLeadScope] = useState<UserCrmLeadScope>('all');
   const [selectedLOFilter, setSelectedLOFilter] = useState<string | null>(null); // null = all LOs
   const [showLOPicker, setShowLOPicker] = useState(false);
   const [selectedSourceFilter, setSelectedSourceFilter] = useState<string>('all'); // 'all' = all sources
@@ -209,14 +219,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   }, [searchQuery]);
 
   const leadListQuery = useMemo<CrmLeadListQuery>(() => {
-    const scope =
-      userRole === 'super_admin' || userRole === 'admin'
-        ? 'all'
-        : userRole === 'loan_officer'
-          ? 'loan_officer'
-          : 'realtor';
     return {
-      scope,
+      scope: crmLeadScope,
       limit: 50,
       search: debouncedSearch.length >= 2 ? debouncedSearch : '',
       status: selectedStatusFilter || 'all',
@@ -245,7 +249,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     selectedStatusFilter,
     trackedFilter,
     unreadFilter,
-    userRole,
+    crmLeadScope,
   ]);
 
   const leadDirectory = usePaginatedLeads(
@@ -477,8 +481,14 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
         // Get user's role using the role system
         const role = await getUserRole(session.user.id, session.user.email);
+        const scope = await getUserCrmLeadScope(
+          session.user.id,
+          session.user.email,
+          role
+        );
         console.log('User role:', role);
         setUserRole(role);
+        setCrmLeadScope(scope);
         setRoleReady(true);
 
         // Fetch team member ID and lead_eligible status for loan officers
@@ -700,7 +710,14 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   // Auto-switch tab based on available leads (only on initial load)
   // If defaultToMyLeads is true, prefer 'leads' tab (My Leads / Website leads)
   useEffect(() => {
-    if (!loading && !hasManuallySelectedTab) {
+    if (
+      !loading
+      && !leadDirectory.searching
+      && leadDirectory.facets
+      && !hasManuallySelectedTab
+      && !hasAutoSelectedTabRef.current
+    ) {
+      hasAutoSelectedTabRef.current = true;
       const organicCount = leadDirectory.facets?.organic ?? leads.length;
       const metaCount = leadDirectory.facets?.meta ?? metaLeads.length;
       if (defaultToMyLeads) {
@@ -718,8 +735,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   }, [
     defaultToMyLeads,
     hasManuallySelectedTab,
-    leadDirectory.facets?.meta,
-    leadDirectory.facets?.organic,
+    leadDirectory.facets,
+    leadDirectory.searching,
     leads.length,
     loading,
     metaLeads.length,
@@ -733,6 +750,15 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
     try {
       const currentRole = await getUserRole(session.user.id, session.user.email);
+      const currentScope = await getUserCrmLeadScope(
+        session.user.id,
+        session.user.email,
+        currentRole
+      );
+      const scopeChanged = currentScope !== crmLeadScope;
+      if (scopeChanged) {
+        setCrmLeadScope(currentScope);
+      }
 
       // Refresh lead_eligible status for loan officers
       if (currentRole === 'loan_officer' && teamMemberId) {
@@ -755,7 +781,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       );
 
       const [, callbacksResult] = await Promise.all([
-        refreshLeadDirectory(),
+        scopeChanged ? Promise.resolve() : refreshLeadDirectory(),
         callbacksPromise,
       ]);
       if (callbacksResult.error) {
@@ -2713,7 +2739,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     }
     return null;
   };
-  const renderLeadListEmpty = () => (
+  const renderLeadListEmpty = () => leadDirectory.searching ? null : (
     <View style={{ alignItems: 'center', paddingHorizontal: 24, paddingVertical: 48 }}>
       <Ionicons name="search-outline" size={36} color="#94A3B8" />
       <Text style={{ marginTop: 10, color: '#64748B', textAlign: 'center' }}>
@@ -2878,33 +2904,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         </Animated.View>
       </Animated.View>
 
-      {loading && (
-        <View style={styles.centerContent}>
-          <ActivityIndicator />
-          <Text style={styles.subtitle}>Loading leads…</Text>
-        </View>
-      )}
-
-      {!loading && errorMessage && leadDirectory.items.length === 0 && (
-        <View style={styles.centerContent}>
-          <Text style={styles.errorText}>Error: {errorMessage}</Text>
-          <TouchableOpacity
-            style={{ marginTop: 14, borderRadius: 10, backgroundColor: '#7C3AED', paddingHorizontal: 18, paddingVertical: 10 }}
-            onPress={() => {
-              if (initialError) {
-                setInitializationAttempt((attempt) => attempt + 1);
-              } else {
-                void retryLeadDirectory();
-              }
-            }}
-          >
-            <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Retry</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {!loading
-        && (leadDirectory.items.length > 0 || !errorMessage)
+      {!initializing
         && roleReady
         && userRole !== 'buyer' && (
         <>
@@ -2942,12 +2942,19 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 placeholder="Search leads (2+ characters)"
                 placeholderTextColor="#94A3B8"
                 value={searchQuery}
-                onChangeText={setSearchQuery}
+                onChangeText={(text) => {
+                  // Keep the current tab if typing starts before the first page loads.
+                  hasAutoSelectedTabRef.current = true;
+                  setSearchQuery(text);
+                }}
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="search"
                 blurOnSubmit
               />
+              {leadDirectory.searching && (
+                <ActivityIndicator size="small" color="#7C3AED" accessibilityLabel="Searching leads" />
+              )}
               {searchQuery.length > 0 && (
                 <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.searchClearButton}>
                   <Ionicons name="close" size={18} color="#94A3B8" />
@@ -3468,6 +3475,31 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             </Modal>
           )}
         </>
+      )}
+
+      {loading && (
+        <View style={styles.centerContent}>
+          <ActivityIndicator />
+          <Text style={styles.subtitle}>Loading leads…</Text>
+        </View>
+      )}
+
+      {!loading && errorMessage && leadDirectory.items.length === 0 && (
+        <View style={styles.centerContent}>
+          <Text style={styles.errorText}>Error: {errorMessage}</Text>
+          <TouchableOpacity
+            style={{ marginTop: 14, borderRadius: 10, backgroundColor: '#7C3AED', paddingHorizontal: 18, paddingVertical: 10 }}
+            onPress={() => {
+              if (initialError) {
+                setInitializationAttempt((attempt) => attempt + 1);
+              } else {
+                void retryLeadDirectory();
+              }
+            }}
+          >
+            <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Retry</Text>
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* Lead Content - FlatLists for each tab */}

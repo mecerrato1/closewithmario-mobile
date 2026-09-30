@@ -61,7 +61,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
   // Biometric state
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
-  const [biometricType, setBiometricType] = useState<string>('Face ID');
+  const [biometricType, setBiometricType] = useState<string>('Biometrics');
   const [biometricEmail, setBiometricEmail] = useState<string | null>(null);
   const [biometricLoading, setBiometricLoading] = useState(false);
 
@@ -147,7 +147,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
         } else if (data.session) {
           // Save email for next time
           await saveEmail(email);
-          // Save credentials for biometric sign-in (stored in iOS Keychain)
+          // Save credentials for biometric sign-in on supported devices
           const biometricSaved = await saveBiometricCredentials(email, password);
           setBiometricEnabled(biometricSaved);
           setBiometricEmail(biometricSaved ? email : null);
@@ -391,8 +391,14 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
   };
 
   const isAnyLoading = authLoading || biometricLoading;
-  const showBiometricSection = mode === 'signIn' && Platform.OS === 'ios';
+  const showBiometricSection = mode === 'signIn';
   const biometricReady = biometricAvailable && biometricEnabled;
+  const appVersion = Constants.expoConfig?.version;
+  const appBuild =
+    Constants.expoConfig?.ios?.buildNumber ??
+    (typeof Constants.expoConfig?.android?.versionCode === 'number'
+      ? String(Constants.expoConfig.android.versionCode)
+      : null);
   const biometricHelperText = biometricReady
     ? biometricEmail
       ? `Use ${biometricType} for ${biometricEmail}.`
@@ -622,7 +628,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
 
           {/* Version */}
           <Text style={s.versionText}>
-            v{Constants.expoConfig?.version} (Build {Constants.expoConfig?.ios?.buildNumber})
+            {appBuild ? `v${appVersion} (Build ${appBuild})` : `v${appVersion}`}
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
