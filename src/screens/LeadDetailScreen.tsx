@@ -59,7 +59,6 @@ import { toggleLeadTracking, updateTrackingNote, getTrackingReasonLabel } from '
 import { AiRewriteToolbar, AiRewriteToolbarRef } from '../components/AiRewriteToolbar';
 import { ReferralAgreementsSection } from '../components/ReferralAgreementsSection';
 import { MetaAdPreviewModal } from '../components/MetaAdPreviewModal';
-import { ApprovalRecipeSection } from '../components/ApprovalRecipeSection';
 import { LeadRealtorRolesSection } from '../components/LeadRealtorRolesSection';
 import { useLeadDetailBootstrap } from '../features/leads/useLeadDetailBootstrap';
 import {
@@ -5982,6 +5981,16 @@ export function LeadDetailView({
               if (priceRange) chips.push({ label: '', value: priceRange });
               if (creditRange) chips.push({ label: '', value: `Credit: ${creditRange}` });
             }
+            const preferredLanguage = (
+              (record as Lead | MetaLead).preferred_language ||
+              (isMeta ? (record as MetaLead).form_data?.preferred_language : null)
+            )?.trim();
+            if (preferredLanguage) {
+              chips.splice(chips.length > 0 ? 1 : 0, 0, {
+                label: 'Language',
+                value: preferredLanguage.charAt(0).toUpperCase() + preferredLanguage.slice(1),
+              });
+            }
             return chips.map((chip, i) => (
               <View key={i} style={[styles.dealChip, { backgroundColor: '#F1F5F9', borderColor: '#E2E8F0' }]}>
                 {chip.label ? <Text style={styles.dealChipLabel}>{chip.label}</Text> : null}
@@ -7188,12 +7197,6 @@ export function LeadDetailView({
               )}
             </>
           )}
-
-          <View style={styles.sectionDivider} />
-          <ApprovalRecipeSection
-            leadId={record.id}
-            leadSource={isMeta ? 'meta' : 'organic'}
-          />
 
           <View style={{ marginTop: 16 }}>
             {renderCollapsibleSectionHeader('team', 'Assignments & Roles', 'people-outline')}

@@ -1,7 +1,38 @@
 🚀 Expo & EAS Workflow Cheat Sheet
-To start it on a mac with the simulator:
-npx expo start --dev-client
-then press i to start the simulator
+## 📱 Run on the iOS Simulator (Xcode 27)
+Xcode 27 renamed `Simulator.app` → `DeviceHub.app`, so pressing `i` in
+`npx expo start` no longer works ("Can't determine id of Simulator app").
+Workaround: start Metro normally, then open the dev client manually.
+
+⚠️ Do NOT use `npx expo@latest` — its newer Metro is incompatible with this
+project's React Native version and bundling fails with
+`react-native/asset-registry` errors. Always use the project's own CLI.
+
+### Every day (2 steps)
+
+1. Start Metro:
+
+       npx expo start --dev-client -c
+
+   (don't press `i` — it's broken on Xcode 27)
+
+2. In a second terminal, open the app connected to Metro:
+
+       xcrun simctl openurl booted "exp+closewithmario-mobile://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081"
+
+   Or just open the app in the simulator and tap the bundler it finds.
+
+Press `r` in Metro to reload after code changes.
+
+### One-time setup (install the dev client on the simulator)
+
+Only needed once, or after native dependency changes:
+
+1. `eas build -p ios --profile development-simulator`
+   (the regular `development` profile is ad hoc — it does NOT run on simulators)
+2. Download the `.tar.gz` from the build page, then `tar -xzf <file>.tar.gz`
+3. `xcrun simctl boot "iPhone 15 Pro Max"` and `open -a DeviceHub`
+4. `xcrun simctl install booted ./closewithmariomobile.app`
 
 For local development:
 eas build -p ios --profile development
