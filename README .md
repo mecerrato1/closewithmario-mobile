@@ -8,7 +8,7 @@ Workaround: start Metro normally, then open the dev client manually.
 project's React Native version and bundling fails with
 `react-native/asset-registry` errors. Always use the project's own CLI.
 
-### Every day (2 steps)
+### Every day (3 steps)
 
 1. Start Metro:
 
@@ -16,7 +16,14 @@ project's React Native version and bundling fails with
 
    (don't press `i` — it's broken on Xcode 27)
 
-2. In a second terminal, open the app connected to Metro:
+2. Boot the simulator (skip if one is already running):
+
+       xcrun simctl boot "iPhone 15 Pro Max" && open -a DeviceHub
+
+   `openurl booted` fails with "No devices are booted" if you skip this —
+   e.g. after a Mac restart. Booting an already-booted device is harmless.
+
+3. Open the app connected to Metro:
 
        xcrun simctl openurl booted "exp+closewithmario-mobile://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8081"
 

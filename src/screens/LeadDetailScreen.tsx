@@ -384,7 +384,6 @@ const splitContactName = (name: string, fallbackFirstName: string) => {
 
 const buildLeadContactCandidates = ({
   record,
-  isMeta,
   phone,
   email,
   currentRealtorName,
@@ -392,7 +391,6 @@ const buildLeadContactCandidates = ({
   bootstrapContacts,
 }: {
   record: Lead | MetaLead | null | undefined;
-  isMeta: boolean;
   phone: string;
   email: string;
   currentRealtorName: string | null;
@@ -418,7 +416,7 @@ const buildLeadContactCandidates = ({
     });
   }
 
-  const coBorrowers = !isMeta ? (record as Lead).metadata?.co_borrowers : undefined;
+  const coBorrowers = record.metadata?.co_borrowers;
   if (Array.isArray(coBorrowers) && coBorrowers.length > 0) {
     const primaryFullName = `${record.first_name || ''} ${record.last_name || ''}`.trim() || 'Primary Borrower';
 
@@ -3894,7 +3892,6 @@ export function LeadDetailView({
   const phone = record?.phone || '';
   const contactCandidates = buildLeadContactCandidates({
     record,
-    isMeta,
     phone,
     email,
     currentRealtorName,
@@ -4162,6 +4159,49 @@ export function LeadDetailView({
     { label: 'Email', value: loanOriginator.email || null },
     { label: 'Phone', value: loanOriginator.phone ? formatPhoneNumber(loanOriginator.phone) : null },
   ] : [];
+  const coBorrowers = record?.metadata?.co_borrowers;
+  const coBorrowerCard = Array.isArray(coBorrowers) && coBorrowers.length > 0 ? (
+    <View style={[styles.coBorrowerCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+      <Text style={[styles.coBorrowerHeader, { color: colors.textPrimary }]}>
+        CO-BORROWERS ({coBorrowers.length})
+      </Text>
+      {coBorrowers.map((cb: CoBorrowerInfo, idx: number) => (
+        <View key={idx} style={[styles.coBorrowerItem, idx > 0 && { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10, marginTop: 10 }]}>
+          <Text style={[styles.coBorrowerName, { color: colors.textPrimary }]}>
+            {`${cb.first_name} ${cb.last_name}`.trim()}
+          </Text>
+          {cb.phone ? (
+            <TouchableOpacity onPress={() => Linking.openURL(`tel:${cb.phone}`)} style={styles.coBorrowerRow}>
+              <Ionicons name="call-outline" size={14} color={PLUM} style={{ marginRight: 6 }} />
+              <Text style={[styles.coBorrowerLink, { color: PLUM }]}>{formatPhoneNumber(cb.phone)}</Text>
+            </TouchableOpacity>
+          ) : null}
+          {cb.email ? (
+            <TouchableOpacity onPress={() => Linking.openURL(`mailto:${cb.email}`)} style={styles.coBorrowerRow}>
+              <Ionicons name="mail-outline" size={14} color={PLUM} style={{ marginRight: 6 }} />
+              <Text style={[styles.coBorrowerLink, { color: PLUM }]}>{cb.email}</Text>
+            </TouchableOpacity>
+          ) : null}
+          {cb.employer_name ? (
+            <View style={styles.coBorrowerRow}>
+              <Ionicons name="business-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
+              <Text style={[styles.coBorrowerDetail, { color: colors.textSecondary }]}>
+                {cb.employer_name}{cb.job_title ? ` — ${cb.job_title}` : ''}
+              </Text>
+            </View>
+          ) : null}
+          {cb.total_monthly_income != null && cb.total_monthly_income > 0 ? (
+            <View style={styles.coBorrowerRow}>
+              <Ionicons name="cash-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
+              <Text style={[styles.coBorrowerDetail, { color: colors.textSecondary }]}>
+                ${cb.total_monthly_income.toLocaleString()}/mo
+              </Text>
+            </View>
+          ) : null}
+        </View>
+      ))}
+    </View>
+  ) : null;
   const recordMetadata = record?.metadata || null;
   const metadataSections = buildMetadataSections(recordMetadata as Record<string, unknown> | null);
   const employmentMetadataSections = metadataSections.filter(
@@ -6890,52 +6930,7 @@ export function LeadDetailView({
               })()}
 
               {/* Co-Borrowers Section */}
-              {(() => {
-                const coBorrowers = (record as Lead).metadata?.co_borrowers;
-                if (!coBorrowers || coBorrowers.length === 0) return null;
-                return (
-                  <View style={[styles.coBorrowerCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-                    <Text style={[styles.coBorrowerHeader, { color: colors.textPrimary }]}>
-                      CO-BORROWERS ({coBorrowers.length})
-                    </Text>
-                    {coBorrowers.map((cb: CoBorrowerInfo, idx: number) => (
-                      <View key={idx} style={[styles.coBorrowerItem, idx > 0 && { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10, marginTop: 10 }]}>
-                        <Text style={[styles.coBorrowerName, { color: colors.textPrimary }]}>
-                          {`${cb.first_name} ${cb.last_name}`.trim()}
-                        </Text>
-                        {cb.phone ? (
-                          <TouchableOpacity onPress={() => Linking.openURL(`tel:${cb.phone}`)} style={styles.coBorrowerRow}>
-                            <Ionicons name="call-outline" size={14} color={PLUM} style={{ marginRight: 6 }} />
-                            <Text style={[styles.coBorrowerLink, { color: PLUM }]}>{formatPhoneNumber(cb.phone)}</Text>
-                          </TouchableOpacity>
-                        ) : null}
-                        {cb.email ? (
-                          <TouchableOpacity onPress={() => Linking.openURL(`mailto:${cb.email}`)} style={styles.coBorrowerRow}>
-                            <Ionicons name="mail-outline" size={14} color={PLUM} style={{ marginRight: 6 }} />
-                            <Text style={[styles.coBorrowerLink, { color: PLUM }]}>{cb.email}</Text>
-                          </TouchableOpacity>
-                        ) : null}
-                        {cb.employer_name ? (
-                          <View style={styles.coBorrowerRow}>
-                            <Ionicons name="business-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
-                            <Text style={[styles.coBorrowerDetail, { color: colors.textSecondary }]}>
-                              {cb.employer_name}{cb.job_title ? ` — ${cb.job_title}` : ''}
-                            </Text>
-                          </View>
-                        ) : null}
-                        {cb.total_monthly_income != null && cb.total_monthly_income > 0 ? (
-                          <View style={styles.coBorrowerRow}>
-                            <Ionicons name="cash-outline" size={14} color="#64748B" style={{ marginRight: 6 }} />
-                            <Text style={[styles.coBorrowerDetail, { color: colors.textSecondary }]}>
-                              ${cb.total_monthly_income.toLocaleString()}/mo
-                            </Text>
-                          </View>
-                        ) : null}
-                      </View>
-                    ))}
-                  </View>
-                );
-              })()}
+              {coBorrowerCard}
               <LeadSummaryCard
                 title="LOAN ORIGINATOR"
                 rows={leadOriginatorRows}
@@ -7187,6 +7182,8 @@ export function LeadDetailView({
                   </>
                 );
               })()}
+              {/* Co-Borrowers Section */}
+              {coBorrowerCard}
               {!shouldHideImportedMetaMetadata && (
                 <LeadMetadataCard
                   sections={additionalMetadataSections}
