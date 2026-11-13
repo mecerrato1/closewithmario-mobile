@@ -55,7 +55,7 @@ export const CLOSE_WITH_MARIO: BrandConfig = {
   colors: {
     primary: '#4C1D95',
     accent: '#7C3AED',
-    accentStrong: '#6D28D9',
+    accentStrong: '#7C3AED',
     accentText: '#6D28D9',
     tint: '#F5F3FF',
     tintBorder: '#DDD6FE',

@@ -4,6 +4,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../../styles/theme';
 import { AssignedRealtor, getRealtorFullName, getRealtorInitials, STAGE_CONFIG } from '../../lib/types/realtors';
+import { themedStyles } from '../../brand/themedStyles';
 
 interface RealtorCardProps {
   realtor: AssignedRealtor;
@@ -62,7 +63,7 @@ export default function RealtorCard({ realtor, onPress }: RealtorCardProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles({
   card: {
     flexDirection: 'row',
     alignItems: 'center',

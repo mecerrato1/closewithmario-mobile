@@ -29,6 +29,7 @@ import type {
   PendingScenarioUpdateChange,
   ThreadSource,
 } from '../../features/messages/messageTypes';
+import { themedStyles } from '../../brand/themedStyles';
 
 type FilterMode = 'all' | 'unread';
 
@@ -815,7 +816,7 @@ export default function MessagesTabScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles({
   safeAreaShell: {
     flex: 1,
   },

@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useQuickCaptures } from '../hooks/useQuickCaptures';
 import type { QuickCapture, QuickCaptureStatus } from '../types';
+import { themedStyles } from '../../../brand/themedStyles';
 
 interface QuickCapturesListScreenProps {
   onCapturePress: (capture: QuickCapture) => void;
@@ -278,7 +279,7 @@ export default function QuickCapturesListScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',

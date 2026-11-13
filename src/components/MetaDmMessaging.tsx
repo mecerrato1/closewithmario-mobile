@@ -23,6 +23,7 @@ import {
 import { useMetaDmConversation } from '../features/messages/useMetaDmConversation';
 import { usePaginatedMessageHistory } from '../features/messages/usePaginatedMessageHistory';
 import { useThemeColors } from '../styles/theme';
+import { themedStyles } from '../brand/themedStyles';
 
 type LeadSource = 'organic' | 'meta';
 type MetaDmMessage = MetaDmHistoryMessage;
@@ -719,7 +720,7 @@ export function MetaDmMessaging({
 
 const PLUM = '#4C1D95';
 
-const dmStyles = StyleSheet.create({
+const dmStyles = themedStyles({
   container: {
     flex: 1,
   },

@@ -12,6 +12,7 @@ import { useThemeColors } from '../styles/theme';
 import { useReferralAgreements } from '../hooks/useReferralAgreements';
 import type { ReferralAgreement, SignerStatus } from '../lib/types/referralAgreement';
 import { authenticatedFetch } from '../lib/authenticatedFetch';
+import { themedStyles } from '../brand/themedStyles';
 
 const API_BASE_URL = 'https://www.closewithmario.com';
 
@@ -390,7 +391,7 @@ function DetailRow({ label, value, colors }: DetailRowProps) {
   );
 }
 
-const localStyles = StyleSheet.create({
+const localStyles = themedStyles({
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',

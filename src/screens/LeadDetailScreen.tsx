@@ -68,6 +68,7 @@ import {
 import { useLeadActivityBodies } from '../features/leads/useLeadActivityBodies';
 import { searchActiveRealtors } from '../lib/supabase/leadRealtorRoles';
 
+import { themedStyles } from '../brand/themedStyles';
 const PLUM = '#4C1D95';
 const CRM_API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_BASE_URL || 'https://www.closewithmario.com'
@@ -8549,7 +8550,7 @@ export function LeadDetailView({
 }
 
 // Styles for AI Recommendation Modal
-const aiRecommendationStyles = StyleSheet.create({
+const aiRecommendationStyles = themedStyles({
   container: {
     backgroundColor: '#1E293B',
     borderRadius: 16,
@@ -8619,7 +8620,7 @@ const aiRecommendationStyles = StyleSheet.create({
 });
 
 // Styles for Tracking Section
-const trackingStyles = StyleSheet.create({
+const trackingStyles = themedStyles({
   container: {
     marginTop: 16,
     paddingTop: 16,
@@ -8697,7 +8698,7 @@ const trackingStyles = StyleSheet.create({
 });
 
 // Styles for Tracking Info Modal
-const trackingInfoStyles = StyleSheet.create({
+const trackingInfoStyles = themedStyles({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -8750,7 +8751,7 @@ const trackingInfoStyles = StyleSheet.create({
   },
 });
 
-const scenarioShareStyles = StyleSheet.create({
+const scenarioShareStyles = themedStyles({
   container: {
     marginTop: 16,
     paddingTop: 16,
@@ -9152,7 +9153,7 @@ const scenarioShareStyles = StyleSheet.create({
   },
 });
 
-const incomeAnalysisStyles = StyleSheet.create({
+const incomeAnalysisStyles = themedStyles({
   container: {
     marginTop: 16,
     paddingTop: 16,
@@ -9274,7 +9275,7 @@ const incomeAnalysisStyles = StyleSheet.create({
 });
 
 // Styles for Partner Update Section
-const partnerUpdateStyles = StyleSheet.create({
+const partnerUpdateStyles = themedStyles({
   container: {
     marginTop: 16,
     paddingTop: 16,
@@ -9383,7 +9384,7 @@ const partnerUpdateStyles = StyleSheet.create({
   },
 });
 
-const collapsibleSectionStyles = StyleSheet.create({
+const collapsibleSectionStyles = themedStyles({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -9421,7 +9422,7 @@ const collapsibleSectionStyles = StyleSheet.create({
 });
 
 // Styles for the Detail/Messages tab bar
-const detailTabStyles = StyleSheet.create({
+const detailTabStyles = themedStyles({
   tabBar: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',

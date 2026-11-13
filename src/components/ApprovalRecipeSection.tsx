@@ -22,6 +22,7 @@ import {
   type ApprovalRecipeLeadSource,
   type ApprovalRecipeRow,
 } from '../lib/types/approvalRecipe';
+import { themedStyles } from '../brand/themedStyles';
 
 const PLUM = '#4C1D95';
 
@@ -670,7 +671,7 @@ export function ApprovalRecipeSection({ leadId, leadSource }: ApprovalRecipeSect
   );
 }
 
-const localStyles = StyleSheet.create({
+const localStyles = themedStyles({
   container: {
     borderWidth: 1,
     borderRadius: 12,

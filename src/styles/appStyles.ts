@@ -1,7 +1,8 @@
 import { StyleSheet, Platform } from 'react-native';
 import Constants from 'expo-constants';
+import { themedStyles } from '../brand/themedStyles';
 
-export const styles = StyleSheet.create({
+export const styles = themedStyles({
   container: {
     flex: 1,
     backgroundColor: '#F5F7FA',

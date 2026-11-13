@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { callRewriteApi } from '../lib/aiRewriteService';
+import { themedStyles } from '../brand/themedStyles';
 
 export type AiTone = 'professional' | 'friendly' | 'concise' | 'detailed' | 'urgent';
 
@@ -210,7 +211,7 @@ export const AiRewriteToolbar = forwardRef<AiRewriteToolbarRef, AiRewriteToolbar
   );
 });
 
-const s = StyleSheet.create({
+const s = themedStyles({
   container: {
     marginTop: 12,
     marginBottom: 16,

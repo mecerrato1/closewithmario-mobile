@@ -37,6 +37,7 @@ import {
   parseSmsVoiceSummary,
   type SmsMediaAttachment,
 } from '../lib/smsMedia';
+import { themedStyles } from '../brand/themedStyles';
 
 type SmsMessage = SmsHistoryMessage;
 
@@ -976,7 +977,7 @@ export function SmsMessaging({
   );
 }
 
-const smsStyles = StyleSheet.create({
+const smsStyles = themedStyles({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',

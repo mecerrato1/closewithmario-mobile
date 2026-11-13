@@ -44,6 +44,7 @@ import {
   formatDPAForText,
 } from '../utils/dpaCalculations';
 import DPAEntryModal from '../components/DPAEntryModal';
+import { themedStyles } from '../brand/themedStyles';
 
 const STORAGE_KEY = '@mortgage_calculator_inputs';
 const PLUM = '#4C1D95';
@@ -434,7 +435,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
     return value.replace(/,/g, '');
   };
 
-  const styles = StyleSheet.create({
+  const styles = themedStyles({
     container: {
       flex: 1,
       backgroundColor: colors.background,

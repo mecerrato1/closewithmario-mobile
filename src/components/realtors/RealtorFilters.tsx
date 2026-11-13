@@ -3,6 +3,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { useThemeColors } from '../../styles/theme';
 import { RelationshipStage, STAGE_CONFIG } from '../../lib/types/realtors';
+import { themedStyles } from '../../brand/themedStyles';
 
 interface RealtorFiltersProps {
   selectedStage: RelationshipStage | 'all';
@@ -58,7 +59,7 @@ export default function RealtorFilters({ selectedStage, onStageChange }: Realtor
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles({
   container: {
     paddingHorizontal: 16,
     paddingVertical: 8,

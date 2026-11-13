@@ -16,6 +16,7 @@ import { Session } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import { useThemeColors } from '../../styles/theme';
 import { saveContact } from '../../utils/vcard';
+import { themedStyles } from '../../brand/themedStyles';
 
 interface AssignedLO {
   id: string;
@@ -212,7 +213,7 @@ export default function LoanOfficersTabScreen({ session, onClose }: LoanOfficers
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles({
   container: {
     flex: 1,
   },

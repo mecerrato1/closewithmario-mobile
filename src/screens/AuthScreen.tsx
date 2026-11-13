@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  SafeAreaView,
   Alert,
   ActivityIndicator,
   Linking,
@@ -16,6 +17,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import BrandLogo from '../brand/BrandLogo';
+import { DENSE_TEXT_MAX_SCALE, MIN_TOUCH_TARGET, TEXT_MAX_SCALE } from '../brand/layout';
 import { PUBLIC_BRAND } from '../brand/brands';
 import { Session } from '@supabase/supabase-js';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -409,6 +411,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
   return (
     <View style={[s.container, { backgroundColor: isDark ? colors.background : brand.colors.canvas }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
+      <SafeAreaView style={s.keyboardView}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.keyboardView}>
         <ScrollView
           contentContainerStyle={s.scrollContent}
@@ -422,14 +425,21 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
 
           {/* Tagline */}
           {brand.tagline && (
-            <Text style={[s.tagline, { color: colors.textSecondary }]}>
+            <Text maxFontSizeMultiplier={TEXT_MAX_SCALE} style={[s.tagline, { color: colors.textSecondary }]}>
               {brand.tagline}
             </Text>
           )}
 
           {/* Welcome */}
           <View style={s.welcomeSection}>
-            <Text style={[s.welcomeTitle, { color: colors.textPrimary }]}>
+            <Text
+              accessibilityRole="header"
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.6}
+              maxFontSizeMultiplier={DENSE_TEXT_MAX_SCALE}
+              style={[s.welcomeTitle, { color: colors.textPrimary }]}
+            >
               Welcome back
             </Text>
           </View>
@@ -473,7 +483,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
                   onChangeText={setPassword}
                   editable={!isAnyLoading}
                 />
-                <TouchableOpacity style={s.visibilityToggle} onPress={() => setShowPassword(!showPassword)} disabled={isAnyLoading}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel={showPassword ? 'Hide password' : 'Show password'} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={s.visibilityToggle} onPress={() => setShowPassword(!showPassword)} disabled={isAnyLoading}>
                   <Ionicons name={showPassword ? 'eye-outline' : 'eye-off-outline'} size={20} color="#94A3B8" />
                 </TouchableOpacity>
               </View>
@@ -481,7 +491,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
 
             {/* Forgot Password */}
             {mode === 'signIn' && (
-              <TouchableOpacity onPress={handleForgotPassword} disabled={isAnyLoading} style={s.forgotLink}>
+              <TouchableOpacity accessibilityRole="button" onPress={handleForgotPassword} disabled={isAnyLoading} style={s.forgotLink}>
                 <Text style={s.forgotText}>Forgot password?</Text>
               </TouchableOpacity>
             )}
@@ -495,7 +505,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
             )}
 
             {/* Sign In Button */}
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={handleEmailPasswordAuth}
               disabled={isAnyLoading}
               activeOpacity={0.85}
@@ -528,7 +538,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
                   <Text style={[s.biometricDividerText, { color: '#94A3B8' }]}>or</Text>
                   <View style={[s.biometricDividerLine, { backgroundColor: colors.border }]} />
                 </View>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[
                     s.biometricButton,
                     !biometricReady && s.biometricButtonDisabled,
@@ -563,7 +573,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
             )}
 
             {ALLOW_SIGNUP && (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 onPress={() => setMode(mode === 'signIn' ? 'signUp' : 'signIn')}
                 style={s.switchModeLink}
               >
@@ -584,7 +594,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
 
           {/* OAuth Buttons */}
           <View style={s.oauthRow}>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={[s.oauthButton, { backgroundColor: colors.cardBackground, borderColor: colors.border }, isAnyLoading && s.buttonDisabled]}
               onPress={handleGoogleSignIn}
               disabled={isAnyLoading}
@@ -597,7 +607,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
             </TouchableOpacity>
 
             {Platform.OS === 'ios' && (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[s.oauthButton, { backgroundColor: colors.cardBackground, borderColor: colors.border }, isAnyLoading && s.buttonDisabled]}
                 onPress={handleAppleSignIn}
                 disabled={isAnyLoading}
@@ -610,7 +620,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
           </View>
 
           {/* Bottom Hint */}
-          <TouchableOpacity onPress={() => Linking.openURL(SIGNUP_URL)}>
+          <TouchableOpacity accessibilityRole="button" onPress={() => Linking.openURL(SIGNUP_URL)}>
             <Text style={[s.bottomHint, { color: colors.textSecondary }]}>
               Need an account?{' '}
               <Text style={s.bottomHintLink}>Create one here</Text>
@@ -623,6 +633,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
+      </SafeAreaView>
     </View>
   );
 }

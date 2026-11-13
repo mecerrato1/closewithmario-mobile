@@ -58,6 +58,7 @@ import {
   uploadRealtorProfilePicture, 
   removeRealtorProfilePicture 
 } from '../../utils/profilePicture';
+import { themedStyles } from '../../brand/themedStyles';
 
 const PLUM = '#4C1D95';
 
@@ -1368,7 +1369,7 @@ export default function RealtorDetailScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles({
   container: {
     flex: 1,
   },

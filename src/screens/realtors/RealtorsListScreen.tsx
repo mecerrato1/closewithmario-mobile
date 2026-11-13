@@ -18,6 +18,7 @@ import { useRealtors } from '../../hooks/useRealtors';
 import { AssignedRealtor, RelationshipStage } from '../../lib/types/realtors';
 import type { UserRole } from '../../lib/roles';
 import RealtorCard from '../../components/realtors/RealtorCard';
+import { themedStyles } from '../../brand/themedStyles';
 
 const PLUM = '#4C1D95';
 
@@ -334,7 +335,7 @@ export default function RealtorsListScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles({
   container: {
     flex: 1,
   },

@@ -20,6 +20,7 @@ import { supabase } from '../lib/supabase';
 import { fetchMetaAdsLibrary, type MetaAdLibraryItem } from '../lib/supabase/metaAdsLibrary';
 import type { UserRole } from '../lib/roles';
 import { useThemeColors } from '../styles/theme';
+import { themedStyles } from '../brand/themedStyles';
 
 type PlatformFilter = 'all' | 'facebook' | 'instagram' | 'other';
 
@@ -557,7 +558,7 @@ export default function AdsLibraryScreen({ session, onBack, userRole }: Props) {
   );
 }
 
-const localStyles = StyleSheet.create({
+const localStyles = themedStyles({
   container: {
     flex: 1,
   },

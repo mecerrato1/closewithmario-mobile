@@ -27,6 +27,7 @@ import {
   uploadRealtorProfilePicture 
 } from '../../utils/profilePicture';
 import { getDeviceContacts, PickedContact } from '../../utils/vcard';
+import { themedStyles } from '../../brand/themedStyles';
 
 interface AddRealtorScreenProps {
   userId: string;
@@ -737,7 +738,7 @@ export default function AddRealtorScreen({ userId, onBack, onSuccess }: AddRealt
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles({
   container: {
     flex: 1,
   },

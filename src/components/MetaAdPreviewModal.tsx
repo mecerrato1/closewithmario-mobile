@@ -17,6 +17,7 @@ import { Audio, InterruptionModeIOS, ResizeMode, Video, type AVPlaybackStatus } 
 import { WebView } from 'react-native-webview';
 import { supabase } from '../lib/supabase';
 import { useThemeColors } from '../styles/theme';
+import { themedStyles } from '../brand/themedStyles';
 
 const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || 'https://www.closewithmario.com').replace(/\/$/, '');
 
@@ -912,7 +913,7 @@ export function MetaAdPreviewModal({
 
 const PLUM = '#4C1D95';
 
-const modalStyles = StyleSheet.create({
+const modalStyles = themedStyles({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(2, 6, 23, 0.88)',

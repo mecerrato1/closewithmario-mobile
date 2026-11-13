@@ -4,6 +4,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Linking } from 'r
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../../styles/theme';
 import { AssignedRealtor, getRealtorFullName, getRealtorInitials } from '../../lib/types/realtors';
+import { themedStyles } from '../../brand/themedStyles';
 
 interface NeedsLoveSectionProps {
   realtors: AssignedRealtor[];
@@ -80,7 +81,7 @@ export default function NeedsLoveSection({ realtors, onRealtorPress }: NeedsLove
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles({
   container: {
     marginBottom: 8,
   },

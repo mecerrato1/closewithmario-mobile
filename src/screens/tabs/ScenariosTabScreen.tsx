@@ -3,6 +3,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../../styles/theme';
+import { themedStyles } from '../../brand/themedStyles';
 
 interface ScenariosTabScreenProps {
   onClose?: () => void;
@@ -39,7 +40,7 @@ export default function ScenariosTabScreen({ onClose }: ScenariosTabScreenProps)
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles({
   container: {
     flex: 1,
   },

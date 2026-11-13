@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import type { QuickCapture } from '../types';
 import type { MatchedLead } from '../services/leadMatchService';
+import { themedStyles } from '../../../brand/themedStyles';
 
 type MergeField = {
   key: string;
@@ -287,7 +288,7 @@ export default function LeadMergeView({
   );
 }
 
-const s = StyleSheet.create({
+const s = themedStyles({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',

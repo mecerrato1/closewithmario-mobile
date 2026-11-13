@@ -17,6 +17,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRealtors } from '../../../hooks/useRealtors';
 import type { AssignedRealtor } from '../../../lib/types/realtors';
+import { themedStyles } from '../../../brand/themedStyles';
 
 interface SelectRealtorModalProps {
   visible: boolean;
@@ -224,7 +225,7 @@ export default function SelectRealtorModal({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',

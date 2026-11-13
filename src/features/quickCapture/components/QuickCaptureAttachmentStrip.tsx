@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { QuickCaptureAttachment, LocalAttachment } from '../types';
+import { themedStyles } from '../../../brand/themedStyles';
 
 const THUMB_SIZE = 88;
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -157,7 +158,7 @@ export default function QuickCaptureAttachmentStrip({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles({
   container: {
     marginTop: 4,
   },

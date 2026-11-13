@@ -38,7 +38,13 @@ export default function BrandLogo({ brand, size = 'large', tone = 'onLight' }: P
       style={[styles.row, large && styles.rowLarge]}
     >
       <AgentLoMark size={large ? 56 : 28} barColor={brand.colors.accent} centerColor={center} />
-      <Text style={[styles.wordmark, { color: textColor, fontSize: large ? 24 : 16 }]}>
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.6}
+        maxFontSizeMultiplier={1.2}
+        style={[styles.wordmark, { color: textColor, fontSize: large ? 24 : 16 }]}
+      >
         Agent
         <Text style={{ color: brand.colors.accent }}>{'  |  '}</Text>
         LO

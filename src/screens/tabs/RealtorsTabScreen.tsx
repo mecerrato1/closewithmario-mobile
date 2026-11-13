@@ -8,6 +8,7 @@ import AddRealtorScreen from '../realtors/AddRealtorScreen';
 import { AssignedRealtor } from '../../lib/types/realtors';
 import { supabase } from '../../lib/supabase';
 import { getUserTeamMemberId, type UserRole } from '../../lib/roles';
+import { themedStyles } from '../../brand/themedStyles';
 
 type ScreenState =
   | { screen: 'list' }
@@ -145,7 +146,7 @@ export default function RealtorsTabScreen({ session, onClose, onNavigateToLead, 
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles({
   container: {
     flex: 1,
   },

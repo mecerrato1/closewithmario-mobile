@@ -28,6 +28,7 @@ import type {
   LeadRealtorRoleType,
   LeadRoleRealtor,
 } from '../lib/types/leadRealtorRoles';
+import { themedStyles } from '../brand/themedStyles';
 
 const PLUM = '#4C1D95';
 
@@ -501,7 +502,7 @@ export function LeadRealtorRolesSection({
   );
 }
 
-const localStyles = StyleSheet.create({
+const localStyles = themedStyles({
   container: {
     marginTop: 16,
     paddingTop: 16,

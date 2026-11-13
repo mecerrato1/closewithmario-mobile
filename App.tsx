@@ -80,6 +80,7 @@ import {
   type LeadCountContext,
 } from './src/features/leads/leadListPresentation';
 import { queryIncompleteTodayCallbacks } from './src/features/leads/todayCallbacksQuery';
+import { themedStyles } from './src/brand/themedStyles';
 
 // Enable LayoutAnimation on Android
 if (
@@ -1388,7 +1389,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const alert = aiAttention?.badge 
       ? { label: aiAttention.badge, color: aiAttention.priority <= 2 ? '#EF4444' : aiAttention.priority <= 4 ? '#F59E0B' : '#22C55E' }
       : getLeadAlert(item);
-    const borderColor = alert ? alert.color : '#7C3AED';
+    const borderColor = alert ? alert.color : brand.colors.accent;
     const unreadCount = Number(item.unread_sms_count) || 0;
     const isUnread = unreadCount > 0;
     const scenarioViewingLabel = getScenarioViewingLabel(item);
@@ -1408,7 +1409,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const renderRightActions = () => (
       <View style={styles.swipeActionsContainer}>
         {/* Mark contacted */}
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.swipeActionButton, styles.swipeActionContacted]}
           onPress={() => handleStatusChange('lead', item.id, 'contacted')}
           activeOpacity={0.8}
@@ -1417,7 +1418,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         </TouchableOpacity>
 
         {/* Mark unqualified */}
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.swipeActionButton, styles.swipeActionUnqualified]}
           onPress={() => handleStatusChange('lead', item.id, 'unqualified')}
           activeOpacity={0.8}
@@ -1427,7 +1428,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
         {/* Delete - only for My Lead */}
         {item.source === 'My Lead' && (
-          <TouchableOpacity
+          <TouchableOpacity accessibilityRole="button"
             style={[styles.swipeActionButton, styles.swipeActionDelete]}
             onPress={() => deleteMyLead(item.id)}
             activeOpacity={0.8}
@@ -1444,7 +1445,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         renderRightActions={renderRightActions}
         overshootRight={false}
       >
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[
             styles.leadCard,
             {
@@ -1462,7 +1463,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           <View style={styles.leadHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
               {item.is_tracked && (
-                <Ionicons name="pin" size={14} color="#7C3AED" style={{ marginRight: 4 }} />
+                <Ionicons name="pin" size={14} color={brand.colors.accent} style={{ marginRight: 4 }} />
               )}
               <Text style={[styles.leadName, { color: colors.textPrimary }]} numberOfLines={1}>
                 {fullName}
@@ -1549,7 +1550,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const alert = aiAttention?.badge 
       ? { label: aiAttention.badge, color: aiAttention.priority <= 2 ? '#EF4444' : aiAttention.priority <= 4 ? '#F59E0B' : '#22C55E' }
       : getLeadAlert(item);
-    const borderColor = alert ? alert.color : '#7C3AED';
+    const borderColor = alert ? alert.color : brand.colors.accent;
     const statusColors =
       STATUS_COLOR_MAP[item.status || 'new'] || STATUS_COLOR_MAP['new'];
     const unreadCount = Number(item.unread_sms_count) || 0;
@@ -1611,7 +1612,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     // Right-side swipe actions for meta leads
     const renderRightActions = () => (
       <View style={styles.swipeActionsContainer}>
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.swipeActionButton, styles.swipeActionContacted]}
           onPress={() => handleStatusChange('meta', item.id, 'contacted')}
           activeOpacity={0.8}
@@ -1619,7 +1620,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           <Text style={styles.swipeActionText}>Contacted</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.swipeActionButton, styles.swipeActionUnqualified]}
           onPress={() => handleStatusChange('meta', item.id, 'unqualified')}
           activeOpacity={0.8}
@@ -1634,7 +1635,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         renderRightActions={renderRightActions}
         overshootRight={false}
       >
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[
             styles.leadCard,
             {
@@ -1652,7 +1653,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           <View style={styles.leadHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
               {item.is_tracked && (
-                <Ionicons name="pin" size={14} color="#7C3AED" style={{ marginRight: 4 }} />
+                <Ionicons name="pin" size={14} color={brand.colors.accent} style={{ marginRight: 4 }} />
               )}
               <Text style={[styles.leadName, { color: colors.textPrimary }]} numberOfLines={1}>
                 {fullName}
@@ -2080,7 +2081,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           animationType="fade"
           onRequestClose={() => setShowProfileMenu(false)}
         >
-          <TouchableOpacity 
+          <TouchableOpacity accessibilityRole="button" 
             style={styles.profileMenuOverlay}
             activeOpacity={1}
             onPress={() => setShowProfileMenu(false)}
@@ -2089,7 +2090,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               {(canManageTeam(userRole) || canViewAdsLibrary(userRole)) && (
                 <>
                   {canManageTeam(userRole) && (
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       style={styles.profileMenuItem}
                       onPress={() => {
                         setShowProfileMenu(false);
@@ -2097,13 +2098,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                       }}
                     >
                       <View style={styles.profileMenuIconContainer}>
-                        <Ionicons name="people" size={20} color="#7C3AED" />
+                        <Ionicons name="people" size={20} color={brand.colors.accent} />
                       </View>
                       <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Team Management</Text>
                     </TouchableOpacity>
                   )}
                   {canViewAdsLibrary(userRole) && (
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       style={styles.profileMenuItem}
                       onPress={() => {
                         setShowProfileMenu(false);
@@ -2111,7 +2112,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                       }}
                     >
                       <View style={styles.profileMenuIconContainer}>
-                        <Ionicons name="images-outline" size={20} color="#7C3AED" />
+                        <Ionicons name="images-outline" size={20} color={brand.colors.accent} />
                       </View>
                       <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Ads Library</Text>
                     </TouchableOpacity>
@@ -2120,7 +2121,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 </>
               )}
 
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.profileMenuItem}
                 onPress={() => {
                   setShowProfileMenu(false);
@@ -2135,7 +2136,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               
               <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
               
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.profileMenuItem}
                 onPress={() => {
                   setShowProfileMenu(false);
@@ -2155,7 +2156,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         <Animated.View style={[
           styles.newDashboardHeader, 
           { 
-            backgroundColor: '#4C1D95',
+            backgroundColor: brand.colors.primary,
             height: DASHBOARD_HEADER_EXPANDED,
             position: 'absolute',
             top: 0,
@@ -2179,13 +2180,15 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 {/* Notification Bell */}
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   onPress={() => {
                     setShowDashboard(false);
                     setSelectedStatusFilter('all');
                     setActiveTab('all');
                     setUnreadFilter(true);
                   }}
+                  accessibilityLabel={unreadConversationCount > 0 ? `Unread messages, ${unreadConversationCount}` : 'Unread messages'}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                   style={{ position: 'relative' }}
                 >
                   <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
@@ -2211,8 +2214,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   )}
                 </TouchableOpacity>
                 {/* Profile Button */}
-                <TouchableOpacity 
+                <TouchableOpacity accessibilityRole="button" 
                   onPress={() => setShowProfileMenu(true)}
+                  accessibilityLabel="Profile and settings"
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                   style={styles.profileButton}
                 >
                   {getAvatarUrl(session?.user?.user_metadata, realtorProfilePicUrl) ? (
@@ -2231,12 +2236,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               </View>
             </View>
 
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               onPress={openLeadListWorkspace}
               activeOpacity={0.9}
               style={styles.dashboardLeadListButton}
             >
-              <Ionicons name="list-outline" size={16} color="#4C1D95" />
+              <Ionicons name="list-outline" size={16} color={brand.colors.primary} />
               <Text style={styles.dashboardLeadListButtonText}>Lead List</Text>
             </TouchableOpacity>
           </Animated.View>
@@ -2257,7 +2262,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             <View style={styles.dashboardHeroGrid}>
               {heroFocusCards.map((card) => (
                 card.onPress ? (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     key={card.key}
                     style={[styles.dashboardHeroCard, card.tone]}
                     onPress={card.onPress}
@@ -2315,7 +2320,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Callback History</Text>
                   <Text style={styles.dashboardSectionCaption}>Review completed outreach and callback execution.</Text>
                 </View>
-                <TouchableOpacity style={styles.dashboardSectionLink} onPress={() => setShowCallbackHistory(false)}>
+                <TouchableOpacity accessibilityRole="button" style={styles.dashboardSectionLink} onPress={() => setShowCallbackHistory(false)}>
                   <Text style={styles.dashboardSectionLinkText}>Back to Today</Text>
                 </TouchableOpacity>
               </View>
@@ -2346,7 +2351,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   }
 
                   return (
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       key={cb.id}
                       style={[styles.newLeadCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
                       onPress={() => {
@@ -2392,7 +2397,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   </View>
                   </View>
                 </View>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={styles.dashboardSectionLink}
                   onPress={() => {
                     Alert.alert(
@@ -2455,7 +2460,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 // Swipe actions for callbacks: Done (non-destructive) + Delete
                 const renderRightActions = () => (
                   <View style={styles.swipeActionsContainer}>
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       style={[styles.swipeActionButton, styles.swipeActionContacted]}
                       onPress={() => completeCallback(cb.id)}
                       activeOpacity={0.8}
@@ -2463,7 +2468,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                       <Ionicons name="checkmark-done-outline" size={18} color="#FFFFFF" />
                       <Text style={styles.swipeActionText}>Done</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       style={[styles.swipeActionButton, styles.swipeActionDelete]}
                       onPress={() => deleteCallback(cb.id)}
                       activeOpacity={0.8}
@@ -2480,7 +2485,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                     renderRightActions={renderRightActions}
                     overshootRight={false}
                   >
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       style={styles.newLeadCard}
                       onPress={() => {
                         if (cb.lead_id || cb.meta_ad_id) {
@@ -2520,7 +2525,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               </View>
             </View>
             <View style={styles.dashboardActionGrid}>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.dashboardActionCard}
                 onPress={() => {
                   openAddLeadModal({ fromDashboard: true });
@@ -2536,7 +2541,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 </View>
               </TouchableOpacity>
 
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.dashboardActionCard}
                 onPress={() => {
                   setQuickCaptureStartOnAdd(true);
@@ -2545,7 +2550,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 activeOpacity={0.8}
               >
                 <View style={[styles.dashboardActionIcon, styles.dashboardActionIconPurple]}>
-                  <Ionicons name="camera-outline" size={16} color="#7C3AED" />
+                  <Ionicons name="camera-outline" size={16} color={brand.colors.accent} />
                 </View>
                 <View style={styles.dashboardActionBody}>
                   <Text style={styles.dashboardActionTitle}>Quick Capture</Text>
@@ -2565,7 +2570,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             </View>
             <View style={styles.performanceGrid}>
               {snapshotCards.map((card) => (
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   key={card.key}
                   style={[
                     styles.performanceCard,
@@ -2614,7 +2619,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   <Text style={styles.statsLabel}>Receive Auto-Assigned Leads</Text>
                   <Text style={styles.statsValue}>{leadEligible ? 'Enabled' : 'Disabled'}</Text>
                 </View>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={styles.leadEligibleToggle}
                   onPress={toggleLeadEligible}
                 >
@@ -2652,7 +2657,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   : 'Website Contact';
                 
                 return (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     key={`${lead._tableType}-${lead.id}`}
                     style={[
                       styles.newLeadCard,
@@ -2735,11 +2740,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     }
     if (leadDirectory.error && leadDirectory.items.length > 0) {
       return (
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={{ alignSelf: 'center', paddingHorizontal: 18, paddingVertical: 14 }}
           onPress={() => void retryLeadDirectory()}
         >
-          <Text style={{ color: '#7C3AED', fontWeight: '700' }}>
+          <Text style={{ color: brand.colors.accentStrong, fontWeight: '700' }}>
             Could not update leads. Retry
           </Text>
         </TouchableOpacity>
@@ -2765,7 +2770,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         animationType="fade"
         onRequestClose={() => setShowProfileMenu(false)}
       >
-        <TouchableOpacity 
+        <TouchableOpacity accessibilityRole="button" 
           style={styles.profileMenuOverlay}
           activeOpacity={1}
           onPress={() => setShowProfileMenu(false)}
@@ -2774,7 +2779,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             {(canManageTeam(userRole) || canViewAdsLibrary(userRole)) && (
               <>
                 {canManageTeam(userRole) && (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     style={styles.profileMenuItem}
                     onPress={() => {
                       setShowProfileMenu(false);
@@ -2782,13 +2787,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                     }}
                   >
                     <View style={styles.profileMenuIconContainer}>
-                      <Ionicons name="people" size={20} color="#7C3AED" />
+                      <Ionicons name="people" size={20} color={brand.colors.accent} />
                     </View>
                     <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Team Management</Text>
                   </TouchableOpacity>
                 )}
                 {canViewAdsLibrary(userRole) && (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     style={styles.profileMenuItem}
                     onPress={() => {
                       setShowProfileMenu(false);
@@ -2796,7 +2801,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                     }}
                   >
                     <View style={styles.profileMenuIconContainer}>
-                      <Ionicons name="images-outline" size={20} color="#7C3AED" />
+                      <Ionicons name="images-outline" size={20} color={brand.colors.accent} />
                     </View>
                     <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Ads Library</Text>
                   </TouchableOpacity>
@@ -2805,7 +2810,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               </>
             )}
 
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.profileMenuItem}
               onPress={() => {
                 setShowProfileMenu(false);
@@ -2820,7 +2825,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
             <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
             
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={styles.profileMenuItem}
               onPress={() => {
                 setShowProfileMenu(false);
@@ -2848,8 +2853,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           styles.headerContent,
           { transform: [{ scale: headerTitleScale }] }
         ]}>
-          <TouchableOpacity 
+          <TouchableOpacity accessibilityRole="button" 
             onPress={returnToLeadDashboard}
+            accessibilityLabel="Back to dashboard"
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={styles.homeButton}
           >
             <Text style={styles.homeButtonText}>← Dashboard</Text>
@@ -2860,13 +2867,15 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             {/* Notification Bell */}
-            <TouchableOpacity 
+            <TouchableOpacity accessibilityRole="button" 
               onPress={() => {
                 setSelectedStatusFilter('all');
                 setActiveTab('all');
                 setUnreadFilter(true);
               }}
-              style={{ position: 'relative' }}
+              accessibilityLabel={unreadConversationCount > 0 ? `Unread messages, ${unreadConversationCount}` : 'Unread messages'}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  style={{ position: 'relative' }}
             >
               <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
               {unreadConversationCount > 0 && (
@@ -2891,9 +2900,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               )}
             </TouchableOpacity>
             {/* Profile Button */}
-            <TouchableOpacity 
+            <TouchableOpacity accessibilityRole="button" 
               onPress={() => setShowProfileMenu(true)}
-              style={styles.profileButton}
+              accessibilityLabel="Profile and settings"
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  style={styles.profileButton}
             >
               {getAvatarUrl(session?.user?.user_metadata, realtorProfilePicUrl) ? (
                 <Image 
@@ -2926,7 +2937,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 const isActive = activeTab === tab.key;
                 const count = getLeadTabCount(tab.key, leadCountContext);
                 return (
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     key={tab.key}
                     style={[styles.listTab, isActive && styles.listTabActive]}
                     onPress={() => handleSelectLeadListTab(tab.key)}
@@ -2961,10 +2972,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 blurOnSubmit
               />
               {leadDirectory.searching && (
-                <ActivityIndicator size="small" color="#7C3AED" accessibilityLabel="Searching leads" />
+                <ActivityIndicator size="small" color={brand.colors.accent} accessibilityLabel="Searching leads" />
               )}
               {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.searchClearButton}>
+                <TouchableOpacity accessibilityRole="button" onPress={() => setSearchQuery('')} style={styles.searchClearButton}>
                   <Ionicons name="close" size={18} color="#94A3B8" />
                 </TouchableOpacity>
               )}
@@ -2976,7 +2987,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             )}
 
             <View style={styles.listPrimaryFilterRow}>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.filterButton, styles.listStatusButton]}
                 onPress={() => setShowStatusPicker(true)}
               >
@@ -2992,35 +3003,35 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             </View>
 
             <View style={styles.listQuickFilterRow}>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.quickFilterChip, attentionFilter && styles.quickFilterChipActive]}
                 onPress={() => setAttentionFilter((current) => !current)}
               >
                 <Ionicons
                   name="alert-circle-outline"
                   size={14}
-                  color={attentionFilter ? '#FFFFFF' : '#7C3AED'}
+                  color={attentionFilter ? '#FFFFFF' : brand.colors.accent}
                 />
                 <Text style={[styles.quickFilterChipText, attentionFilter && styles.quickFilterChipTextActive]}>
                   Needs Attention
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.quickFilterChip, trackedFilter && styles.quickFilterChipActive]}
                 onPress={() => setTrackedFilter((current) => !current)}
               >
                 <Ionicons
                   name="bookmark-outline"
                   size={14}
-                  color={trackedFilter ? '#FFFFFF' : '#7C3AED'}
+                  color={trackedFilter ? '#FFFFFF' : brand.colors.accent}
                 />
                 <Text style={[styles.quickFilterChipText, trackedFilter && styles.quickFilterChipTextActive]}>
                   Tracked
                 </Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[styles.quickFilterChip, unreadFilter && styles.quickFilterChipActive]}
                 onPress={() => {
                   const nextUnreadFilter = !unreadFilter;
@@ -3033,7 +3044,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 <Ionicons
                   name="chatbubble-ellipses-outline"
                   size={14}
-                  color={unreadFilter ? '#FFFFFF' : '#7C3AED'}
+                  color={unreadFilter ? '#FFFFFF' : brand.colors.accent}
                 />
                 <Text style={[styles.quickFilterChipText, unreadFilter && styles.quickFilterChipTextActive]}>
                   Unread
@@ -3043,7 +3054,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
             {userRole === 'super_admin' && (
               <View style={styles.listSecondaryFilterRow}>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[styles.filterButton, styles.filterButtonHalf, styles.listSecondaryFilterButton]}
                   onPress={() => setShowLOPicker(true)}
                 >
@@ -3059,7 +3070,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   <Text style={styles.filterButtonIcon}>▼</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={[styles.filterButton, styles.filterButtonHalf, styles.listSecondaryFilterButton]}
                   onPress={() => setShowSourcePicker(true)}
                 >
@@ -3112,7 +3123,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   Showing Unread Messages
                 </Text>
               </View>
-              <TouchableOpacity onPress={() => setUnreadFilter(false)}>
+              <TouchableOpacity accessibilityRole="button" onPress={() => setUnreadFilter(false)}>
                 <Ionicons name="close-circle" size={24} color="#9CA3AF" />
               </TouchableOpacity>
             </View>
@@ -3143,11 +3154,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               }}>
                 You have no unread messages
               </Text>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 onPress={() => setUnreadFilter(false)}
                 style={{
                   marginTop: 20,
-                  backgroundColor: '#7C3AED',
+                  backgroundColor: brand.colors.accentStrong,
                   paddingHorizontal: 20,
                   paddingVertical: 10,
                   borderRadius: 20,
@@ -3165,7 +3176,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             animationType="fade"
             onRequestClose={() => setShowStatusPicker(false)}
           >
-            <TouchableOpacity 
+            <TouchableOpacity accessibilityRole="button" 
               style={styles.modalOverlay}
               activeOpacity={1}
               onPress={() => setShowStatusPicker(false)}
@@ -3173,12 +3184,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               <View style={styles.statusPickerContainer}>
                 <View style={styles.statusPickerHeader}>
                   <Text style={styles.statusPickerTitle}>Filter by Status</Text>
-                  <TouchableOpacity onPress={() => setShowStatusPicker(false)}>
+                  <TouchableOpacity accessibilityRole="button" onPress={() => setShowStatusPicker(false)}>
                     <Text style={styles.statusPickerClose}>✕</Text>
                   </TouchableOpacity>
                 </View>
                 <ScrollView style={styles.statusPickerScroll}>
-                  <TouchableOpacity
+                  <TouchableOpacity accessibilityRole="button"
                     style={[
                       styles.statusPickerItem,
                       selectedStatusFilter === 'all' && styles.statusPickerItemActive,
@@ -3213,7 +3224,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                       leadCountContext
                     );
                     return (
-                      <TouchableOpacity
+                      <TouchableOpacity accessibilityRole="button"
                         key={status}
                         style={[
                           styles.statusPickerItem,
@@ -3258,7 +3269,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               animationType="fade"
               onRequestClose={() => setShowLOPicker(false)}
             >
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.modalOverlay}
                 activeOpacity={1}
                 onPress={() => setShowLOPicker(false)}
@@ -3267,7 +3278,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   <Text style={styles.statusPickerTitle}>Filter by Loan Officer</Text>
                   <ScrollView style={styles.statusPickerScroll}>
                     {/* All LOs Option */}
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       style={[
                         styles.statusPickerItem,
                         selectedLOFilter === null && styles.statusPickerItemActive,
@@ -3296,7 +3307,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                     </TouchableOpacity>
 
                     {/* Unassigned Option */}
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       style={[
                         styles.statusPickerItem,
                         selectedLOFilter === 'unassigned' && styles.statusPickerItemActive,
@@ -3331,7 +3342,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                         : null;
 
                       return (
-                        <TouchableOpacity
+                        <TouchableOpacity accessibilityRole="button"
                           key={lo.id}
                           style={[
                             styles.statusPickerItem,
@@ -3375,7 +3386,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               animationType="fade"
               onRequestClose={() => setShowSourcePicker(false)}
             >
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.modalOverlay}
                 activeOpacity={1}
                 onPress={() => setShowSourcePicker(false)}
@@ -3384,7 +3395,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   <Text style={styles.statusPickerTitle}>Filter by Source</Text>
                   <ScrollView style={styles.statusPickerScroll}>
                     {/* All Sources Option */}
-                    <TouchableOpacity
+                    <TouchableOpacity accessibilityRole="button"
                       style={[
                         styles.statusPickerItem,
                         selectedSourceFilter === 'all' && styles.statusPickerItemActive,
@@ -3434,7 +3445,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                       );
                       
                       return (
-                        <TouchableOpacity
+                        <TouchableOpacity accessibilityRole="button"
                           key={source}
                           style={[
                             styles.statusPickerItem,
@@ -3495,8 +3506,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       {!loading && errorMessage && leadDirectory.items.length === 0 && (
         <View style={styles.centerContent}>
           <Text style={styles.errorText}>Error: {errorMessage}</Text>
-          <TouchableOpacity
-            style={{ marginTop: 14, borderRadius: 10, backgroundColor: '#7C3AED', paddingHorizontal: 18, paddingVertical: 10 }}
+          <TouchableOpacity accessibilityRole="button"
+            style={{ marginTop: 14, borderRadius: 10, backgroundColor: brand.colors.accentStrong, paddingHorizontal: 18, paddingVertical: 10 }}
             onPress={() => {
               if (initialError) {
                 setInitializationAttempt((attempt) => attempt + 1);
@@ -3605,7 +3616,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
       {/* FAB - Quick Actions (for LOs and Super Admins) */}
       {(userRole === 'loan_officer' || userRole === 'super_admin') && !showDashboard && (
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={styles.fab}
           onPress={() => setShowFabActionSheet(true)}
           activeOpacity={0.8}
@@ -3621,14 +3632,14 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         animationType="fade"
         onRequestClose={() => setShowFabActionSheet(false)}
       >
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' }}
           activeOpacity={1}
           onPress={() => setShowFabActionSheet(false)}
         >
           <View style={{ backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: Platform.OS === 'ios' ? 34 : 16, paddingTop: 12 }}>
             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#D1D5DB', alignSelf: 'center', marginBottom: 16 }} />
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, gap: 14 }}
               onPress={() => {
                 setShowFabActionSheet(false);
@@ -3636,15 +3647,15 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 setShowQuickCaptures(true);
               }}
             >
-              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#F5F3FF', justifyContent: 'center', alignItems: 'center' }}>
-                <Ionicons name="camera-outline" size={20} color="#7C3AED" />
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: brand.colors.tint, justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name="camera-outline" size={20} color={brand.colors.accent} />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 16, fontWeight: '600', color: '#111827' }}>Quick Capture</Text>
                 <Text style={{ fontSize: 13, color: '#6B7280', marginTop: 2 }}>Photo + name for fast lead capture</Text>
               </View>
             </TouchableOpacity>
-            <TouchableOpacity
+            <TouchableOpacity accessibilityRole="button"
               style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, gap: 14 }}
               onPress={() => {
                 setShowFabActionSheet(false);
@@ -3674,7 +3685,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.addLeadModalOverlay}
         >
-          <TouchableOpacity 
+          <TouchableOpacity accessibilityRole="button" 
             style={{ flex: 1 }} 
             activeOpacity={1} 
             onPress={closeAddLeadModal}
@@ -3683,7 +3694,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             {/* Header */}
             <View style={styles.addLeadModalHeader}>
               <Text style={styles.addLeadModalTitle}>➕ Add My Lead</Text>
-              <TouchableOpacity 
+              <TouchableOpacity accessibilityRole="button" 
                 style={styles.addLeadCloseButton}
                 onPress={closeAddLeadModal}
               >
@@ -3777,7 +3788,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               {/* Loan Purpose */}
               <View style={styles.addLeadField}>
                 <Text style={styles.addLeadLabel}>Loan Purpose</Text>
-                <TouchableOpacity
+                <TouchableOpacity accessibilityRole="button"
                   style={styles.addLeadPickerContainer}
                   onPress={() => setShowLoanPurposePicker(!showLoanPurposePicker)}
                 >
@@ -3789,13 +3800,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 {showLoanPurposePicker && (
                   <View style={{ backgroundColor: '#F9FAFB', borderRadius: 8, marginTop: 4, borderWidth: 1, borderColor: '#E5E7EB' }}>
                     {LOAN_PURPOSES.map((purpose) => (
-                      <TouchableOpacity
+                      <TouchableOpacity accessibilityRole="button"
                         key={purpose}
                         style={{
                           padding: 12,
                           borderBottomWidth: purpose !== LOAN_PURPOSES[LOAN_PURPOSES.length - 1] ? 1 : 0,
                           borderBottomColor: '#E5E7EB',
-                          backgroundColor: newLead.loan_purpose === purpose ? '#EDE9FE' : 'transparent',
+                          backgroundColor: newLead.loan_purpose === purpose ? brand.colors.tint : 'transparent',
                         }}
                         onPress={() => {
                           setNewLead(prev => ({ ...prev, loan_purpose: purpose }));
@@ -3805,11 +3816,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                           <Text style={{ 
                             fontSize: 15, 
-                            color: newLead.loan_purpose === purpose ? '#7C3AED' : '#374151',
+                            color: newLead.loan_purpose === purpose ? brand.colors.accentStrong : '#374151',
                             fontWeight: newLead.loan_purpose === purpose ? '600' : '400',
                           }}>{purpose}</Text>
                           {newLead.loan_purpose === purpose && (
-                            <Ionicons name="checkmark" size={18} color="#7C3AED" />
+                            <Ionicons name="checkmark" size={18} color={brand.colors.accent} />
                           )}
                         </View>
                       </TouchableOpacity>
@@ -3845,13 +3856,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
             {/* Footer */}
             <View style={styles.addLeadFooter}>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={styles.addLeadCancelButton}
                 onPress={closeAddLeadModal}
               >
                 <Text style={styles.addLeadCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={[
                   styles.addLeadSaveButton,
                   savingNewLead && styles.addLeadSaveButtonDisabled
@@ -3881,7 +3892,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         onRequestClose={() => setShowAiRecommendationModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <TouchableOpacity 
+          <TouchableOpacity accessibilityRole="button" 
             style={StyleSheet.absoluteFill} 
             activeOpacity={1} 
             onPress={() => setShowAiRecommendationModal(false)} 
@@ -3889,7 +3900,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           <View style={aiRecommendationStyles.container}>
             <View style={aiRecommendationStyles.header}>
               <Text style={aiRecommendationStyles.title}>Why this needs attention</Text>
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 onPress={() => setShowAiRecommendationModal(false)}
                 style={aiRecommendationStyles.closeIcon}
               >
@@ -3918,7 +3929,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             )}
             
             {selectedAiAttention?.suggestedAction?.toLowerCase().includes('send a text') && selectedAiAttention?.phone ? (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={aiRecommendationStyles.sendTextButton}
                 onPress={handleAiSuggestedTextFromModal}
               >
@@ -3926,7 +3937,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 <Text style={aiRecommendationStyles.closeButtonText}>Send This Text</Text>
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity
+              <TouchableOpacity accessibilityRole="button"
                 style={aiRecommendationStyles.closeButton}
                 onPress={() => setShowAiRecommendationModal(false)}
               >
@@ -3942,7 +3953,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 }
 
 // Styles for AI Recommendation Modal
-const aiRecommendationStyles = StyleSheet.create({
+const aiRecommendationStyles = themedStyles({
   container: {
     backgroundColor: '#1E293B',
     borderRadius: 16,
@@ -4163,7 +4174,7 @@ function RootApp() {
         </Text>
         <TouchableOpacity
           accessibilityRole="button"
-          style={{ marginTop: 14, borderRadius: 10, backgroundColor: '#7C3AED', paddingHorizontal: 18, paddingVertical: 12 }}
+          style={{ marginTop: 14, borderRadius: 10, backgroundColor: '#0F172A', paddingHorizontal: 18, paddingVertical: 12 }}
           onPress={() => setSessionAttempt((attempt) => attempt + 1)}
         >
           <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Try again</Text>

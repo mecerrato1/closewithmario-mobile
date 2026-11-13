@@ -28,6 +28,7 @@ import {
   removeCustomProfilePicture,
   getAvatarUrl,
 } from '../utils/profilePicture';
+import { themedStyles } from '../brand/themedStyles';
 
 const LANGUAGE_MAP: Record<string, string> = {
   en: 'English',
@@ -1158,7 +1159,7 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
   );
 }
 
-const localStyles = StyleSheet.create({
+const localStyles = themedStyles({
   container: {
     flex: 1,
   },

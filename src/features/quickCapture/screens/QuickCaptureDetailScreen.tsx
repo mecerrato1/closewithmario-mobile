@@ -31,6 +31,7 @@ import SelectRealtorModal from '../components/SelectRealtorModal';
 import type { QuickCapture, QuickCaptureAttachment } from '../types';
 import { findMatchingLeads, searchLeads, mergeIntoExistingLead, type MatchedLead } from '../services/leadMatchService';
 import LeadMergeView from '../components/LeadMergeView';
+import { themedStyles } from '../../../brand/themedStyles';
 
 const PLUM = '#4C1D95';
 
@@ -988,7 +989,7 @@ export default function QuickCaptureDetailScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',

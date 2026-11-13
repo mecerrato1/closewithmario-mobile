@@ -24,6 +24,7 @@ import { useQuickCaptureAttachments } from '../hooks/useQuickCaptureAttachments'
 import QuickCaptureAttachmentStrip from '../components/QuickCaptureAttachmentStrip';
 import SelectRealtorModal from '../components/SelectRealtorModal';
 import type { CreateQuickCapturePayload } from '../types';
+import { themedStyles } from '../../../brand/themedStyles';
 
 const PLUM = '#4C1D95';
 
@@ -491,7 +492,7 @@ export default function AddQuickCaptureScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themedStyles({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',

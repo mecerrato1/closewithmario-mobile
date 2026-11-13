@@ -12,6 +12,7 @@ import { getUserRole, type UserRole } from '../lib/roles';
 import { ACCOUNT_LOOKUP_ERROR_MESSAGE } from '../features/session/lookup';
 import { BrandProvider } from '../brand/BrandContext';
 import { getBrand, type BrandConfig } from '../brand/brands';
+import { setActiveBrand } from '../brand/themedStyles';
 import { fetchAccountBrand } from '../brand/fetchAccountBrand';
 import { authenticatedFetch } from '../lib/authenticatedFetch';
 import { API_BASE_URL } from '../lib/apiBaseUrl';
@@ -58,6 +59,7 @@ export default function AuthenticatedRoot({
 
   useEffect(() => {
     // Reset first so nothing from a previous account can render for this one.
+    setActiveBrand(null);
     setUserRole(null);
     setBrand(null);
     setRoleFailed(false);
@@ -76,6 +78,8 @@ export default function AuthenticatedRoot({
     ])
       .then(([role, brandId]) => {
         if (controller.signal.aborted) return;
+        // Active brand is set before the content that reads it is rendered.
+        setActiveBrand(brandId);
         setUserRole(role);
         setBrand(getBrand(brandId));
       })
@@ -85,6 +89,7 @@ export default function AuthenticatedRoot({
 
     return () => {
       controller.abort();
+      setActiveBrand(null);
     };
   }, [session?.user?.id, session?.user?.email, roleAttempt]);
 

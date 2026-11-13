@@ -23,6 +23,7 @@ import {
   generateDPAId,
 } from '../utils/dpaTypes';
 import { calculateDPAAmount, calculateDPAPayment } from '../utils/dpaCalculations';
+import { themedStyles } from '../brand/themedStyles';
 
 interface DPAEntryModalProps {
   visible: boolean;
@@ -185,7 +186,7 @@ export default function DPAEntryModal({
     onClose();
   };
 
-  const styles = StyleSheet.create({
+  const styles = themedStyles({
     modalOverlay: {
       flex: 1,
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
