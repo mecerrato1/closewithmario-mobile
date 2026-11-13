@@ -112,6 +112,36 @@ function getCreditScore(creditBand: CreditBand): number {
   return match ? parseInt(match[1], 10) : 740;
 }
 
+/**
+ * VA funding fee rate (as a fraction of the base loan) by usage and down payment.
+ * Tiers: under 5% down, 5% to under 10%, 10% or more.
+ */
+export function vaFundingFeeRate(usage: VALoanUsage, downPct: number): number {
+  if (usage === 'exempt') return 0;
+  if (usage === 'firstUse') {
+    if (downPct < 5) return 2.15 / 100;
+    if (downPct < 10) return 1.5 / 100;
+    return 1.25 / 100;
+  }
+  // Subsequent use
+  if (downPct < 5) return 3.3 / 100;
+  if (downPct < 10) return 1.5 / 100;
+  return 1.25 / 100;
+}
+
+/**
+ * Monthly principal-and-interest payment. Handles a 0% rate (straight-line)
+ * and returns 0 for a non-positive principal or term instead of NaN/Infinity.
+ */
+export function monthlyPrincipalAndInterest(principal: number, annualRatePct: number, termYears: number): number {
+  const n = Math.round(termYears * 12);
+  if (!(principal > 0) || !(n > 0)) return 0;
+  const monthlyRate = annualRatePct / 100 / 12;
+  if (!(monthlyRate > 0)) return principal / n;
+  const growth = Math.pow(1 + monthlyRate, n);
+  return (principal * (monthlyRate * growth)) / (growth - 1);
+}
+
 export interface MortgageOptions {
   waiveIntangibleAndDeed?: boolean; // For programs like Hometown Heroes, FL Assist
 }
@@ -129,24 +159,7 @@ export function calculateMortgage(inputs: MortgageInputs, fees: ClosingCostFees 
 
   // VA funding fee & FHA UFMIP roll-in
   if (inputs.loanType === 'VA') {
-    const vaUsage = inputs.vaLoanUsage || 'firstUse';
-    if (vaUsage === 'exempt') {
-      feeRate = 0;
-    } else if (vaUsage === 'firstUse') {
-      if (inputs.downPct < 5) {
-        feeRate = 2.15 / 100;
-      } else if (inputs.downPct < 10) {
-        feeRate = 1.50 / 100;
-      } else {
-        feeRate = 1.25 / 100;
-      }
-    } else if (vaUsage === 'subsequentUse') {
-      if (inputs.downPct < 5) {
-        feeRate = 3.30 / 100;
-      } else {
-        feeRate = 1.50 / 100;
-      }
-    }
+    feeRate = vaFundingFeeRate(inputs.vaLoanUsage || 'firstUse', inputs.downPct);
     
     financedFee = baseLoan * feeRate;
     baseLoan = baseLoan + financedFee;
@@ -162,11 +175,7 @@ export function calculateMortgage(inputs: MortgageInputs, fees: ClosingCostFees 
     : RATE_BY_LOAN[inputs.loanType];
 
   // Calculate P&I
-  const monthlyRate = noteRate / 100 / 12;
-  const n = inputs.termYears * 12;
-  const monthlyPI = baseLoan && monthlyRate
-    ? baseLoan * (monthlyRate * Math.pow(1 + monthlyRate, n)) / (Math.pow(1 + monthlyRate, n) - 1)
-    : 0;
+  const monthlyPI = monthlyPrincipalAndInterest(baseLoan, noteRate, inputs.termYears);
 
   // Calculate MI
   const ltv = 100 - inputs.downPct;
@@ -196,9 +205,7 @@ export function calculateMortgage(inputs: MortgageInputs, fees: ClosingCostFees 
     
   const amountFinanced = baseLoan - prepaidFinanceCharges;
   const numberOfPayments = inputs.termYears * 12;
-  const monthlyNoteRate = noteRate / 100 / 12;
-  const basePIPayment = baseLoan * (monthlyNoteRate * Math.pow(1 + monthlyNoteRate, numberOfPayments)) / 
-                        (Math.pow(1 + monthlyNoteRate, numberOfPayments) - 1);
+  const basePIPayment = monthlyPrincipalAndInterest(baseLoan, noteRate, inputs.termYears);
   const totalMonthlyPayment = basePIPayment + monthlyMI;
   
   // APR bisection method
@@ -209,7 +216,8 @@ export function calculateMortgage(inputs: MortgageInputs, fees: ClosingCostFees 
   const maxIterations = 100;
   
   let apr = noteRate;
-  for (let iteration = 0; iteration < maxIterations; iteration++) {
+  const canSolveApr = numberOfPayments > 0 && amountFinanced > 0;
+  for (let iteration = 0; canSolveApr && iteration < maxIterations; iteration++) {
     const guessRate = (lowerBound + upperBound) / 2;
     const monthlyGuessRate = guessRate / 12;
     

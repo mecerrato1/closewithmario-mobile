@@ -1479,9 +1479,14 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
                     </Text>
                   </TouchableOpacity>
                 )}
-                {!customRate && !loadingRates && rates && (
-                  <Text style={{ fontSize: 12, color: '#10B981' }}>
+                {!customRate && !loadingRates && rates && rates.source === 'live' && (
+                  <Text style={{ fontSize: 12, color: '#047857' }}>
                     Live rate
+                  </Text>
+                )}
+                {!customRate && !loadingRates && rates && rates.source === 'fallback' && (
+                  <Text style={{ fontSize: 12, color: '#B45309' }}>
+                    Default estimate, live rates unavailable
                   </Text>
                 )}
                 {loadingRates && (
