@@ -1,6 +1,6 @@
 // src/screens/AuthenticatedRoot.tsx
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { Session } from '@supabase/supabase-js';
 import BottomTabs, { TabKey } from '../components/navigation/BottomTabs';
 import QuickCaptureTab from '../features/quickCapture/QuickCaptureTab';
@@ -9,6 +9,7 @@ import LoanOfficersTabScreen from './tabs/LoanOfficersTabScreen';
 import CalculatorTabScreen from './tabs/CalculatorTabScreen';
 import MessagesTabScreen from './tabs/MessagesTabScreen';
 import { getUserRole, type UserRole } from '../lib/roles';
+import { ACCOUNT_LOOKUP_ERROR_MESSAGE } from '../features/session/lookup';
 
 interface AuthenticatedRootProps {
   session: Session;
@@ -42,23 +43,67 @@ export default function AuthenticatedRoot({
   const [pendingLeadNav, setPendingLeadNav] = useState<PendingLeadNavigation>(null);
   const [pendingCaptureId, setPendingCaptureId] = useState<PendingCaptureNavigation>(null);
   const [hasClickedLeadsTab, setHasClickedLeadsTab] = useState(false);
-  const [userRole, setUserRole] = useState<UserRole>('buyer');
+  // null until the account's role is confirmed. A failed lookup is never
+  // treated as a role; private content waits for a confirmed answer.
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [roleFailed, setRoleFailed] = useState(false);
+  const [roleAttempt, setRoleAttempt] = useState(0);
 
   useEffect(() => {
-    const fetchRole = async () => {
-      if (session?.user?.id && session?.user?.email) {
-        const role = await getUserRole(session.user.id, session.user.email);
-        setUserRole(role);
-      }
+    let cancelled = false;
+    setUserRole(null);
+    setRoleFailed(false);
+
+    const userId = session?.user?.id;
+    const email = session?.user?.email;
+    if (!userId || !email) {
+      setRoleFailed(true);
+      return;
+    }
+
+    getUserRole(userId, email)
+      .then((role) => {
+        if (!cancelled) setUserRole(role);
+      })
+      .catch(() => {
+        if (!cancelled) setRoleFailed(true);
+      });
+
+    return () => {
+      cancelled = true;
     };
-    fetchRole();
-  }, [session?.user?.id, session?.user?.email]);
+  }, [session?.user?.id, session?.user?.email, roleAttempt]);
 
   useEffect(() => {
     if (notificationLead) {
       setActiveTab('leads');
     }
   }, [notificationLead]);
+
+  if (userRole === null) {
+    return (
+      <View style={styles.gate}>
+        {roleFailed ? (
+          <>
+            <Text style={styles.gateTitle}>Couldn't load your workspace</Text>
+            <Text style={styles.gateBody}>{ACCOUNT_LOOKUP_ERROR_MESSAGE}</Text>
+            <TouchableOpacity
+              accessibilityRole="button"
+              style={styles.gatePrimary}
+              onPress={() => setRoleAttempt((attempt) => attempt + 1)}
+            >
+              <Text style={styles.gatePrimaryText}>Try again</Text>
+            </TouchableOpacity>
+            <TouchableOpacity accessibilityRole="button" style={styles.gateSecondary} onPress={onSignOut}>
+              <Text style={styles.gateSecondaryText}>Sign out</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <ActivityIndicator accessibilityLabel="Loading your workspace" />
+        )}
+      </View>
+    );
+  }
 
   const handleTabChange = (tab: TabKey) => {
     if (tab === 'leads') {
@@ -169,4 +214,25 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  gate: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+    gap: 10,
+  },
+  gateTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A', textAlign: 'center' },
+  gateBody: { fontSize: 14, color: '#475569', textAlign: 'center' },
+  gatePrimary: {
+    marginTop: 8,
+    minHeight: 44,
+    paddingHorizontal: 22,
+    borderRadius: 10,
+    backgroundColor: '#7C3AED',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gatePrimaryText: { color: '#FFFFFF', fontWeight: '700' },
+  gateSecondary: { minHeight: 44, paddingHorizontal: 22, alignItems: 'center', justifyContent: 'center' },
+  gateSecondaryText: { color: '#475569', fontWeight: '600' },
 });

@@ -5,6 +5,10 @@ import { supabase } from './supabase';
 
 const DEFAULT_ANDROID_CHANNEL_ID = 'default';
 
+// Token registered by this device in this app session. Used to deactivate only
+// this device at sign-out, never the signed-in user's other devices.
+let registeredPushToken: string | null = null;
+
 // Configure how notifications appear when app is in foreground
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -23,7 +27,6 @@ Notifications.setNotificationHandler({
 export async function registerForPushNotifications(userId: string): Promise<string | null> {
   // Note: Constants.isDevice can be unreliable in dev client builds
   // We'll try to register anyway and let it fail gracefully if on simulator
-  console.log('📱 [Notifications] Starting registration for user:', userId);
 
   try {
     if (Platform.OS === 'android') {
@@ -56,7 +59,7 @@ export async function registerForPushNotifications(userId: string): Promise<stri
       projectId,
     });
     const pushToken = tokenData.data;
-    console.log('📱 [Notifications] Push token:', pushToken);
+    registeredPushToken = pushToken;
 
     // Store token in Supabase (upsert to handle existing tokens)
     const { error } = await supabase
@@ -87,23 +90,36 @@ export async function registerForPushNotifications(userId: string): Promise<stri
 }
 
 /**
- * Remove push token when user logs out
+ * Stop this device receiving pushes for the account that is signing out, and
+ * cancel reminders scheduled on this device. Call before ending the session,
+ * while the access token is still valid. Other devices of the same user are
+ * left registered.
  */
-export async function unregisterPushNotifications(userId: string): Promise<void> {
-  try {
-    const { error } = await supabase
-      .from('expo_push_tokens')
-      .update({ is_active: false })
-      .eq('user_id', userId);
-
-    if (error) {
-      console.error('📱 [Notifications] Error deactivating push token:', error);
-    } else {
-      console.log('📱 [Notifications] Push token deactivated');
+export async function deactivateThisDevicePush(userId: string): Promise<void> {
+  let token = registeredPushToken;
+  if (!token) {
+    try {
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+      token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
+    } catch {
+      token = null; // Never registered on this device (permission denied or simulator).
     }
-  } catch (error) {
-    console.error('📱 [Notifications] Error unregistering push notifications:', error);
   }
+  if (!token) return;
+
+  const { error } = await supabase
+    .from('expo_push_tokens')
+    .update({ is_active: false })
+    .eq('user_id', userId)
+    .eq('push_token', token);
+  if (error) {
+    throw new Error('Could not deactivate this device for notifications.');
+  }
+  registeredPushToken = null;
+}
+
+export async function cancelAllScheduledReminders(): Promise<void> {
+  await Notifications.cancelAllScheduledNotificationsAsync();
 }
 
 /**

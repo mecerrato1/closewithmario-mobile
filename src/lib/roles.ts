@@ -5,6 +5,7 @@ import {
   resolveCrmLeadScopeForRole,
   type CrmLeadScopeResolution,
 } from './crmLeadScope';
+import { unwrapLookup } from '../features/session/lookup';
 
 export type UserRole =
   | 'super_admin'
@@ -43,6 +44,13 @@ function writeSessionCache<T>(
     value,
     expiresAt: Date.now() + SESSION_CACHE_TTL_MS,
   });
+}
+
+/** Drop every account-scoped cache. Call on sign-out and when the signed-in user changes. */
+export function clearRoleCaches() {
+  roleCache.clear();
+  teamMemberCache.clear();
+  crmLeadScopeCache.clear();
 }
 
 function roleCacheKey(userId: string, email: string) {
@@ -98,12 +106,14 @@ export async function getUserRole(
   }
 
   // Check if user is a loan officer (by user_id)
-  let { data: loData } = await supabase
-    .from('loan_officers')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('active', true)
-    .maybeSingle();
+  const loData = unwrapLookup(
+    await supabase
+      .from('loan_officers')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('active', true)
+      .maybeSingle()
+  );
 
   if (loData) {
     writeSessionCache(teamMemberCache, `${userId}:loan_officer`, loData.id);
@@ -111,13 +121,15 @@ export async function getUserRole(
   }
 
   // Auto-link: Check if there's an unlinked loan officer with this email
-  const { data: unlinkedLO } = await supabase
-    .from('loan_officers')
-    .select('id')
-    .eq('email', emailLower)
-    .is('user_id', null)
-    .eq('active', true)
-    .maybeSingle();
+  const unlinkedLO = unwrapLookup(
+    await supabase
+      .from('loan_officers')
+      .select('id')
+      .eq('email', emailLower)
+      .is('user_id', null)
+      .eq('active', true)
+      .maybeSingle()
+  );
 
   if (unlinkedLO) {
     // Link this auth user to the loan officer record
@@ -126,20 +138,20 @@ export async function getUserRole(
       .update({ user_id: userId })
       .eq('id', unlinkedLO.id);
 
-    console.log(
-      `✅ Auto-linked user ${userId} to loan officer ${unlinkedLO.id}`
-    );
+    console.log('✅ Auto-linked account to loan officer record');
     writeSessionCache(teamMemberCache, `${userId}:loan_officer`, unlinkedLO.id);
     return remember('loan_officer');
   }
 
   // Check if user is a realtor (by user_id)
-  let { data: realtorData } = await supabase
-    .from('realtors')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('active', true)
-    .maybeSingle();
+  const realtorData = unwrapLookup(
+    await supabase
+      .from('realtors')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('active', true)
+      .maybeSingle()
+  );
 
   if (realtorData) {
     writeSessionCache(teamMemberCache, `${userId}:realtor`, realtorData.id);
@@ -147,13 +159,15 @@ export async function getUserRole(
   }
 
   // Auto-link: Check if there's an unlinked realtor with this email
-  const { data: unlinkedRealtor } = await supabase
-    .from('realtors')
-    .select('id')
-    .eq('email', emailLower)
-    .is('user_id', null)
-    .eq('active', true)
-    .maybeSingle();
+  const unlinkedRealtor = unwrapLookup(
+    await supabase
+      .from('realtors')
+      .select('id')
+      .eq('email', emailLower)
+      .is('user_id', null)
+      .eq('active', true)
+      .maybeSingle()
+  );
 
   if (unlinkedRealtor) {
     // Link this auth user to the realtor record
@@ -162,9 +176,7 @@ export async function getUserRole(
       .update({ user_id: userId })
       .eq('id', unlinkedRealtor.id);
 
-    console.log(
-      `✅ Auto-linked user ${userId} to realtor ${unlinkedRealtor.id}`
-    );
+    console.log('✅ Auto-linked account to realtor record');
     writeSessionCache(teamMemberCache, `${userId}:realtor`, unlinkedRealtor.id);
     return remember('realtor');
   }
@@ -241,16 +253,11 @@ async function getAssistantProfileId(
     .eq('id', unlinkedAssistant.id);
 
   if (linkError) {
-    console.error(
-      `❌ Failed to auto-link assistant ${unlinkedAssistant.id}:`,
-      linkError.message
-    );
+    console.error('❌ Failed to auto-link assistant record:', linkError.message);
     return null;
   }
 
-  console.log(
-    `✅ Auto-linked user ${userId} to assistant ${unlinkedAssistant.id}`
-  );
+  console.log('✅ Auto-linked account to assistant record');
   writeSessionCache(teamMemberCache, cacheKey, unlinkedAssistant.id);
   return unlinkedAssistant.id;
 }

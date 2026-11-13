@@ -259,14 +259,10 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
         return;
       }
 
-      console.log('Opening Google auth session:', authUrl);
-
       const result = await WebBrowser.openAuthSessionAsync(
         authUrl,
         redirectTo
       );
-
-      console.log('AuthSession result:', result);
 
       if (result.type !== 'success' || !result.url) {
         setAuthError('Google sign-in did not complete. Please try again.');
@@ -293,12 +289,10 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
         });
 
       if (sessionError) {
-        console.log('Set session error:', sessionError);
+        console.log('Set session error:', sessionError.message);
         setAuthError(sessionError.message);
         return;
       }
-
-      console.log('Supabase session set successfully:', sessionData);
 
       if (sessionData.session) {
         onAuth(sessionData.session);

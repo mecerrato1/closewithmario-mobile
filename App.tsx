@@ -25,6 +25,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './src/lib/supabase';
 import {
+  clearRoleCaches,
   getUserCrmLeadScope,
   getUserRole,
   getUserTeamMemberId,
@@ -49,7 +50,12 @@ import ProfileSettingsScreen from './src/screens/ProfileSettingsScreen';
 import { AppLockProvider, useAppLock } from './src/contexts/AppLockContext';
 import { useAiLeadAttention } from './src/hooks/useAiLeadAttention';
 import LockScreen from './src/screens/LockScreen';
-import { registerForPushNotifications } from './src/lib/notifications';
+import {
+  cancelAllScheduledReminders,
+  deactivateThisDevicePush,
+  registerForPushNotifications,
+} from './src/lib/notifications';
+import { runSignOut } from './src/features/session/signOutCleanup';
 import { styles } from './src/styles/appStyles';
 import { useThemeColors } from './src/styles/theme';
 import { getAvatarUrl } from './src/utils/profilePicture';
@@ -4013,45 +4019,84 @@ const aiRecommendationStyles = StyleSheet.create({
 function RootApp() {
   const [session, setSession] = useState<Session | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [sessionCheckFailed, setSessionCheckFailed] = useState(false);
+  const [sessionAttempt, setSessionAttempt] = useState(0);
   const [notificationLead, setNotificationLead] = useState<{ id: string; source: 'lead' | 'meta'; openTab?: 'messages' | 'dm' } | null>(null);
   const { isLocked } = useAppLock();
   const lastHandledNotificationIdRef = useRef<string | null>(null);
+  const currentUserIdRef = useRef<string | null>(null);
 
-  // Check for existing Supabase session on mount
-  useEffect(() => {
-    const initAuth = async () => {
-      const {
-        data: { session: existingSession },
-      } = await supabase.auth.getSession();
-
-      setSession(existingSession);
-      setCheckingSession(false);
-
-      // Register for push notifications if user is logged in
-      console.log('📱 [Auth] Session check - user id:', existingSession?.user?.id || 'none');
-      if (existingSession?.user?.id) {
-        registerForPushNotifications(existingSession.user.id);
+  // Single entry point for session changes. When the signed-in user changes or
+  // ends, everything scoped to the previous account is dropped.
+  const adoptSession = useCallback((nextSession: Session | null) => {
+    const previousUserId = currentUserIdRef.current;
+    const nextUserId = nextSession?.user?.id ?? null;
+    if (previousUserId !== nextUserId) {
+      clearRoleCaches();
+      if (previousUserId !== null) {
+        setNotificationLead(null);
+        lastHandledNotificationIdRef.current = null;
       }
-
-      // Listen for auth changes
-      const {
-        data: { subscription },
-      } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
-        setSession(newSession);
-        // Register for push notifications when user signs in
-        if (newSession?.user?.id) {
-          console.log('📱 [Auth] Auth state changed - registering for notifications');
-          registerForPushNotifications(newSession.user.id);
-        }
-      });
-
-      return () => {
-        subscription.unsubscribe();
-      };
-    };
-
-    initAuth();
+      currentUserIdRef.current = nextUserId;
+    }
+    setSession(nextSession);
   }, []);
+
+  // Restore the session on launch and follow auth changes.
+  useEffect(() => {
+    let cancelled = false;
+    setCheckingSession(true);
+    setSessionCheckFailed(false);
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (cancelled) return;
+      adoptSession(newSession);
+      // Token refreshes and the initial event must not re-register the device.
+      if (event === 'SIGNED_IN' && newSession?.user?.id) {
+        registerForPushNotifications(newSession.user.id);
+      }
+    });
+
+    (async () => {
+      try {
+        const {
+          data: { session: existingSession },
+        } = await supabase.auth.getSession();
+        if (cancelled) return;
+        adoptSession(existingSession);
+        if (existingSession?.user?.id) {
+          registerForPushNotifications(existingSession.user.id);
+        }
+      } catch {
+        if (!cancelled) setSessionCheckFailed(true);
+      } finally {
+        if (!cancelled) setCheckingSession(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, [adoptSession, sessionAttempt]);
+
+  const handleSignOut = useCallback(async () => {
+    const userId = session?.user?.id;
+    const { failedSteps } = await runSignOut({
+      deactivatePushToken: async () => {
+        if (userId) await deactivateThisDevicePush(userId);
+      },
+      cancelScheduledNotifications: cancelAllScheduledReminders,
+      signOut: () => supabase.auth.signOut(),
+      clearAccountCaches: clearRoleCaches,
+    });
+    if (failedSteps.length > 0) {
+      console.warn('Sign-out cleanup incomplete:', failedSteps.join(', '));
+    }
+    adoptSession(null);
+  }, [session?.user?.id, adoptSession]);
 
   // Listen for notification taps, including the initial launch from a push.
   useEffect(() => {
@@ -4108,9 +4153,26 @@ function RootApp() {
     );
   }
 
+  if (sessionCheckFailed) {
+    return (
+      <View style={styles.centerContent}>
+        <Text style={styles.subtitle}>
+          We couldn't check your session. Check your connection and try again.
+        </Text>
+        <TouchableOpacity
+          accessibilityRole="button"
+          style={{ marginTop: 14, borderRadius: 10, backgroundColor: '#7C3AED', paddingHorizontal: 18, paddingVertical: 12 }}
+          onPress={() => setSessionAttempt((attempt) => attempt + 1)}
+        >
+          <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Try again</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   // No Supabase session → show login
   if (!session) {
-    return <AuthScreen onAuth={(sess) => setSession(sess)} />;
+    return <AuthScreen onAuth={(sess) => adoptSession(sess)} />;
   }
 
   // Have session but app is locked → show Face ID lock screen
@@ -4128,10 +4190,7 @@ function RootApp() {
     <>
       <AuthenticatedRoot
         session={session}
-        onSignOut={async () => {
-          await supabase.auth.signOut();
-          setSession(null);
-        }}
+        onSignOut={handleSignOut}
         notificationLead={notificationLead}
         onNotificationHandled={() => setNotificationLead(null)}
         LeadsScreenComponent={LeadsScreen}
