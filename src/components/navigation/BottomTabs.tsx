@@ -2,6 +2,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform, Image, ImageSourcePropType } from 'react-native';
 import { useThemeColors } from '../../styles/theme';
+import { useBrand } from '../../brand/BrandContext';
 
 import type { UserRole } from '../../lib/roles';
 
@@ -39,6 +40,7 @@ interface BottomTabsProps {
 export default function BottomTabs({ activeTab, onTabChange, userRole }: BottomTabsProps) {
   const tabs = userRole === 'realtor' ? REALTOR_TABS : DEFAULT_TABS;
   const { colors } = useThemeColors();
+  const brand = useBrand();
 
   return (
     <View style={[styles.container, { backgroundColor: colors.cardBackground, borderTopColor: colors.border }]}>
@@ -62,13 +64,13 @@ export default function BottomTabs({ activeTab, onTabChange, userRole }: BottomT
               minimumFontScale={0.8}
               style={[
                 styles.label,
-                { color: isActive ? '#7C3AED' : colors.textSecondary },
+                { color: isActive ? brand.colors.accentText : colors.textSecondary },
                 isActive && styles.labelActive,
               ]}
             >
               {tab.label}
             </Text>
-            {isActive && <View style={styles.activeIndicator} />}
+            {isActive && <View style={[styles.activeIndicator, { backgroundColor: brand.colors.accent }]} />}
           </TouchableOpacity>
         );
       })}

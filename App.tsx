@@ -58,6 +58,7 @@ import {
 import { runSignOut } from './src/features/session/signOutCleanup';
 import { styles } from './src/styles/appStyles';
 import { useThemeColors } from './src/styles/theme';
+import { useBrand } from './src/brand/BrandContext';
 import { getAvatarUrl } from './src/utils/profilePicture';
 import AuthenticatedRoot from './src/screens/AuthenticatedRoot';
 
@@ -155,6 +156,7 @@ function resolveNotificationOpenTab(
 
 function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandled, defaultToMyLeads, skipDashboard, onNavigateToCapture }: LeadsScreenProps) {
   const { colors, isDark } = useThemeColors();
+  const brand = useBrand();
   const [initializing, setInitializing] = useState(true);
   const [initialError, setInitialError] = useState<string | null>(null);
   const [roleReady, setRoleReady] = useState(false);
@@ -2838,7 +2840,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       <Animated.View style={[
         styles.leadsHeaderContainer, 
         { 
-          backgroundColor: '#4C1D95',
+          backgroundColor: brand.colors.primary,
           height: headerHeight,
         }
       ]}>
@@ -2853,7 +2855,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             <Text style={styles.homeButtonText}>← Dashboard</Text>
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>Close With Mario</Text>
+            <Text style={styles.headerTitle}>{brand.displayName}</Text>
             <Text style={styles.headerSubtitle}>Lead Management</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>

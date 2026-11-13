@@ -9,13 +9,14 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Image,
   Alert,
   ActivityIndicator,
   Linking,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
+import BrandLogo from '../brand/BrandLogo';
+import { PUBLIC_BRAND } from '../brand/brands';
 import { Session } from '@supabase/supabase-js';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useThemeColors } from '../styles/theme';
@@ -42,6 +43,10 @@ const redirectTo = makeRedirectUri({
   scheme: 'com.closewithmario.mobile',
   path: 'auth/callback',
 });
+
+// The sign-in screen is shown before the account's brand is known.
+const brand = PUBLIC_BRAND;
+const SIGNUP_URL = 'https://www.agentloconnect.com/login?tab=signup';
 
 export type AuthScreenProps = {
   onAuth: (session: Session) => void;
@@ -402,13 +407,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
       : `${biometricType} is not available in the current simulator or build.`;
 
   return (
-    <View style={[s.container, { backgroundColor: isDark ? colors.background : '#F3F0FF' }]}>
-      {!isDark && (
-        <LinearGradient
-          colors={['#F3F0FF', '#EDE9FE', '#E8E0FF']}
-          style={StyleSheet.absoluteFill}
-        />
-      )}
+    <View style={[s.container, { backgroundColor: isDark ? colors.background : brand.colors.canvas }]}>
       <StatusBar style={isDark ? 'light' : 'dark'} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.keyboardView}>
         <ScrollView
@@ -418,17 +417,15 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
         >
           {/* Logo */}
           <View style={s.logoRow}>
-            <Image
-              source={require('../../assets/CWMLogo.png')}
-              style={s.logoImage}
-              resizeMode="contain"
-            />
+            <BrandLogo brand={brand} />
           </View>
 
           {/* Tagline */}
-          <Text style={[s.tagline, { color: colors.textSecondary }]}>
-            Your mortgage workflow simplified.
-          </Text>
+          {brand.tagline && (
+            <Text style={[s.tagline, { color: colors.textSecondary }]}>
+              {brand.tagline}
+            </Text>
+          )}
 
           {/* Welcome */}
           <View style={s.welcomeSection}>
@@ -445,7 +442,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
               <View style={s.inputWrapper}>
                 <Ionicons name="mail-outline" size={18} color="#94A3B8" style={s.inputIcon} />
                 <TextInput
-                  style={[s.input, s.inputWithIcon, { backgroundColor: isDark ? colors.background : '#FAFAFE', borderColor: isDark ? colors.border : '#DDD6FE', color: colors.textPrimary }]}
+                  style={[s.input, s.inputWithIcon, { backgroundColor: isDark ? colors.background : brand.colors.canvas, borderColor: isDark ? colors.border : brand.colors.tintBorder, color: colors.textPrimary }]}
                   placeholder="you@company.com"
                   placeholderTextColor="#94A3B8"
                   autoCapitalize="none"
@@ -465,7 +462,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
               <View style={s.inputWrapper}>
                 <Ionicons name="lock-closed-outline" size={18} color="#94A3B8" style={s.inputIcon} />
                 <TextInput
-                  style={[s.input, s.inputWithIcon, { backgroundColor: isDark ? colors.background : '#FAFAFE', borderColor: isDark ? colors.border : '#DDD6FE', color: colors.textPrimary, paddingRight: 72 }]}
+                  style={[s.input, s.inputWithIcon, { backgroundColor: isDark ? colors.background : brand.colors.canvas, borderColor: isDark ? colors.border : brand.colors.tintBorder, color: colors.textPrimary, paddingRight: 72 }]}
                   placeholder="Enter your password"
                   placeholderTextColor="#94A3B8"
                   secureTextEntry={!showPassword}
@@ -505,7 +502,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
               style={isAnyLoading ? s.buttonDisabled : undefined}
             >
               <LinearGradient
-                colors={['#8B5CF6', '#7C3AED', '#6D28D9']}
+                colors={[brand.colors.accentStrong, brand.colors.accentStrong, brand.colors.accentStrong]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={s.signInButton}
@@ -517,7 +514,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
                     <Text style={s.signInButtonText}>
                       {mode === 'signIn' ? 'Sign In' : 'Create Account'}
                     </Text>
-                    <Ionicons name="arrow-forward" size={20} color="#F59E0B" style={{ marginLeft: 6 }} />
+                    <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={{ marginLeft: 6 }} />
                   </>
                 )}
               </LinearGradient>
@@ -542,13 +539,13 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
                   activeOpacity={0.7}
                 >
                   {biometricLoading ? (
-                    <ActivityIndicator size="small" color="#7C3AED" />
+                    <ActivityIndicator size="small" color={brand.colors.accentText} />
                   ) : (
                     <>
                       <Ionicons
                         name="finger-print-outline"
                         size={24}
-                        color={biometricReady ? '#7C3AED' : '#A78BFA'}
+                        color={biometricReady ? brand.colors.accentText : brand.colors.tintBorder}
                       />
                       <Text
                         style={[
@@ -613,7 +610,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
           </View>
 
           {/* Bottom Hint */}
-          <TouchableOpacity onPress={() => Linking.openURL('https://closewithmario.com/login?tab=signup')}>
+          <TouchableOpacity onPress={() => Linking.openURL(SIGNUP_URL)}>
             <Text style={[s.bottomHint, { color: colors.textSecondary }]}>
               Need an account?{' '}
               <Text style={s.bottomHintLink}>Create one here</Text>
@@ -650,10 +647,6 @@ const s = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  logoImage: {
-    width: 108,
-    height: 108,
-  },
 
   // Tagline
   tagline: {
@@ -679,7 +672,7 @@ const s = StyleSheet.create({
     borderRadius: 22,
     padding: 20,
     gap: 16,
-    shadowColor: '#7C3AED',
+    shadowColor: brand.colors.accentText,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.12,
     shadowRadius: 28,
@@ -748,7 +741,7 @@ const s = StyleSheet.create({
   forgotText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#7C3AED',
+    color: brand.colors.accentText,
   },
 
   // Sign In Button
@@ -758,7 +751,7 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     height: 52,
     borderRadius: 12,
-    shadowColor: '#6D28D9',
+    shadowColor: brand.colors.accentStrong,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
     shadowRadius: 10,
@@ -784,7 +777,7 @@ const s = StyleSheet.create({
     fontWeight: '500',
   },
   switchModeBold: {
-    color: '#7C3AED',
+    color: brand.colors.accentText,
     fontWeight: '700',
   },
 
@@ -851,7 +844,7 @@ const s = StyleSheet.create({
     fontWeight: '500',
   },
   bottomHintLink: {
-    color: '#7C3AED',
+    color: brand.colors.accentText,
     fontWeight: '700',
   },
   versionText: {
@@ -892,27 +885,27 @@ const s = StyleSheet.create({
     width: '100%',
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#E9E0FF',
-    backgroundColor: '#F9F5FF',
+    borderColor: brand.colors.tintBorder,
+    backgroundColor: brand.colors.tint,
   },
   biometricButtonDisabled: {
-    backgroundColor: '#F5F3FF',
-    borderColor: '#DDD6FE',
+    backgroundColor: brand.colors.tint,
+    borderColor: brand.colors.tintBorder,
   },
   biometricButtonText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#7C3AED',
+    color: brand.colors.accentText,
   },
   biometricButtonTextDisabled: {
-    color: '#8B5CF6',
+    color: brand.colors.accent,
   },
   biometricHelperText: {
     marginTop: 8,
     fontSize: 12,
     lineHeight: 17,
     textAlign: 'center',
-    color: '#7C3AED',
+    color: brand.colors.accentText,
     opacity: 0.78,
   },
 });

@@ -127,7 +127,7 @@ export async function biometricSignIn(): Promise<{
 
   // 3. Prompt user for biometric auth
   const result = await LocalAuthentication.authenticateAsync({
-    promptMessage: 'Sign in to Close With Mario',
+    promptMessage: 'Sign in with Face ID',
     cancelLabel: 'Cancel',
     disableDeviceFallback: false,
   });

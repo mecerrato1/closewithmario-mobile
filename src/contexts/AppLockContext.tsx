@@ -47,7 +47,7 @@ export const AppLockProvider: React.FC<{ children: React.ReactNode }> = ({
     }
 
     const result = await LocalAuthentication.authenticateAsync({
-      promptMessage: 'Unlock Close With Mario',
+      promptMessage: 'Unlock to continue',
       cancelLabel: 'Cancel',
       disableDeviceFallback: false,
     });

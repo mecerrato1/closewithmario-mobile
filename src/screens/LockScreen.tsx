@@ -1,13 +1,14 @@
 // src/screens/LockScreen.tsx
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useAppLock } from '../contexts/AppLockContext';
+import BrandLogo from '../brand/BrandLogo';
+import { PUBLIC_BRAND } from '../brand/brands';
 
-type LockScreenProps = {
-  appName?: string;
-};
+// Shown before the account's brand is known, so it always uses the public identity.
+const brand = PUBLIC_BRAND;
 
-const LockScreen: React.FC<LockScreenProps> = ({ appName = 'Close With Mario' }) => {
+const LockScreen: React.FC = () => {
   const { requireUnlock } = useAppLock();
 
   const onUnlockPress = async () => {
@@ -16,15 +17,13 @@ const LockScreen: React.FC<LockScreenProps> = ({ appName = 'Close With Mario' })
 
   return (
     <View style={styles.container}>
-      <Image 
-        source={require('../../assets/CWMLogo.png')} 
-        style={styles.logo}
-        resizeMode="contain"
-      />
+      <View style={styles.logo}>
+        <BrandLogo brand={brand} />
+      </View>
       <Text style={styles.title}>App Locked</Text>
       <Text style={styles.subtitle}>Use biometrics to continue</Text>
 
-      <TouchableOpacity style={styles.button} onPress={onUnlockPress}>
+      <TouchableOpacity accessibilityRole="button" style={styles.button} onPress={onUnlockPress}>
         <Text style={styles.buttonText}>Unlock</Text>
       </TouchableOpacity>
     </View>
@@ -36,38 +35,33 @@ export default LockScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E8DFF5', // matches AuthScreen background
+    backgroundColor: brand.colors.canvas,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
   },
   logo: {
-    width: 200,
-    height: 80,
     marginBottom: 32,
   },
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#1F2937',
+    color: brand.colors.textPrimary,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,
-    color: '#6B7280',
+    color: brand.colors.textSecondary,
     textAlign: 'center',
     marginBottom: 32,
   },
   button: {
-    backgroundColor: '#7C3AED',
+    minHeight: 48,
+    backgroundColor: brand.colors.accentStrong,
     paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderRadius: 14,
-    shadowColor: '#7C3AED',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
+    justifyContent: 'center',
   },
   buttonText: {
     color: '#FFFFFF',

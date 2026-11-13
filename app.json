@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "closewithmario-mobile",
+    "name": "AgentLOConnect",
     "slug": "closewithmario-mobile",
-    "version": "1.1.124",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -11,7 +11,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0B1220"
     },
     "ios": {
       "supportsTablet": true,
@@ -25,11 +25,11 @@
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSUserNotificationUsageDescription": "We use notifications to remind you to follow up with your leads.",
-        "NSFaceIDUsageDescription": "Close With Mario uses Face ID so you can securely sign in faster on your device.",
-        "NSMicrophoneUsageDescription": "Close With Mario uses your microphone to record voice notes on leads, such as when you want to add spoken updates instead of typing.",
-        "NSContactsUsageDescription": "Close With Mario uses your contacts only when you choose to save a lead into your device's address book.",
-        "NSPhotoLibraryUsageDescription": "Close With Mario uses your photo library only when you choose an image for your profile picture. For example, you may select a headshot so teammates can recognize your account.",
-        "NSCameraUsageDescription": "Close With Mario uses your camera only when you take a profile picture so your team can recognize your account.",
+        "NSFaceIDUsageDescription": "Use Face ID to sign in faster and unlock the app on this device.",
+        "NSMicrophoneUsageDescription": "Your microphone is used to record voice notes on leads, such as spoken updates instead of typing.",
+        "NSContactsUsageDescription": "Your contacts are used only when you choose to save a lead to your phone's address book.",
+        "NSPhotoLibraryUsageDescription": "Your photo library is used only when you choose an image for your profile picture, for example a headshot.",
+        "NSCameraUsageDescription": "Your camera is used only when you take a profile picture so colleagues can recognize your account.",
         "LSApplicationQueriesSchemes": [
           "ms-outlook"
         ]
@@ -83,20 +83,20 @@
       [
         "expo-av",
         {
-          "microphonePermission": "Close With Mario uses your microphone to record voice notes for lead updates."
+          "microphonePermission": "Your microphone is used to record voice notes on leads, such as spoken updates instead of typing."
         }
       ],
       [
         "expo-contacts",
         {
-          "contactsPermission": "Close With Mario uses your contacts only when you choose to save a lead to your phone's address book."
+          "contactsPermission": "Your contacts are used only when you choose to save a lead to your phone's address book."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Close With Mario uses your photo library only when you choose an image for your profile picture — for example selecting a headshot.",
-          "cameraPermission": "Close With Mario uses your camera only to take a profile picture so your teammates can recognize your account."
+          "photosPermission": "Your photo library is used only when you choose an image for your profile picture, for example a headshot.",
+          "cameraPermission": "Your camera is used only when you take a profile picture so colleagues can recognize your account."
         }
       ],
       "expo-apple-authentication",
