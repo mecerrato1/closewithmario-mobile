@@ -28,8 +28,8 @@
         "NSFaceIDUsageDescription": "Use Face ID to sign in faster and unlock the app on this device.",
         "NSMicrophoneUsageDescription": "Your microphone is used to record voice notes on leads, such as spoken updates instead of typing.",
         "NSContactsUsageDescription": "Your contacts are used only when you choose to save a lead to your phone's address book.",
-        "NSPhotoLibraryUsageDescription": "Your photo library is used only when you choose an image for your profile picture, for example a headshot.",
-        "NSCameraUsageDescription": "Your camera is used only when you take a profile picture so colleagues can recognize your account.",
+        "NSPhotoLibraryUsageDescription": "Your photo library is used when you choose a profile picture or add photos to a Quick Lead.",
+        "NSCameraUsageDescription": "Your camera is used when you take a profile picture or photos for a Quick Lead.",
         "LSApplicationQueriesSchemes": [
           "ms-outlook"
         ]
@@ -95,8 +95,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Your photo library is used only when you choose an image for your profile picture, for example a headshot.",
-          "cameraPermission": "Your camera is used only when you take a profile picture so colleagues can recognize your account."
+          "photosPermission": "Your photo library is used when you choose a profile picture or add photos to a Quick Lead.",
+          "cameraPermission": "Your camera is used when you take a profile picture or photos for a Quick Lead."
         }
       ],
       "expo-apple-authentication",
