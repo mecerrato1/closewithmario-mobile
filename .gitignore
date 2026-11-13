@@ -41,3 +41,8 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# personal data and diagnostics that must not be committed
+backup_*.json
+*.crash
+docs/crashfiles/

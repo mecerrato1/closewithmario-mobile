@@ -24,6 +24,7 @@ import { useMetaDmConversation } from '../features/messages/useMetaDmConversatio
 import { usePaginatedMessageHistory } from '../features/messages/usePaginatedMessageHistory';
 import { useThemeColors } from '../styles/theme';
 import { themedStyles } from '../brand/themedStyles';
+import { SEND_TIMEOUT_MESSAGE, useSendGuard } from '../features/messages/sendGuard';
 
 type LeadSource = 'organic' | 'meta';
 type MetaDmMessage = MetaDmHistoryMessage;
@@ -130,6 +131,7 @@ export function MetaDmMessaging({
   const { colors } = useThemeColors();
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const sendGuard = useSendGuard();
   const [actionError, setActionError] = useState<string | null>(null);
   const flatListRef = useRef<FlatList<MetaDmMessage>>(null);
   const activeConversationIdRef = useRef<string | null>(null);
@@ -318,7 +320,11 @@ export function MetaDmMessaging({
       return;
     }
 
+    if (!sendGuard.tryAcquire()) return;
+
     const messageToSend = draft.trim();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 20000);
     setSending(true);
     setActionError(null);
     clearConversationError();
@@ -336,6 +342,7 @@ export function MetaDmMessaging({
             conversationId: conversation.id,
             message: messageToSend,
           }),
+          signal: controller.signal,
         }
       );
 
@@ -354,12 +361,20 @@ export function MetaDmMessaging({
       await Promise.all([reloadStored(), reloadHistory()]);
       onMessageSent?.();
     } catch (sendError) {
-      const message =
-        sendError instanceof Error
-          ? sendError.message
-          : 'Failed to send Messenger reply';
-      setActionError(message);
+      if (sendError instanceof Error && sendError.name === 'AbortError') {
+        // The server may have sent the reply before the client gave up.
+        setActionError(SEND_TIMEOUT_MESSAGE);
+        void Promise.all([reloadStored(), reloadHistory()]);
+      } else {
+        const message =
+          sendError instanceof Error
+            ? sendError.message
+            : 'Failed to send Messenger reply';
+        setActionError(message);
+      }
     } finally {
+      clearTimeout(timeoutId);
+      sendGuard.release();
       setSending(false);
     }
   }, [

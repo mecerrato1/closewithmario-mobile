@@ -69,6 +69,8 @@ import { useLeadActivityBodies } from '../features/leads/useLeadActivityBodies';
 import { searchActiveRealtors } from '../lib/supabase/leadRealtorRoles';
 
 import { themedStyles } from '../brand/themedStyles';
+import { PARTNER_UPDATE_TIMEOUT_MESSAGE, useSendGuard } from '../features/messages/sendGuard';
+
 const PLUM = '#4C1D95';
 const CRM_API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_BASE_URL || 'https://www.closewithmario.com'
@@ -2625,6 +2627,7 @@ export function LeadDetailView({
   const [sendingPartnerUpdate, setSendingPartnerUpdate] = useState(false);
 
   // Saved scenario sharing state
+  const partnerUpdateGuard = useSendGuard();
   const [leadScenarios, setLeadScenarios] = useState<LeadScenarioSummary[]>([]);
   const [scenarioLinks, setScenarioLinks] = useState<QualificationLinkSummary[]>([]);
   const [loadingScenarios, setLoadingScenarios] = useState(false);
@@ -2990,7 +2993,8 @@ export function LeadDetailView({
   // Handle sending partner update
   const handleSendPartnerUpdate = async () => {
     if (!record || !partnerUpdateMessage.trim()) return;
-    
+    if (!partnerUpdateGuard.tryAcquire()) return;
+
     setSendingPartnerUpdate(true);
     try {
       // Create abort controller for timeout
@@ -3046,13 +3050,14 @@ export function LeadDetailView({
     } catch (error: any) {
       console.error('📧 Error sending partner update:', error);
       if (error.name === 'AbortError') {
-        Alert.alert('Timeout', 'Request timed out. Please check your connection and try again.');
+        Alert.alert('Timeout', PARTNER_UPDATE_TIMEOUT_MESSAGE);
       } else {
         Alert.alert('Error', `Failed to send partner update: ${error.message || 'Unknown error'}`);
       }
     } finally {
       setSendingPartnerUpdate(false);
     }
+      partnerUpdateGuard.release();
   };
 
 

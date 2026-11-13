@@ -38,6 +38,7 @@ import {
   type SmsMediaAttachment,
 } from '../lib/smsMedia';
 import { themedStyles } from '../brand/themedStyles';
+import { SEND_TIMEOUT_MESSAGE, useSendGuard } from '../features/messages/sendGuard';
 
 type SmsMessage = SmsHistoryMessage;
 
@@ -122,6 +123,7 @@ export function SmsMessaging({
 }: SmsMessagingProps) {
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const sendGuard = useSendGuard();
   const [actionError, setActionError] = useState<string | null>(null);
   const [smsOptIn, setSmsOptIn] = useState<boolean | null | undefined>(
     initialSmsOptIn
@@ -263,6 +265,8 @@ export function SmsMessaging({
       return;
     }
 
+    if (!sendGuard.tryAcquire()) return;
+
     console.log('📱 [SMS] Sending message...', {
       leadId,
       toNumber: leadPhone,
@@ -317,11 +321,14 @@ export function SmsMessaging({
     } catch (err: any) {
       console.log('📱 [SMS] Error:', err.name, err.message || err);
       if (err.name === 'AbortError') {
-        setActionError('Request timed out. Please try again.');
+        // The server may have sent the text before the client gave up.
+        setActionError(SEND_TIMEOUT_MESSAGE);
+        void reload();
       } else {
         setActionError(err.message || 'Failed to send message');
       }
     } finally {
+      sendGuard.release();
       setSending(false);
     }
   }
