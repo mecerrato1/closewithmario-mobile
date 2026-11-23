@@ -16,13 +16,29 @@ import {
 } from 'react-native';
 import { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isSessionMfaVerified } from '../features/session/mfaPolicy';
+import { fetchAccountMfaStatus, isReminderSnoozed } from '../features/session/mfaAccount';
+import { API_BASE_URL } from '../lib/apiBaseUrl';
+import MfaEnrollment from './MfaEnrollment';
 import BrandLogo from '../brand/BrandLogo';
 import { PUBLIC_BRAND } from '../brand/brands';
 
 const brand = PUBLIC_BRAND;
 
-type GateState = 'checking' | 'open' | 'challenge' | 'error';
+type GateState = 'checking' | 'open' | 'challenge' | 'enroll' | 'remind' | 'error';
+
+const snoozeKey = (userId: string) => `mfa_setup_snoozed_at:${userId}`;
+
+async function readSnooze(userId: string): Promise<number | null> {
+  try {
+    const raw = await AsyncStorage.getItem(snoozeKey(userId));
+    const value = raw ? Number(raw) : NaN;
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
 
 type Props = {
   session: Session;
@@ -52,12 +68,30 @@ export default function MfaGate({ session, onSignOut, children }: Props) {
         return;
       }
       const totp = (data?.totp ?? []).find((f) => f.status === 'verified');
-      // No authenticator on the account: nothing to verify.
+      // Always judge the newest token: a code just verified refreshes the session.
+      const { data: current } = await supabase.auth.getSession();
+      const token = current.session?.access_token ?? accessToken;
       if (!totp) {
+        // No authenticator yet. The server decides whether this account must set one up.
+        const status = await fetchAccountMfaStatus(API_BASE_URL, token);
+        if (cancelled) return;
+        if (!status) {
+          setState('error');
+          return;
+        }
+        if (status.decision === 'enrollment_required') {
+          setState('enroll');
+          return;
+        }
+        if (status.requiredRole && !isReminderSnoozed(await readSnooze(session.user.id))) {
+          if (cancelled) return;
+          setState('remind');
+          return;
+        }
         setState('open');
         return;
       }
-      if (isSessionMfaVerified(accessToken)) {
+      if (isSessionMfaVerified(token)) {
         setState('open');
         return;
       }
@@ -69,7 +103,7 @@ export default function MfaGate({ session, onSignOut, children }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, attempt]);
+  }, [accessToken, attempt, session.user.id]);
 
   // People leave the app to read their authenticator code. iOS dismisses the
   // keyboard while the app is in the background and autoFocus only runs once, so
@@ -117,6 +151,30 @@ export default function MfaGate({ session, onSignOut, children }: Props) {
   }, [code, factorId, submitting]);
 
   if (state === 'open') return <>{children}</>;
+
+  if (state === 'enroll' || state === 'remind') {
+    const mandatory = state === 'enroll';
+    return (
+      <MfaEnrollment
+        intro={
+          mandatory
+            ? 'Your account needs two-step verification before you can open your leads. It takes about a minute.'
+            : 'Your role will need two-step verification soon. Set it up now so your leads keep loading.'
+        }
+        onVerified={() => setAttempt((n) => n + 1)}
+        onSkip={
+          mandatory
+            ? undefined
+            : () => {
+                void AsyncStorage.setItem(snoozeKey(session.user.id), String(Date.now())).catch(() => {});
+                setState('open');
+              }
+        }
+        skipLabel="Remind me later"
+        onSignOut={onSignOut}
+      />
+    );
+  }
 
   return (
     <KeyboardAvoidingView
