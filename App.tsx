@@ -61,6 +61,7 @@ import { useThemeColors } from './src/styles/theme';
 import { useBrand } from './src/brand/BrandContext';
 import { getAvatarUrl } from './src/utils/profilePicture';
 import AuthenticatedRoot from './src/screens/AuthenticatedRoot';
+import MfaGate from './src/screens/MfaGate';
 
 import * as WebBrowser from 'expo-web-browser';
 import QuickCaptureTab from './src/features/quickCapture/QuickCaptureTab';
@@ -4201,13 +4202,15 @@ function RootApp() {
   // Have session and app is unlocked → show main app with bottom tabs
   return (
     <>
-      <AuthenticatedRoot
-        session={session}
-        onSignOut={handleSignOut}
-        notificationLead={notificationLead}
-        onNotificationHandled={() => setNotificationLead(null)}
-        LeadsScreenComponent={LeadsScreen}
-      />
+      <MfaGate session={session} onSignOut={handleSignOut}>
+        <AuthenticatedRoot
+          session={session}
+          onSignOut={handleSignOut}
+          notificationLead={notificationLead}
+          onNotificationHandled={() => setNotificationLead(null)}
+          LeadsScreenComponent={LeadsScreen}
+        />
+      </MfaGate>
       <StatusBar style="auto" />
     </>
   );
