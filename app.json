@@ -2,7 +2,7 @@
   "expo": {
     "name": "closewithmario-mobile",
     "slug": "closewithmario-mobile",
-    "version": "1.1.124",
+    "version": "1.2.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
