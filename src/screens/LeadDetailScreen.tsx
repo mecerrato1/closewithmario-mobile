@@ -43,6 +43,7 @@ import type { UserRole } from '../lib/roles';
 import { authenticatedFetch } from '../lib/authenticatedFetch';
 import { supabase } from '../lib/supabase';
 import { getUserRole, getUserTeamMemberId, canSeeAllLeads } from '../lib/roles';
+import { prepareLeadTemplateMessage, prefersSpanish, assertResolvedTemplate } from '../features/leads/leadTemplateMessage';
 import { TEXT_TEMPLATES, fetchLeadTemplates, fillTemplate, getTemplateText, getTemplateName, getTemplateSubject, formatPhoneNumber, type TemplateVariables, type TextTemplate } from '../lib/textTemplates';
 import { STATUSES, STATUS_DISPLAY_MAP, STATUS_COLOR_MAP, getLeadAlert, formatStatus, getTimeAgo, sortLeadsByLastTouchedDesc } from '../lib/leadsHelpers';
 import { scheduleLeadCallback } from '../lib/callbacks';
@@ -67,7 +68,6 @@ import {
 } from '../features/leads/crmLeadApi';
 import { useLeadActivityBodies } from '../features/leads/useLeadActivityBodies';
 import { searchActiveRealtors } from '../lib/supabase/leadRealtorRoles';
-
 import { themedStyles } from '../brand/themedStyles';
 import { PARTNER_UPDATE_TIMEOUT_MESSAGE, useSendGuard } from '../features/messages/sendGuard';
 
@@ -2597,6 +2597,8 @@ export function LeadDetailView({
   const [savedContactKeys, setSavedContactKeys] = useState<string[]>([]);
   const [showAdImage, setShowAdImage] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [preparingTemplate, setPreparingTemplate] = useState(false);
+  const preparingTemplateRef = useRef(false);
   const [currentLOInfo, setCurrentLOInfo] = useState<{ firstName: string; lastName: string; phone: string; email: string; aiDraftAccess?: boolean; company?: string } | null>(null);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
   const [showCallbackModal, setShowCallbackModal] = useState(false);
@@ -2625,9 +2627,9 @@ export function LeadDetailView({
   const [showPartnerUpdateModal, setShowPartnerUpdateModal] = useState(false);
   const [partnerUpdateMessage, setPartnerUpdateMessage] = useState('');
   const [sendingPartnerUpdate, setSendingPartnerUpdate] = useState(false);
+  const partnerUpdateGuard = useSendGuard();
 
   // Saved scenario sharing state
-  const partnerUpdateGuard = useSendGuard();
   const [leadScenarios, setLeadScenarios] = useState<LeadScenarioSummary[]>([]);
   const [scenarioLinks, setScenarioLinks] = useState<QualificationLinkSummary[]>([]);
   const [loadingScenarios, setLoadingScenarios] = useState(false);
@@ -3055,9 +3057,9 @@ export function LeadDetailView({
         Alert.alert('Error', `Failed to send partner update: ${error.message || 'Unknown error'}`);
       }
     } finally {
+      partnerUpdateGuard.release();
       setSendingPartnerUpdate(false);
     }
-      partnerUpdateGuard.release();
   };
 
 
@@ -4402,12 +4404,15 @@ export function LeadDetailView({
   };
 
   const handleTemplateSelect = async (templateId: string) => {
+    if (preparingTemplateRef.current) return;
     const template = templates.find(t => t.id === templateId);
     if (!template) return;
     if (!record) return;
     const r = record;
 
-    console.log('Current LO Info when creating template:', currentLOInfo);
+    preparingTemplateRef.current = true;
+    setPreparingTemplate(true);
+    try {
 
     // Helper function to format callback date/time
     const formatCallbackDateTime = (date: Date): string => {
@@ -4499,12 +4504,18 @@ export function LeadDetailView({
       county,
     };
 
-    console.log('Template variables:', variables);
-
     // Use the correct language template
     const templateText = getTemplateText(template, useSpanishTemplates);
-    const messageBody = fillTemplate(templateText, variables);
-    console.log('Final message body:', messageBody);
+    const messageBody = await prepareLeadTemplateMessage({
+      message: fillTemplate(templateText, variables),
+      leadId: r.id,
+      leadSource: isMeta ? 'meta' : 'organic',
+      spanish: useSpanishTemplates,
+      request: authenticatedFetch,
+    });
+    if (templateMode === 'email') {
+      assertResolvedTemplate(getTemplateSubject(template, useSpanishTemplates), useSpanishTemplates);
+    }
     
     setShowTemplateModal(false);
 
@@ -4553,7 +4564,7 @@ export function LeadDetailView({
       }
       
       // Open SMS app with pre-filled message
-      Linking.openURL(`sms:${phone}?body=${encodedBody}`);
+      await Linking.openURL(`sms:${phone}?body=${encodedBody}`);
     } else if (templateMode === 'email') {
       if (!email) return;
 
@@ -4618,6 +4629,16 @@ export function LeadDetailView({
           console.error('Error opening mailto:', e);
         }
       }
+    }
+    } catch (error) {
+      setShowTemplateModal(true);
+      Alert.alert(
+        useSpanishTemplates ? 'No se pudo preparar el mensaje' : 'Unable to prepare message',
+        error instanceof Error ? error.message : 'Please try again.'
+      );
+    } finally {
+      preparingTemplateRef.current = false;
+      setPreparingTemplate(false);
     }
   };
 
@@ -5010,13 +5031,8 @@ export function LeadDetailView({
 
   // Set language preference based on lead's preferred_language
   useEffect(() => {
-    if (record && isMeta) {
-      const preferredLanguage = (record as MetaLead).preferred_language?.toLowerCase();
-      setUseSpanishTemplates(preferredLanguage === 'spanish');
-    } else {
-      // Default to English for non-meta leads
-      setUseSpanishTemplates(false);
-    }
+    setUseSpanishTemplates(prefersSpanish(record?.preferred_language
+      || (isMeta ? (record as MetaLead)?.form_data?.preferred_language : null)));
   }, [record?.id, isMeta]);
 
   // Cleanup current sound when component unmounts or sound changes
@@ -7953,6 +7969,7 @@ export function LeadDetailView({
         transparent={true}
         animationType="slide"
         onRequestClose={() => {
+          if (preparingTemplateRef.current) return;
           setShowTemplateModal(false);
           setShowCustomMessage(false);
           setCustomMessageText('');
@@ -7983,13 +8000,14 @@ export function LeadDetailView({
                             !customMessageText.trim() && styles.templateSendActionDisabled
                           ]}
                           onPress={handleCustomMessageSend}
-                          disabled={!customMessageText.trim()}
+                          disabled={!customMessageText.trim() || preparingTemplate}
                         >
                           <Ionicons name="send" size={15} color="#FFFFFF" />
                           <Text style={styles.templateSendActionText}>Send</Text>
                         </TouchableOpacity>
                       ) : null}
                       <TouchableOpacity
+                  disabled={preparingTemplate}
                         onPress={() => {
                           setShowTemplateModal(false);
                           setShowCustomMessage(false);
@@ -8006,6 +8024,7 @@ export function LeadDetailView({
               <>
                 {/* Custom Message Button */}
                 <TouchableOpacity
+                  disabled={preparingTemplate}
                   style={styles.customMessageButton}
                   onPress={() => setShowCustomMessage(true)}
                 >
@@ -8015,6 +8034,7 @@ export function LeadDetailView({
                 {/* Language Toggle */}
                 <View style={styles.languageToggleContainer}>
                   <TouchableOpacity
+                  disabled={preparingTemplate}
                     style={[
                       styles.languageToggleButton,
                       !useSpanishTemplates && styles.languageToggleButtonActive
@@ -8027,6 +8047,7 @@ export function LeadDetailView({
                     ]}>🇺🇸 English</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
+                  disabled={preparingTemplate}
                     style={[
                       styles.languageToggleButton,
                       useSpanishTemplates && styles.languageToggleButtonActive
@@ -8040,6 +8061,12 @@ export function LeadDetailView({
                   </TouchableOpacity>
                 </View>
                 
+                {preparingTemplate && (
+                  <View accessibilityRole="progressbar" accessibilityLiveRegion="polite">
+                    <ActivityIndicator />
+                    <Text>{useSpanishTemplates ? 'Preparando mensaje…' : 'Preparing message…'}</Text>
+                  </View>
+                )}
                 <ScrollView style={styles.templateList} showsVerticalScrollIndicator={false}>
                   {templates.map((template) => {
                     const metaRec = record as MetaLead;
@@ -8072,6 +8099,7 @@ export function LeadDetailView({
                       <TouchableOpacity
                         key={template.id}
                         style={styles.templateItem}
+                        disabled={preparingTemplate}
                         onPress={() => handleTemplateSelect(template.id)}
                       >
                         <Text style={styles.templateName}>{getTemplateName(template, useSpanishTemplates)}</Text>
