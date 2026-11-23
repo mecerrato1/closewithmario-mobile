@@ -2,9 +2,10 @@
 // The CRM database and API now require a session verified with an authenticator
 // code (aal2, TOTP under 30 days old) for anyone who has an authenticator. Without
 // this gate the app's calls are refused and the lead list loads empty.
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -40,6 +41,7 @@ export default function MfaGate({ session, onSignOut, children }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const inputRef = useRef<TextInput>(null);
 
   const accessToken = session.access_token;
 
@@ -72,6 +74,27 @@ export default function MfaGate({ session, onSignOut, children }: Props) {
       cancelled = true;
     };
   }, [accessToken, attempt]);
+
+  // People leave the app to read their authenticator code. iOS dismisses the
+  // keyboard while the app is in the background and autoFocus only runs once, so
+  // bring the keyboard back whenever the app returns to the foreground.
+  useEffect(() => {
+    if (state !== 'challenge') return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') return;
+      if (timer) clearTimeout(timer);
+      // The input may still think it is focused; blur first so focus() reopens the keyboard.
+      timer = setTimeout(() => {
+        inputRef.current?.blur();
+        inputRef.current?.focus();
+      }, 350);
+    });
+    return () => {
+      subscription.remove();
+      if (timer) clearTimeout(timer);
+    };
+  }, [state]);
 
   const verify = useCallback(async () => {
     if (!factorId || submitting) return;
@@ -125,6 +148,7 @@ export default function MfaGate({ session, onSignOut, children }: Props) {
             Enter the 6-digit code from your authenticator app.
           </Text>
           <TextInput
+            ref={inputRef}
             accessibilityLabel="Authenticator code"
             style={styles.input}
             value={code}
