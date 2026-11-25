@@ -27,7 +27,16 @@ const brand = PUBLIC_BRAND;
 
 // Shown in the authenticator app next to the account, same as the web CRM.
 const MFA_ISSUER = 'Agent LO Connect';
-const AUTHENTICATOR_STORE_URL = 'https://apps.apple.com/app/microsoft-authenticator/id983156458';
+const AUTHENTICATOR_STORE_URL =
+  Platform.OS === 'android'
+    ? 'https://play.google.com/store/apps/details?id=com.azure.authenticator'
+    : 'https://apps.apple.com/app/microsoft-authenticator/id983156458';
+const OTHER_AUTHENTICATORS =
+  Platform.OS === 'android'
+    ? 'Google Authenticator works too.'
+    : 'Google Authenticator and the iPhone Passwords app work too.';
+// Default name for this authenticator on the account's security page.
+const DEVICE_NAME = Platform.OS === 'android' ? 'Android phone' : 'iPhone';
 
 type Step = 'intro' | 'connect' | 'done';
 type Enrollment = { factorId: string; secret: string; uri: string };
@@ -109,7 +118,7 @@ export default function MfaEnrollment({ intro, onVerified, onSkip, skipLabel = '
       const taken = await removeUnfinishedFactors();
       const { data, error: enrollError } = await supabase.auth.mfa.enroll({
         factorType: 'totp',
-        friendlyName: uniqueFactorName('iPhone', taken),
+        friendlyName: uniqueFactorName(DEVICE_NAME, taken),
         issuer: MFA_ISSUER,
       });
       if (enrollError || !data) {
@@ -201,8 +210,7 @@ export default function MfaEnrollment({ intro, onVerified, onSkip, skipLabel = '
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Step 1: Get an authenticator app</Text>
               <Text style={styles.cardBody}>
-                We recommend Microsoft Authenticator. It is free. Google Authenticator and the iPhone
-                Passwords app work too.
+                We recommend Microsoft Authenticator. It is free. {OTHER_AUTHENTICATORS}
               </Text>
               <TouchableOpacity
                 accessibilityRole="link"
