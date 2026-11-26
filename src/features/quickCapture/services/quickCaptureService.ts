@@ -2,6 +2,7 @@
 // Data access layer for Quick Capture feature
 
 import { supabase } from '../../../lib/supabase';
+import { getUserRole } from '../../../lib/roles';
 import type {
   QuickCapture,
   QuickCaptureAttachment,
@@ -76,11 +77,12 @@ export async function listQuickCaptures(
   options: ListQuickCapturesOptions = {}
 ): Promise<{ data: QuickCapture[]; error: Error | null }> {
   try {
-    // The list is your own captures, as on the website. Admins can read every
-    // account's rows, so the database alone does not narrow it.
+    // Only a super admin sees every account's captures. Other admin accounts can
+    // read them too, so the database alone does not narrow the list.
     const { data: auth } = await supabase.auth.getSession();
     const userId = auth.session?.user.id;
-    if (!userId) {
+    const email = auth.session?.user.email;
+    if (!userId || !email) {
       return { data: [], error: new Error('Sign in again to see your quick leads.') };
     }
 
@@ -90,8 +92,11 @@ export async function listQuickCaptures(
         *,
         realtors ( id, first_name, last_name )
       `)
-      .eq('created_by_user_id', userId)
       .order('last_touched_at', { ascending: false });
+
+    if ((await getUserRole(userId, email)) !== 'super_admin') {
+      query = query.eq('created_by_user_id', userId);
+    }
 
     if (options.status) {
       query = query.eq('status', options.status);
