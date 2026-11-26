@@ -13,10 +13,12 @@ import {
   Alert,
   ActivityIndicator,
   Linking,
+  Image,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import BrandLogo from '../brand/BrandLogo';
+import { GIO } from '../features/gio/gioImages';
 import { DENSE_TEXT_MAX_SCALE, MIN_TOUCH_TARGET, TEXT_MAX_SCALE } from '../brand/layout';
 import { PUBLIC_BRAND } from '../brand/brands';
 import { Session } from '@supabase/supabase-js';
@@ -442,6 +444,7 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
             >
               Welcome back
             </Text>
+            <Image source={GIO.wave} style={s.welcomeGio} resizeMode="contain" accessibilityElementsHidden />
           </View>
 
           {/* Login Card */}
@@ -669,10 +672,18 @@ const s = StyleSheet.create({
 
   // Welcome
   welcomeSection: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
     alignItems: 'center',
     marginBottom: 20,
   },
+  welcomeGio: {
+    width: 52,
+    height: 72,
+  },
   welcomeTitle: {
+    flexShrink: 1,
     fontSize: 40,
     fontWeight: '800',
     letterSpacing: -1.4,

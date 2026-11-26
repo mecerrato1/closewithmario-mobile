@@ -2322,8 +2322,6 @@ export const styles = StyleSheet.create({
   dashGreeting: { color: '#FFFFFF', fontSize: 21, fontWeight: '700' },
   dashDate: { color: '#BFD3FB', fontSize: 12, marginTop: 2 },
   dashSlim: { position: 'absolute', top: 0, height: 44, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', gap: 6 },
-  gioHeaderButton: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#16264A', borderWidth: 2, borderColor: '#3B82F6', alignItems: 'center', justifyContent: 'center' },
-  gioHeaderImage: { width: 44, height: 44 },
   dashSlimTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '700', marginRight: 2, flexShrink: 1 },
   dashSlimChip: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1 },
   dashSlimChipText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },

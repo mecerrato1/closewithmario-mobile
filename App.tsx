@@ -4,8 +4,6 @@ import { LatestLeadRow } from './src/features/dashboard/LatestLeadRow';
 import { CallQueueRow } from './src/features/today/CallQueueRow';
 import { TodayCallsScreen } from './src/features/today/TodayCallsScreen';
 import { useCallQueue } from './src/features/today/useCallQueue';
-import { CaughtUp } from './src/features/gio/CaughtUp';
-import { GIO } from './src/features/gio/gioImages';
 import { GioScreen } from './src/features/gio/GioScreen';
 import { useGio } from './src/features/gio/useGio';
 import type { CallQueueFilter, CallQueueItem } from './src/features/today/callQueue';
@@ -2085,6 +2083,21 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 </>
               )}
 
+            {gio.available ? (
+              <TouchableOpacity accessibilityRole="button"
+                style={styles.profileMenuItem}
+                onPress={() => {
+                  setShowProfileMenu(false);
+                  setShowGio(true);
+                }}
+              >
+                <View style={styles.profileMenuIconContainer}>
+                  <Ionicons name="chatbubble-ellipses-outline" size={20} color={brand.colors.accent} />
+                </View>
+                <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Ask Gio</Text>
+              </TouchableOpacity>
+            ) : null}
+
               <TouchableOpacity accessibilityRole="button"
                 style={styles.profileMenuItem}
                 onPress={() => {
@@ -2154,11 +2167,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 ))}
               </Animated.View>
             </View>
-            {gio.available ? (
-              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Ask Gio" style={styles.gioHeaderButton} onPress={() => setShowGio(true)}>
-                <Image source={GIO.chat} style={styles.gioHeaderImage} resizeMode="contain" />
-              </TouchableOpacity>
-            ) : null}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 {/* Notification Bell */}
                 <TouchableOpacity accessibilityRole="button"
@@ -2374,7 +2382,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                       </View>
                     )
                   ) : todayCalls.page.items.length === 0 ? (
-                    <CaughtUp />
+                    <View style={styles.dashEmptyRow}>
+                      <Ionicons name="checkmark-circle-outline" size={18} color="#047857" />
+                      <Text style={styles.dashEmptyText}>You're caught up for today</Text>
+                    </View>
                   ) : (
                     <>
                       {todayCalls.page.items.map((item, index) => (
