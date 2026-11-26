@@ -1,6 +1,8 @@
 import { StatusBar } from 'expo-status-bar';
 import { senderNames } from './src/features/leads/senderName';
 import { LatestLeadRow } from './src/features/dashboard/LatestLeadRow';
+import { LeadListRow } from './src/features/leads/LeadListRow';
+import { dayLabel, nextStep, timeLabel } from './src/features/leads/leadRowPresentation';
 import { CallQueueRow } from './src/features/today/CallQueueRow';
 import { TodayCallsScreen } from './src/features/today/TodayCallsScreen';
 import { useCallQueue } from './src/features/today/useCallQueue';
@@ -190,6 +192,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [hasManuallySelectedTab, setHasManuallySelectedTab] = useState(false);
   const hasAutoSelectedTabRef = useRef(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
+  const [showLeadSearch, setShowLeadSearch] = useState(false);
+  const [showLeadFilters, setShowLeadFilters] = useState(false);
   const [loanOfficers, setLoanOfficers] = useState<Array<{ id: string; name: string }>>([]);
   const [userRole, setUserRole] = useState<UserRole>('buyer');
   const [searchQuery, setSearchQuery] = useState('');
@@ -335,7 +339,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   // Micro animations for the lead list
   const listOpacity = useRef(new Animated.Value(1)).current;
-  const listScale = useRef(new Animated.Value(1)).current;
 
   // Calculate unique sources for the filter
   const uniqueSources = React.useMemo(() => {
@@ -365,23 +368,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     leads,
     metaLeads,
   ]);
-
-  // Collapsing header animation for leads view
-  const scrollY = useRef(new Animated.Value(0)).current;
-  const HEADER_EXPANDED_HEIGHT = 156;
-  const HEADER_COLLAPSED_HEIGHT = 112;
-
-  const headerHeight = scrollY.interpolate({
-    inputRange: [0, 100],
-    outputRange: [HEADER_EXPANDED_HEIGHT, HEADER_COLLAPSED_HEIGHT],
-    extrapolate: 'clamp',
-  });
-
-  const headerTitleScale = scrollY.interpolate({
-    inputRange: [0, 100],
-    outputRange: [1, 0.85],
-    extrapolate: 'clamp',
-  });
 
   // Collapsing header animation for dashboard view
   // The dashboard list starts at the top every time it comes back on screen, so its
@@ -439,27 +425,14 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     extrapolate: 'clamp',
   });
 
+  // A brief fade as the list changes. It no longer shrinks the list: the list can be
+  // swapped out mid-animation, which left it stuck narrower than the screen.
   const triggerListAnimation = () => {
-    // Small pulse + LayoutAnimation for item movement
-    Animated.parallel([
-      Animated.timing(listOpacity, {
-        toValue: 0.96,
-        duration: 120,
-        useNativeDriver: true,
-      }),
-      Animated.sequence([
-        Animated.timing(listScale, {
-          toValue: 0.98,
-          duration: 120,
-          useNativeDriver: true,
-        }),
-        Animated.timing(listScale, {
-          toValue: 1,
-          duration: 120,
-          useNativeDriver: true,
-        }),
-      ]),
-    ]).start(() => {
+    Animated.timing(listOpacity, {
+      toValue: 0.96,
+      duration: 120,
+      useNativeDriver: true,
+    }).start(() => {
       // Reset opacity so future animations look consistent
       listOpacity.setValue(1);
     });
@@ -512,7 +485,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const animatedListStyle = {
     flex: 1,
     opacity: listOpacity,
-    transform: [{ scale: listScale }],
   };
 
   useEffect(() => {
@@ -950,6 +922,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     setUnreadFilter(DASHBOARD_LEAD_FILTERS.unreadOnly);
     setTrackedFilter(DASHBOARD_LEAD_FILTERS.trackedOnly);
     setSearchQuery(DASHBOARD_LEAD_FILTERS.search);
+    setShowLeadSearch(false);
+    setShowLeadFilters(false);
     setShowDashboard(true);
   };
 
@@ -1315,20 +1289,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     return matchesLeadListBase(lead, 'meta');
   };
 
-  const formatLeadListTimestamp = (lead: Lead | MetaLead) => {
-    const date = new Date(getLeadLastTouchedValue(lead));
-    if (Number.isNaN(date.getTime())) {
-      return '';
-    }
-
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
   const getScenarioViewingLabel = (lead: Lead | MetaLead) => {
     const buyerActive = lead.has_active_borrower_scenario === true;
     const partnerActive = lead.has_active_realtor_scenario === true;
@@ -1353,343 +1313,56 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         }
       : null);
 
-  const renderLeadItem = ({ item }: { item: Lead }) => {
-    const fullName =
-      [item.first_name, item.last_name].filter(Boolean).join(' ') ||
-      '(No name)';
+  const renderLeadRow = (
+    item: Lead | MetaLead,
+    source: 'lead' | 'meta',
+    previous: Lead | MetaLead | undefined
+  ) => {
     const status = item.status || 'new';
-    const statusDisplay = formatStatus(status);
-    const statusColors = STATUS_COLOR_MAP[status] || STATUS_COLOR_MAP['new'];
-    const emailOrPhone = item.email || item.phone || 'No contact info';
-    // Use AI attention if available, fallback to rule-based
-    const aiAttention = getLeadAttention(item);
-    const alert = aiAttention?.badge 
-      ? { label: aiAttention.badge, color: aiAttention.priority <= 2 ? '#EF4444' : aiAttention.priority <= 4 ? '#F59E0B' : '#22C55E' }
-      : getLeadAlert(item);
-    const borderColor = alert ? alert.color : brand.colors.accent;
-    const unreadCount = Number(item.unread_sms_count) || 0;
-    const isUnread = unreadCount > 0;
-    const scenarioViewingLabel = getScenarioViewingLabel(item);
-    // Priority dot color for lead list (green for priority 5 = "On Track")
-    const getPriorityDotColor = () => {
-      if (aiAttention?.badge) {
-        if (aiAttention.priority <= 1) return '#EF4444';
-        if (aiAttention.priority <= 2) return '#F97316';
-        if (aiAttention.priority <= 3) return '#EAB308';
-        return '#22C55E'; // priority 4 and 5
-      }
-      return alert ? alert.color : null;
-    };
-    const dotColor = getPriorityDotColor();
-
-    // Right-side swipe actions for website leads
-    const renderRightActions = () => (
-      <View style={styles.swipeActionsContainer}>
-        {/* Mark contacted */}
-        <TouchableOpacity accessibilityRole="button"
-          style={[styles.swipeActionButton, styles.swipeActionContacted]}
-          onPress={() => handleStatusChange('lead', item.id, 'contacted')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.swipeActionText}>Contacted</Text>
-        </TouchableOpacity>
-
-        {/* Mark unqualified */}
-        <TouchableOpacity accessibilityRole="button"
-          style={[styles.swipeActionButton, styles.swipeActionUnqualified]}
-          onPress={() => handleStatusChange('lead', item.id, 'unqualified')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.swipeActionText}>Unqualified</Text>
-        </TouchableOpacity>
-
-        {/* Delete - only for My Lead */}
-        {item.source === 'My Lead' && (
-          <TouchableOpacity accessibilityRole="button"
-            style={[styles.swipeActionButton, styles.swipeActionDelete]}
-            onPress={() => deleteMyLead(item.id)}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="trash-outline" size={18} color="#FFFFFF" />
-            <Text style={styles.swipeActionText}>Delete</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
+    const attention = getLeadAttention(item);
+    const step = nextStep({
+      status,
+      unreadCount: Number(item.unread_sms_count) || 0,
+      attention,
+      ruleLabel: getLeadAlert(item)?.label ?? null,
+    });
+    const touched = getLeadLastTouchedValue(item);
+    const day = dayLabel(touched);
+    const isMyLead = source === 'lead' && (item as Lead).source === 'My Lead';
+    const meta = item as MetaLead;
+    const notes: string[] = [];
+    if (userRole === 'super_admin' && item.lo_id) {
+      notes.push(loanOfficers.find((lo) => lo.id === item.lo_id)?.name || 'Unknown LO');
+    }
+    const scenario = getScenarioViewingLabel(item);
+    if (scenario) notes.push(scenario);
 
     return (
-      <Swipeable
-        renderRightActions={renderRightActions}
-        overshootRight={false}
-      >
-        <TouchableOpacity accessibilityRole="button"
-          style={[
-            styles.leadCard,
-            {
-              borderLeftColor: borderColor,
-              backgroundColor: colors.cardBackground,
-              borderColor: colors.border,
-            },
-          ]}
-          onPress={() => {
-            openLeadFromSelection({ source: 'lead', id: item.id });
-          }}
-          activeOpacity={0.7}
-        >
-          {/* Row 1: Name + Source badge */}
-          <View style={styles.leadHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
-              {item.is_tracked && (
-                <Ionicons name="pin" size={14} color={brand.colors.accent} style={{ marginRight: 4 }} />
-              )}
-              <Text style={[styles.leadName, { color: colors.textPrimary }]} numberOfLines={1}>
-                {fullName}
-              </Text>
-              {isUnread && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, marginLeft: 8 }}>
-                  <Ionicons name="chatbubble-ellipses" size={12} color="#2563EB" />
-                  {unreadCount > 1 && (
-                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#2563EB', marginLeft: 3 }}>{unreadCount}</Text>
-                  )}
-                </View>
-              )}
-            </View>
-            {item.source === 'My Lead' ? (
-              <View style={styles.myLeadBadge}>
-                <Ionicons name="person-add-outline" size={12} color="#16A34A" />
-                <Text style={styles.myLeadBadgeText}>My Lead</Text>
-              </View>
-            ) : (
-              <View style={styles.leadSourceBadge}>
-                <Ionicons name="globe-outline" size={12} color="#0F172A" style={{ marginRight: 4 }} />
-                <Text style={styles.leadSourceText}>Web</Text>
-              </View>
-            )}
-          </View>
-          {/* Row 2: Phone (left) + Date & Status (right) */}
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <View style={{ flex: 1, marginRight: 12 }}>
-              {item.phone && (
-                <View style={[styles.leadContactRow, { marginBottom: 0 }]}>
-                  <Ionicons name="call-outline" size={14} color={colors.textSecondary} style={styles.leadContactIcon as any} />
-                  <Text style={[styles.leadContact, { color: colors.textSecondary }]} numberOfLines={1}>
-                    {formatPhoneNumber(item.phone)}
-                  </Text>
-                </View>
-              )}
-              {userRole === 'super_admin' && item.lo_id && (
-                <View style={[styles.leadLORow, { marginBottom: 0, marginTop: 4 }]}>
-                  <Ionicons name="person-circle-outline" size={14} color="#64748B" style={styles.leadLOIcon as any} />
-                  <Text style={styles.leadLOText} numberOfLines={1}>
-                    {loanOfficers.find(lo => lo.id === item.lo_id)?.name || 'Unknown LO'}
-                  </Text>
-                </View>
-              )}
-              {scenarioViewingLabel && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 5 }}>
-                  <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#10B981', marginRight: 5 }} />
-                  <Text style={{ color: '#047857', fontSize: 11, fontWeight: '700' }} numberOfLines={1}>
-                    {scenarioViewingLabel}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <View style={{ alignItems: 'flex-end', flexShrink: 0 }}>
-              <Text style={[styles.leadTimestamp, { marginBottom: 4 }]}>
-                {formatLeadListTimestamp(item)}
-              </Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                {dotColor && (
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dotColor, marginRight: 5 }} />
-                )}
-                <View style={[styles.statusBadge, { backgroundColor: statusColors.bg, borderColor: statusColors.border, marginBottom: 0 }]}>
-                  <Text style={[styles.statusBadgeText, { color: statusColors.text }]}>
-                    {statusDisplay}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </View>
-        </TouchableOpacity>
-      </Swipeable>
-    );
-  };
-
-  const renderMetaLeadItem = ({ item }: { item: MetaLead }) => {
-    const fullName =
-      [item.first_name, item.last_name].filter(Boolean).join(' ') ||
-      '(No name)';
-    const status = item.status ? formatStatus(item.status) : 'No status';
-    const platform = item.platform || 'Facebook';
-    const campaign = item.campaign_name || '';
-    // Use AI attention if available, fallback to rule-based
-    const aiAttention = getLeadAttention(item);
-    const alert = aiAttention?.badge 
-      ? { label: aiAttention.badge, color: aiAttention.priority <= 2 ? '#EF4444' : aiAttention.priority <= 4 ? '#F59E0B' : '#22C55E' }
-      : getLeadAlert(item);
-    const borderColor = alert ? alert.color : brand.colors.accent;
-    const statusColors =
-      STATUS_COLOR_MAP[item.status || 'new'] || STATUS_COLOR_MAP['new'];
-    const unreadCount = Number(item.unread_sms_count) || 0;
-    const hasUnreadMessages = unreadCount > 0;
-    const isUnread = hasUnreadMessages;
-    const scenarioViewingLabel = getScenarioViewingLabel(item);
-    // Priority dot color for lead list (green for priority 5 = "On Track")
-    const getPriorityDotColor = () => {
-      if (aiAttention?.badge) {
-        if (aiAttention.priority <= 1) return '#EF4444';
-        if (aiAttention.priority <= 2) return '#F97316';
-        if (aiAttention.priority <= 3) return '#EAB308';
-        return '#22C55E'; // priority 4 and 5
-      }
-      return alert ? alert.color : null;
-    };
-    const dotColor = getPriorityDotColor();
-
-    const getPlatformBadge = (platform: string) => {
-      const platformLower = platform.toLowerCase();
-
-      let badgeText = 'Facebook';
-      let badgeColor = '#1877F2';
-      let badgeBg = '#E7F3FF';
-      let iconName: keyof typeof Ionicons.glyphMap = 'logo-facebook';
-
-      if (platformLower.includes('instagram') || platformLower === 'ig') {
-        badgeText = 'Instagram';
-        badgeColor = '#E4405F';
-        badgeBg = '#FFE8ED';
-        iconName = 'logo-instagram';
-      } else if (platformLower.includes('facebook') || platformLower === 'fb') {
-        badgeText = 'Facebook';
-        badgeColor = '#1877F2';
-        badgeBg = '#E7F3FF';
-        iconName = 'logo-facebook';
-      } else if (platformLower.includes('messenger')) {
-        badgeText = 'Messenger';
-        badgeColor = '#0084FF';
-        badgeBg = '#E5F2FF';
-        iconName = 'chatbubble-outline';
-      } else if (platformLower.includes('whatsapp')) {
-        badgeText = 'WhatsApp';
-        badgeColor = '#25D366';
-        badgeBg = '#E8F8EF';
-        iconName = 'logo-whatsapp';
-      }
-
-      return (
-        <View style={[styles.platformBadge, { backgroundColor: badgeBg }]}>
-          <Ionicons name={iconName} size={12} color={badgeColor} style={{ marginRight: 4 }} />
-          <Text style={[styles.platformBadgeText, { color: badgeColor }]}>
-            {badgeText}
-          </Text>
-        </View>
-      );
-    };
-
-    // Right-side swipe actions for meta leads
-    const renderRightActions = () => (
-      <View style={styles.swipeActionsContainer}>
-        <TouchableOpacity accessibilityRole="button"
-          style={[styles.swipeActionButton, styles.swipeActionContacted]}
-          onPress={() => handleStatusChange('meta', item.id, 'contacted')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.swipeActionText}>Contacted</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity accessibilityRole="button"
-          style={[styles.swipeActionButton, styles.swipeActionUnqualified]}
-          onPress={() => handleStatusChange('meta', item.id, 'unqualified')}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.swipeActionText}>Unqualified</Text>
-        </TouchableOpacity>
+      <View>
+        {!previous || dayLabel(getLeadLastTouchedValue(previous)) !== day ? (
+          <Text style={styles.leadDayLabel}>{day}</Text>
+        ) : null}
+        <LeadListRow
+          name={[item.first_name, item.last_name].filter(Boolean).join(' ') || '(No name)'}
+          status={status}
+          source={
+            isMyLead
+              ? 'My lead'
+              : leadSourceLine({ isMeta: source === 'meta', platform: meta.platform, campaignName: meta.campaign_name })
+          }
+          time={timeLabel(touched)}
+          step={step}
+          tracked={item.is_tracked === true}
+          hasPhone={Boolean(item.phone)}
+          notes={notes}
+          onOpen={() => openLeadFromSelection({ source, id: item.id })}
+          onCall={() => openLeadFromSelection({ source, id: item.id }, { action: 'call' })}
+          onText={() => openLeadFromSelection({ source, id: item.id }, { action: 'text' })}
+          onContacted={() => handleStatusChange(source, item.id, 'contacted')}
+          onUnqualified={() => handleStatusChange(source, item.id, 'unqualified')}
+          onDelete={isMyLead ? () => deleteMyLead(item.id) : undefined}
+        />
       </View>
-    );
-
-    return (
-      <Swipeable
-        renderRightActions={renderRightActions}
-        overshootRight={false}
-      >
-        <TouchableOpacity accessibilityRole="button"
-          style={[
-            styles.leadCard,
-            {
-              borderLeftColor: borderColor,
-              backgroundColor: colors.cardBackground,
-              borderColor: colors.border,
-            },
-          ]}
-          onPress={() => {
-            openLeadFromSelection({ source: 'meta', id: item.id });
-          }}
-          activeOpacity={0.7}
-        >
-          {/* Row 1: Name + Platform badge */}
-          <View style={styles.leadHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 1 }}>
-              {item.is_tracked && (
-                <Ionicons name="pin" size={14} color={brand.colors.accent} style={{ marginRight: 4 }} />
-              )}
-              <Text style={[styles.leadName, { color: colors.textPrimary }]} numberOfLines={1}>
-                {fullName}
-              </Text>
-              {isUnread && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#EFF6FF', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2, marginLeft: 8 }}>
-                  <Ionicons name="chatbubble-ellipses" size={12} color="#2563EB" />
-                  {unreadCount > 1 && (
-                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#2563EB', marginLeft: 3 }}>{unreadCount}</Text>
-                  )}
-                </View>
-              )}
-            </View>
-            {getPlatformBadge(platform)}
-          </View>
-          {/* Row 2: Phone (left) + Date & Status (right) */}
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <View style={{ flex: 1, marginRight: 12 }}>
-              {item.phone && (
-                <View style={[styles.leadContactRow, { marginBottom: 0 }]}>
-                  <Ionicons name="call-outline" size={14} color={colors.textSecondary} style={styles.leadContactIcon as any} />
-                  <Text style={[styles.leadContact, { color: colors.textSecondary }]} numberOfLines={1}>{formatPhoneNumber(item.phone)}</Text>
-                </View>
-              )}
-              {userRole === 'super_admin' && item.lo_id && (
-                <View style={[styles.leadLORow, { marginBottom: 0, marginTop: 4 }]}>
-                  <Ionicons name="person-circle-outline" size={14} color={colors.textSecondary} style={styles.leadLOIcon as any} />
-                  <Text style={[styles.leadLOText, { color: colors.textSecondary }]} numberOfLines={1}>
-                    {loanOfficers.find(lo => lo.id === item.lo_id)?.name || 'Unknown LO'}
-                  </Text>
-                </View>
-              )}
-              {scenarioViewingLabel && (
-                <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 5 }}>
-                  <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#10B981', marginRight: 5 }} />
-                  <Text style={{ color: '#047857', fontSize: 11, fontWeight: '700' }} numberOfLines={1}>
-                    {scenarioViewingLabel}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <View style={{ alignItems: 'flex-end', flexShrink: 0 }}>
-              <Text style={[styles.leadTimestamp, { color: colors.textSecondary, marginBottom: 4 }]}>
-                {formatLeadListTimestamp(item)}
-              </Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                {dotColor && (
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dotColor, marginRight: 5 }} />
-                )}
-                <View style={[styles.statusBadge, { backgroundColor: statusColors.bg, borderColor: statusColors.border, marginBottom: 0 }]}>
-                  <Text style={[styles.statusBadgeText, { color: statusColors.text }]}>
-                    {status}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          </View>
-        </TouchableOpacity>
-      </Swipeable>
     );
   };
 
@@ -2616,6 +2289,33 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     totalCount: totalVisibleLeadCount,
     facets: leadDirectory.facets,
   };
+  const showListControls = !initializing && roleReady && userRole !== 'buyer';
+  const searchOpen = showLeadSearch || searchQuery.length > 0;
+  const activeFilters: Array<{ key: string; label: string; clear: () => void }> = [];
+  if (selectedStatusFilter !== 'all') {
+    activeFilters.push({ key: 'status', label: formatStatus(selectedStatusFilter), clear: () => setSelectedStatusFilter('all') });
+  }
+  if (attentionFilter) {
+    activeFilters.push({ key: 'attention', label: 'Needs attention', clear: () => setAttentionFilter(false) });
+  }
+  if (trackedFilter) {
+    activeFilters.push({ key: 'tracked', label: 'Tracked', clear: () => setTrackedFilter(false) });
+  }
+  if (unreadFilter) {
+    activeFilters.push({ key: 'unread', label: 'Unread', clear: () => setUnreadFilter(false) });
+  }
+  if (userRole === 'super_admin' && selectedLOFilter !== null) {
+    activeFilters.push({
+      key: 'lo',
+      label: selectedLOFilter === 'unassigned'
+        ? 'Unassigned'
+        : loanOfficers.find((lo) => lo.id === selectedLOFilter)?.name || 'Loan officer',
+      clear: () => setSelectedLOFilter(null),
+    });
+  }
+  if (userRole === 'super_admin' && selectedSourceFilter !== 'all') {
+    activeFilters.push({ key: 'source', label: selectedSourceFilter, clear: () => setSelectedSourceFilter('all') });
+  }
   const allStatusesCount = getStatusOptionCount('all', leadCountContext);
   const allSourcesCount = getSourceOptionCount('all', leadCountContext);
   const renderLeadListFooter = () => {
@@ -2647,233 +2347,118 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Profile Menu Modal */}
-      <Modal
-        visible={showProfileMenu}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowProfileMenu(false)}
-      >
-        <TouchableOpacity accessibilityRole="button" 
-          style={styles.profileMenuOverlay}
-          activeOpacity={1}
-          onPress={() => setShowProfileMenu(false)}
-        >
-          <View style={[styles.profileMenuContent, { backgroundColor: colors.cardBackground }]}>
-            {(canManageTeam(userRole) || canViewAdsLibrary(userRole)) && (
-              <>
-                {canManageTeam(userRole) && (
-                  <TouchableOpacity accessibilityRole="button"
-                    style={styles.profileMenuItem}
-                    onPress={() => {
-                      setShowProfileMenu(false);
-                      setShowTeamManagement(true);
-                    }}
-                  >
-                    <View style={styles.profileMenuIconContainer}>
-                      <Ionicons name="people" size={20} color={brand.colors.accent} />
-                    </View>
-                    <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Team Management</Text>
-                  </TouchableOpacity>
-                )}
-                {canViewAdsLibrary(userRole) && (
-                  <TouchableOpacity accessibilityRole="button"
-                    style={styles.profileMenuItem}
-                    onPress={() => {
-                      setShowProfileMenu(false);
-                      setShowAdsLibrary(true);
-                    }}
-                  >
-                    <View style={styles.profileMenuIconContainer}>
-                      <Ionicons name="images-outline" size={20} color={brand.colors.accent} />
-                    </View>
-                    <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Ads Library</Text>
-                  </TouchableOpacity>
-                )}
-                <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
-              </>
-            )}
-
-            <TouchableOpacity accessibilityRole="button"
-              style={styles.profileMenuItem}
-              onPress={() => {
-                setShowProfileMenu(false);
-                setShowProfileSettings(true);
-              }}
-            >
-              <View style={styles.profileMenuIconContainer}>
-                <Ionicons name="person-circle-outline" size={20} color={colors.textPrimary} />
-              </View>
-              <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Profile Settings</Text>
-            </TouchableOpacity>
-
-            <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
-            
-            <TouchableOpacity accessibilityRole="button"
-              style={styles.profileMenuItem}
-              onPress={() => {
-                setShowProfileMenu(false);
-                onSignOut();
-              }}
-            >
-              <View style={styles.profileMenuIconContainer}>
-                <Ionicons name="log-out-outline" size={20} color="#EF4444" />
-              </View>
-              <Text style={[styles.profileMenuText, { color: '#EF4444' }]}>Sign Out</Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Modern Header with Stats and Search - Animated Collapsing */}
-      <Animated.View style={[
-        styles.leadsHeaderContainer, 
-        { 
-          backgroundColor: brand.colors.primary,
-          height: headerHeight,
-        }
-      ]}>
+      <View style={[styles.leadsTopBar, { backgroundColor: brand.colors.primary }]}>
         <StatusBar style="light" />
-        <Animated.View style={[
-          styles.headerContent,
-          { transform: [{ scale: headerTitleScale }] }
-        ]}>
-          <TouchableOpacity accessibilityRole="button" 
+        <View style={styles.leadsTopRow}>
+          <TouchableOpacity accessibilityRole="button"
             onPress={returnToLeadDashboard}
             accessibilityLabel="Back to dashboard"
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            style={styles.homeButton}
           >
-            <Text style={styles.homeButtonText}>← Dashboard</Text>
+            <Ionicons name="chevron-back" size={26} color="#FFFFFF" />
           </TouchableOpacity>
-          <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
-              {brand.displayName}
-            </Text>
-            <Text style={styles.headerSubtitle}>Lead Management</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            {/* Notification Bell */}
-            <TouchableOpacity accessibilityRole="button" 
-              onPress={() => {
-                setSelectedStatusFilter('all');
-                setActiveTab('all');
-                setUnreadFilter(true);
-              }}
-              accessibilityLabel={unreadConversationCount > 0 ? `Unread messages, ${unreadConversationCount}` : 'Unread messages'}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  style={{ position: 'relative' }}
-            >
-              <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
-              {unreadConversationCount > 0 && (
-                <View style={{
-                  position: 'absolute',
-                  top: -4,
-                  right: -4,
-                  backgroundColor: '#EF4444',
-                  borderRadius: 10,
-                  minWidth: 18,
-                  height: 18,
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  paddingHorizontal: 4,
-                }}>
-                  <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>
-                    {unreadConversationCount > 99
-                      ? '99+' 
-                      : unreadConversationCount}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            {/* Profile Button */}
-            <TouchableOpacity accessibilityRole="button" 
-              onPress={() => setShowProfileMenu(true)}
-              accessibilityLabel="Profile and settings"
-                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                  style={styles.profileButton}
-            >
-              {getAvatarUrl(session?.user?.user_metadata, realtorProfilePicUrl) ? (
-                <Image 
-                  source={{ uri: getAvatarUrl(session?.user?.user_metadata, realtorProfilePicUrl) || '' }}
-                  style={styles.profileButtonAvatar}
-                />
-              ) : (
-                <View style={styles.profileButtonPlaceholder}>
-                  <Text style={styles.profileButtonText}>
-                    {session?.user?.email?.[0]?.toUpperCase() || 'U'}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          </View>
-        </Animated.View>
-      </Animated.View>
-
-      {!initializing
-        && roleReady
-        && userRole !== 'buyer' && (
-        <>
-          <View style={styles.listUtilityPanel}>
-            <View style={styles.listTabBar}>
-              {[
-                { key: 'all' as const, label: 'All' },
-                { key: 'leads' as const, label: 'My Leads' },
-                { key: 'meta' as const, label: 'Meta Ads' },
-              ].map((tab) => {
-                const isActive = activeTab === tab.key;
-                const count =
-                  getLeadTabCount(tab.key, leadCountContext) ?? otherTabCounts[tab.key];
-                return (
-                  <TouchableOpacity accessibilityRole="button"
-                    key={tab.key}
-                    style={[styles.listTab, isActive && styles.listTabActive]}
-                    onPress={() => handleSelectLeadListTab(tab.key)}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={[styles.listTabCount, isActive && styles.listTabCountActive]}>
-                      {count ?? '…'}
-                    </Text>
-                    <Text style={[styles.listTabLabel, isActive && styles.listTabLabelActive]}>
-                      {tab.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <View style={styles.listSearchContainer}>
-              <Ionicons name="search-outline" size={18} color="#64748B" />
-              <TextInput
-                style={styles.listSearchInput}
-                placeholder="Search leads (2+ characters)"
-                placeholderTextColor="#94A3B8"
-                value={searchQuery}
-                onChangeText={(text) => {
-                  // Keep the current tab if typing starts before the first page loads.
-                  hasAutoSelectedTabRef.current = true;
-                  setSearchQuery(text);
+          <Text style={styles.leadsTopTitle}>Leads</Text>
+          {showListControls && (
+            <>
+              <TouchableOpacity accessibilityRole="button"
+                accessibilityLabel={searchOpen ? 'Close search' : 'Search leads'}
+                hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                onPress={() => {
+                  if (searchOpen) setSearchQuery('');
+                  setShowLeadSearch(!searchOpen);
                 }}
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="search"
-                blurOnSubmit
-              />
-              {leadDirectory.searching && (
-                <ActivityIndicator size="small" color={brand.colors.accent} accessibilityLabel="Searching leads" />
-              )}
-              {searchQuery.length > 0 && (
-                <TouchableOpacity accessibilityRole="button" onPress={() => setSearchQuery('')} style={styles.searchClearButton}>
-                  <Ionicons name="close" size={18} color="#94A3B8" />
-                </TouchableOpacity>
-              )}
-            </View>
-            {searchQuery.trim().length === 1 && (
-              <Text style={styles.listSearchHint}>
-                Enter at least 2 characters to search.
-              </Text>
+              >
+                <Ionicons name={searchOpen ? 'close' : 'search-outline'} size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+              <TouchableOpacity accessibilityRole="button"
+                accessibilityLabel={activeFilters.length ? `Filters, ${activeFilters.length} on` : 'Filters'}
+                accessibilityState={{ expanded: showLeadFilters }}
+                hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+                onPress={() => setShowLeadFilters((current) => !current)}
+              >
+                <Ionicons name="options-outline" size={24} color={showLeadFilters ? '#93C5FD' : '#FFFFFF'} />
+              </TouchableOpacity>
+            </>
+          )}
+          <TouchableOpacity accessibilityRole="button"
+            onPress={() => {
+              setSelectedStatusFilter('all');
+              setActiveTab('all');
+              setUnreadFilter(true);
+            }}
+            accessibilityLabel={unreadConversationCount > 0 ? `Unread messages, ${unreadConversationCount}` : 'Unread messages'}
+            hitSlop={{ top: 10, bottom: 10, left: 8, right: 10 }}
+          >
+            <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
+            {unreadConversationCount > 0 && (
+              <View style={styles.leadsBellBadge}>
+                <Text style={styles.leadsBellBadgeText}>
+                  {unreadConversationCount > 99 ? '99+' : unreadConversationCount}
+                </Text>
+              </View>
             )}
+          </TouchableOpacity>
+        </View>
 
+        {showListControls && searchOpen && (
+          <View style={styles.leadsSearchField}>
+            <Ionicons name="search-outline" size={17} color="#94A3B8" />
+            <TextInput
+              style={styles.leadsSearchInput}
+              placeholder="Search leads (2+ characters)"
+              placeholderTextColor="#94A3B8"
+              value={searchQuery}
+              onChangeText={(text) => {
+                // Keep the current tab if typing starts before the first page loads.
+                hasAutoSelectedTabRef.current = true;
+                setShowLeadSearch(true);
+                setSearchQuery(text);
+              }}
+              autoFocus={searchQuery.length === 0}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+              blurOnSubmit
+            />
+            {leadDirectory.searching && (
+              <ActivityIndicator size="small" color="#93C5FD" accessibilityLabel="Searching leads" />
+            )}
+          </View>
+        )}
+        {showListControls && searchQuery.trim().length === 1 && (
+          <Text style={styles.leadsSearchHint}>Enter at least 2 characters to search.</Text>
+        )}
+
+        {showListControls && (
+          <View style={styles.leadsTabs}>
+            {[
+              { key: 'all' as const, label: 'All' },
+              { key: 'leads' as const, label: 'My leads' },
+              { key: 'meta' as const, label: 'Meta' },
+            ].map((tab) => {
+              const isActive = activeTab === tab.key;
+              const count = getLeadTabCount(tab.key, leadCountContext) ?? otherTabCounts[tab.key];
+              return (
+                <TouchableOpacity accessibilityRole="button"
+                  accessibilityState={{ selected: isActive }}
+                  key={tab.key}
+                  style={[styles.leadsTab, isActive && styles.leadsTabActive]}
+                  onPress={() => handleSelectLeadListTab(tab.key)}
+                >
+                  <Text style={[styles.leadsTabText, isActive && styles.leadsTabTextActive]}>
+                    {tab.label} {count ?? '…'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+      </View>
+
+      {showListControls && (
+        <>
+          {showLeadFilters ? (
+            <View style={styles.listUtilityPanel}>
             <View style={styles.listPrimaryFilterRow}>
               <TouchableOpacity accessibilityRole="button"
                 style={[styles.filterButton, styles.listStatusButton]}
@@ -2975,47 +2560,25 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 </TouchableOpacity>
               </View>
             )}
-          </View>
-
-          {/* Unread Filter Active Indicator */}
-          {unreadFilter && (
-            <View style={{ 
-              backgroundColor: '#FFFFFF', 
-              marginHorizontal: 16, 
-              marginTop: 8,
-              marginBottom: 8, 
-              borderRadius: 12,
-              padding: 10,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 1 },
-              shadowOpacity: 0.1,
-              shadowRadius: 2,
-              elevation: 2,
-            }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={{ 
-                  backgroundColor: '#EF4444', 
-                  width: 28, 
-                  height: 28, 
-                  borderRadius: 14, 
-                  justifyContent: 'center', 
-                  alignItems: 'center',
-                  marginRight: 10,
-                }}>
-                  <Ionicons name="notifications" size={16} color="#FFFFFF" />
-                </View>
-                <Text style={{ color: '#1F2937', fontWeight: '600', fontSize: 14 }}>
-                  Showing Unread Messages
-                </Text>
-              </View>
-              <TouchableOpacity accessibilityRole="button" onPress={() => setUnreadFilter(false)}>
-                <Ionicons name="close-circle" size={24} color="#9CA3AF" />
-              </TouchableOpacity>
             </View>
-          )}
+          ) : activeFilters.length > 0 ? (
+            <View style={styles.leadsFilterChips}>
+              {activeFilters.map((filter) => (
+                <TouchableOpacity accessibilityRole="button"
+                  key={filter.key}
+                  accessibilityLabel={`Remove filter ${filter.label}`}
+                  style={styles.leadsFilterChip}
+                  onPress={() => {
+                    triggerListAnimation();
+                    filter.clear();
+                  }}
+                >
+                  <Text style={styles.leadsFilterChipText} numberOfLines={1}>{filter.label}</Text>
+                  <Ionicons name="close" size={14} color="#1D4ED8" />
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
 
           {/* No Unread Messages State */}
           {unreadFilter && unreadConversationCount === 0 && (
@@ -3418,20 +2981,17 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         <Animated.View style={animatedListStyle}>
           <Animated.FlatList
             data={filteredWebsiteLeads}
-            renderItem={renderLeadItem}
+            renderItem={({ item, index }) => renderLeadRow(item, 'lead', filteredWebsiteLeads[index - 1])}
             keyExtractor={(item) => item.id}
             extraData={attentionMap}
             ListEmptyComponent={renderLeadListEmpty}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={styles.leadListContent}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
             }
             showsVerticalScrollIndicator={false}
-            onScroll={Animated.event(
-              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-              { useNativeDriver: false }
-            )}
-            scrollEventThrottle={16}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             onEndReached={() => void loadMoreDirectoryLeads()}
             onEndReachedThreshold={0.4}
             ListFooterComponent={renderLeadListFooter}
@@ -3447,20 +3007,17 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         <Animated.View style={animatedListStyle}>
           <Animated.FlatList
             data={filteredMetaListLeads}
-            renderItem={renderMetaLeadItem}
+            renderItem={({ item, index }) => renderLeadRow(item, 'meta', filteredMetaListLeads[index - 1])}
             keyExtractor={(item) => item.id}
             extraData={attentionMap}
             ListEmptyComponent={renderLeadListEmpty}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={styles.leadListContent}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
             }
             showsVerticalScrollIndicator={false}
-            onScroll={Animated.event(
-              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-              { useNativeDriver: false }
-            )}
-            scrollEventThrottle={16}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             onEndReached={() => void loadMoreDirectoryLeads()}
             onEndReachedThreshold={0.4}
             ListFooterComponent={renderLeadListFooter}
@@ -3476,25 +3033,19 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         <Animated.View style={animatedListStyle}>
           <Animated.FlatList
             data={allVisibleLeads}
-            renderItem={({ item }) => {
-              if (item._tableType === 'meta') {
-                return renderMetaLeadItem({ item });
-              }
-              return renderLeadItem({ item });
-            }}
+            renderItem={({ item, index }) =>
+              renderLeadRow(item, item._tableType, allVisibleLeads[index - 1])
+            }
             keyExtractor={(item) => `${item._tableType}-${item.id}`}
             extraData={attentionMap}
             ListEmptyComponent={renderLeadListEmpty}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={styles.leadListContent}
             refreshControl={
               <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
             }
             showsVerticalScrollIndicator={false}
-            onScroll={Animated.event(
-              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-              { useNativeDriver: false }
-            )}
-            scrollEventThrottle={16}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             onEndReached={() => void loadMoreDirectoryLeads()}
             onEndReachedThreshold={0.4}
             ListFooterComponent={renderLeadListFooter}
