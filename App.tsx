@@ -1784,9 +1784,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                     <View style={styles.profileMenuIconContainer}>
                       <Ionicons name="shield-outline" size={20} color={colors.textPrimary} />
                     </View>
-                    <View style={{ flex: 1, marginRight: 8 }}>
-                      <Text style={[styles.profileMenuText, { flex: 0, color: colors.textPrimary }]}>Super Admin</Text>
-                      <Text style={styles.superAdminHint}>
+                    <View style={{ minWidth: 128, marginRight: 12 }}>
+                      <Text numberOfLines={1} style={[styles.profileMenuText, { flex: 0, color: colors.textPrimary }]}>
+                        Super Admin
+                      </Text>
+                      <Text numberOfLines={1} style={styles.superAdminHint}>
                         {superAdminMode ? 'Showing everyone' : 'Showing only yours'}
                       </Text>
                     </View>
