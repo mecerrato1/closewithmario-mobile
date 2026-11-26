@@ -1,6 +1,8 @@
 // The website's loan officer Gio (POST /api/crm/gio-chat). The server owns what Gio may
 // answer; this only shapes the request and reads the reply.
 
+import { cleanAnswer } from './gioAnswer';
+
 export type GioMode = 'assistant' | 'guidelines' | 'compare' | 'changes';
 
 export type GioCitation = { id: string; title: string; url: string | null };
@@ -55,5 +57,5 @@ export function readGioReply(ok: boolean, body: unknown): Reply {
       title: c.title as string,
       url: typeof c.url === 'string' && c.url.startsWith('https://') ? c.url : null,
     }));
-  return { content, citations };
+  return cleanAnswer(content, citations);
 }
