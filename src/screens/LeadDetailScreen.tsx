@@ -37,6 +37,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { senderNames } from '../features/leads/senderName';
 import { LeadDetailHeader } from '../features/leads/LeadDetailHeader';
+import { StatusSheet } from '../features/leads/StatusSheet';
 import { activityPreview } from '../features/leads/leadPipeline';
 import { dayLabel, timeLabel } from '../features/leads/leadRowPresentation';
 import { isTextSuggestion, readableStatuses, suggestedMessage } from '../features/leads/followUpText';
@@ -53,7 +54,7 @@ import { supabase } from '../lib/supabase';
 import { getUserRole, getUserTeamMemberId, canSeeAllLeads } from '../lib/roles';
 import { prepareLeadTemplateMessage, prefersSpanish, assertResolvedTemplate } from '../features/leads/leadTemplateMessage';
 import { TEXT_TEMPLATES, fetchLeadTemplates, fillTemplate, getTemplateText, getTemplateName, getTemplateSubject, formatPhoneNumber, type TemplateVariables, type TextTemplate } from '../lib/textTemplates';
-import { STATUSES, STATUS_DISPLAY_MAP, STATUS_COLOR_MAP, getLeadAlert, formatStatus, getTimeAgo, sortLeadsByLastTouchedDesc } from '../lib/leadsHelpers';
+import { STATUS_DISPLAY_MAP, getLeadAlert, formatStatus, getTimeAgo, sortLeadsByLastTouchedDesc } from '../lib/leadsHelpers';
 import { scheduleLeadCallback } from '../lib/callbacks';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { styles } from '../styles/appStyles';
@@ -6008,54 +6009,15 @@ export function LeadDetailView({
         }}
       />
 
-      {/* Status Picker Modal */}
-      <Modal
+      <StatusSheet
         visible={showStatusPicker}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowStatusPicker(false)}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowStatusPicker(false)}
-        >
-          <View style={styles.statusPickerContainer}>
-            <View style={styles.statusPickerHeader}>
-              <Text style={styles.statusPickerTitle}>Change Status</Text>
-              <TouchableOpacity onPress={() => setShowStatusPicker(false)}>
-                <Text style={styles.statusPickerClose}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView style={styles.statusPickerScroll}>
-              {STATUSES.map((s) => {
-                const active = s === status;
-                const colors = STATUS_COLOR_MAP[s] || STATUS_COLOR_MAP['new'];
-                return (
-                  <TouchableOpacity
-                    key={s}
-                    style={[
-                      styles.statusPickerOption,
-                      active && styles.statusPickerOptionActive,
-                    ]}
-                    onPress={async () => {
-                      setShowStatusPicker(false);
-                      await handleDetailStatusChange(s);
-                    }}
-                  >
-                    <View style={[styles.statusPickerBadge, { backgroundColor: colors.bg }]}>
-                      <Text style={[styles.statusPickerBadgeText, { color: colors.text }]}>
-                        {formatStatus(s)}
-                      </Text>
-                    </View>
-                    {active && <Text style={styles.statusPickerCheck}>✓</Text>}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+        status={status}
+        onClose={() => setShowStatusPicker(false)}
+        onSelect={(next) => {
+          setShowStatusPicker(false);
+          void handleDetailStatusChange(next);
+        }}
+      />
 
       {/* Messages / DM Tab Content */}
       {activeDetailTab === 'messages' && phone ? (
