@@ -684,10 +684,22 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     }
   }, [skipDashboard]);
 
+  // Leaving a lead, by its close button or the Leads tab.
+  const closeSelectedLead = () => {
+    setSelectedLead(null);
+    setNotificationTargetTab(null); // Reset notification target
+    setNotificationTargetLead(null);
+    setPendingLeadAction(null);
+    refreshTodayCallbacks(); // Refresh callbacks when returning to dashboard
+    void todayCalls.refresh();
+    void refreshLeadDirectory();
+  };
+
   const seenLeadsTabPresses = useRef(leadsTabPresses);
   useEffect(() => {
     if (leadsTabPresses === seenLeadsTabPresses.current) return;
     seenLeadsTabPresses.current = leadsTabPresses;
+    if (selectedLead) closeSelectedLead();
     setShowTodayCalls(false);
     setShowDashboard(false);
   }, [leadsTabPresses]);
@@ -1755,14 +1767,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         selected={selectedLead}
         leads={filteredLeads}
         metaLeads={filteredMetaLeads}
-        onBack={() => {
-          setSelectedLead(null);
-          setNotificationTargetTab(null); // Reset notification target
-          setNotificationTargetLead(null);
-          refreshTodayCallbacks(); // Refresh callbacks when returning to dashboard
-          void todayCalls.refresh();
-          void refreshLeadDirectory();
-        }}
+        onBack={closeSelectedLead}
         onNavigate={(leadRef) => openLeadFromSelection(leadRef)}
         onStatusChange={handleStatusChange}
         session={session}
