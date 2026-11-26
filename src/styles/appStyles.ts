@@ -207,7 +207,8 @@ export const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 16,
-    paddingBottom: 32,
+    // Lets the last card scroll clear of the add button.
+    paddingBottom: 90,
   },
   listUtilityPanel: {
     paddingHorizontal: 16,
@@ -367,6 +368,8 @@ export const styles = StyleSheet.create({
     color: '#1E40AF',
   },
   platformBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
@@ -3153,7 +3156,7 @@ export const styles = StyleSheet.create({
   // FAB (Floating Action Button) styles
   fab: {
     position: 'absolute',
-    bottom: 96,
+    bottom: 16,
     right: 20,
     width: 54,
     height: 54,

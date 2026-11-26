@@ -69,6 +69,7 @@ import MfaGate from './src/screens/MfaGate';
 import * as WebBrowser from 'expo-web-browser';
 import QuickCaptureTab from './src/features/quickCapture/QuickCaptureTab';
 import { usePaginatedLeads } from './src/features/leads/usePaginatedLeads';
+import { useLeadTabCounts } from './src/features/leads/useLeadTabCounts';
 import {
   getCrmLeadSourceKey,
   toMobileLead,
@@ -267,6 +268,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const leadDirectory = usePaginatedLeads(
     leadListQuery,
     roleReady && userRole !== 'buyer'
+  );
+  const otherTabCounts = useLeadTabCounts(
+    leadListQuery,
+    activeTab,
+    leadDirectory.totalCount,
+    roleReady && userRole !== 'buyer' && !leadDirectory.loading
   );
   const {
     loadMore: loadMoreDirectoryLeads,
@@ -2945,7 +2952,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 { key: 'meta' as const, label: 'Meta Ads' },
               ].map((tab) => {
                 const isActive = activeTab === tab.key;
-                const count = getLeadTabCount(tab.key, leadCountContext);
+                const count =
+                  getLeadTabCount(tab.key, leadCountContext) ?? otherTabCounts[tab.key];
                 return (
                   <TouchableOpacity accessibilityRole="button"
                     key={tab.key}
@@ -2954,7 +2962,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                     activeOpacity={0.85}
                   >
                     <Text style={[styles.listTabCount, isActive && styles.listTabCountActive]}>
-                      {count ?? '—'}
+                      {count ?? '…'}
                     </Text>
                     <Text style={[styles.listTabLabel, isActive && styles.listTabLabelActive]}>
                       {tab.label}
