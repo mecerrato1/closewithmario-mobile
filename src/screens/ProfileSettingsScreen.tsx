@@ -3,7 +3,6 @@ import {
   View,
   Text,
   TouchableOpacity,
-  SafeAreaView,
   StyleSheet,
   Alert,
   Image,
@@ -17,6 +16,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
 import type { Session } from '@supabase/supabase-js';
 import { useThemeColors } from '../styles/theme';
 import { supabase } from '../lib/supabase';
@@ -111,6 +111,8 @@ const FLORIDA_COUNTIES = [
   'Suwannee', 'Taylor', 'Union', 'Volusia', 'Wakulla', 'Walton', 'Washington',
 ];
 
+type SettingsTab = 'profile' | 'leads' | 'account';
+
 type ProfileSettingsScreenProps = {
   session: Session | null;
   onBack: () => void;
@@ -157,6 +159,13 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
   const avatarUrl = getAvatarUrl(session?.user?.user_metadata, realtorProfilePicUrl);
   const isRealtor = userRole === 'realtor';
   const isLoanOfficer = userRole === 'loan_officer';
+  const hasProfile = isRealtor || isLoanOfficer;
+  const [tab, setTab] = useState<SettingsTab>('profile');
+  const tabs: { key: SettingsTab; label: string }[] = [
+    { key: 'profile', label: 'Profile' },
+    ...(hasProfile ? [{ key: 'leads' as const, label: 'Leads' }] : []),
+    { key: 'account', label: 'Account' },
+  ];
 
   // Fetch realtor profile data
   const fetchRealtorProfile = useCallback(async () => {
@@ -462,145 +471,108 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
     }
   };
 
+  const handleChangePassword = () => {
+    Alert.alert(
+      'Change Password',
+      'A password reset email will be sent to your email address.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send Reset Email',
+          onPress: async () => {
+            const { error } = await supabase.auth.resetPasswordForEmail(session?.user?.email || '');
+            if (error) {
+              Alert.alert('Error', error.message);
+            } else {
+              Alert.alert('Success', 'Check your email for the password reset link.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
-    <SafeAreaView style={[localStyles.container, { backgroundColor: colors.background }]}>
-      <View style={[localStyles.header, { borderBottomColor: colors.border }]}
-      >
-        <TouchableOpacity onPress={onBack} style={localStyles.backButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Ionicons name="chevron-back" size={22} color={colors.textPrimary} />
-          <Text style={[localStyles.backButtonText, { color: colors.textPrimary }]}>Back</Text>
-        </TouchableOpacity>
-        <Text style={[localStyles.headerTitle, { color: colors.textPrimary }]}>Profile Settings</Text>
-        <View style={localStyles.headerRightSpacer} />
+    <View style={[localStyles.container, { backgroundColor: colors.background }]}>
+      <StatusBar style="light" />
+      <View style={localStyles.header}>
+        <View style={localStyles.titleRow}>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            onPress={onBack}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="chevron-back" size={26} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={localStyles.headerTitle}>Settings</Text>
+        </View>
+        <View style={localStyles.tabs}>
+          {tabs.map((item) => {
+            const active = item.key === tab;
+            return (
+              <TouchableOpacity
+                key={item.key}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: active }}
+                style={[localStyles.tab, active && localStyles.tabActive]}
+                onPress={() => setTab(item.key)}
+              >
+                <Text style={[localStyles.tabText, active && localStyles.tabTextActive]}>{item.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
 
-      <ScrollView contentContainerStyle={localStyles.content}>
-        <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-          <Text style={[localStyles.sectionTitle, { color: colors.textPrimary }]}>Profile Picture</Text>
-
-          <View style={localStyles.avatarRow}>
-            {avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={localStyles.avatar} />
-            ) : (
-              <View style={[localStyles.avatarPlaceholder, { backgroundColor: colors.border }]}>
-                <Text style={[localStyles.avatarPlaceholderText, { color: colors.textPrimary }]}>
-                  {session?.user?.email?.[0]?.toUpperCase() || 'U'}
-                </Text>
-              </View>
-            )}
-
-            <View style={localStyles.avatarActions}>
-              <TouchableOpacity
-                style={[localStyles.primaryButton, { backgroundColor: '#2563EB' }]}
-                onPress={handleUploadProfilePicture}
-                disabled={uploadingPicture}
-              >
+      <ScrollView
+        key={tab}
+        contentContainerStyle={localStyles.content}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
+      >
+        {tab === 'profile' && (
+          <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+            <View style={localStyles.avatarRow}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={localStyles.avatar} />
+              ) : (
+                <View style={[localStyles.avatarPlaceholder, { backgroundColor: colors.border }]}>
+                  <Text style={[localStyles.avatarPlaceholderText, { color: colors.textPrimary }]}>
+                    {session?.user?.email?.[0]?.toUpperCase() || 'U'}
+                  </Text>
+                </View>
+              )}
+              <View style={localStyles.avatarActions}>
                 {uploadingPicture ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
+                  <ActivityIndicator size="small" color="#2563EB" style={localStyles.linkButton} />
                 ) : (
-                  <Text style={localStyles.primaryButtonText}>Change Picture</Text>
+                  <>
+                    <TouchableOpacity accessibilityRole="button" style={localStyles.linkButton} onPress={handleUploadProfilePicture}>
+                      <Text style={localStyles.linkText}>Change picture</Text>
+                    </TouchableOpacity>
+                    {session?.user?.user_metadata?.custom_avatar_url ? (
+                      <TouchableOpacity accessibilityRole="button" style={localStyles.linkButton} onPress={handleRemoveProfilePicture}>
+                        <Text style={[localStyles.linkText, { color: colors.textSecondary }]}>Remove custom picture</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </>
                 )}
-              </TouchableOpacity>
-
-              {session?.user?.user_metadata?.custom_avatar_url ? (
-                <TouchableOpacity
-                  style={[localStyles.secondaryButton, { borderColor: colors.border }]}
-                  onPress={handleRemoveProfilePicture}
-                  disabled={uploadingPicture}
-                >
-                  <Text style={[localStyles.secondaryButtonText, { color: colors.textPrimary }]}>Remove Custom Picture</Text>
-                </TouchableOpacity>
-              ) : null}
+              </View>
             </View>
           </View>
-        </View>
+        )}
 
-        {/* Realtor Profile Fields */}
-        {isRealtor && !loadingProfile && (
+        {tab !== 'account' && hasProfile && loadingProfile && (
+          <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border, alignItems: 'center', padding: 24 }]}>
+            <ActivityIndicator size="small" color="#2563EB" />
+            <Text style={{ color: colors.textSecondary, marginTop: 8 }}>Loading profile...</Text>
+          </View>
+        )}
+
+        {/* Realtor details */}
+        {tab === 'profile' && isRealtor && !loadingProfile && (
           <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-            {/* Lead Participation */}
-            <View style={localStyles.toggleRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={[localStyles.sectionTitle, { color: colors.textPrimary, marginBottom: 0 }]}>Lead Participation</Text>
-                <Text style={[localStyles.toggleSubtext, { color: colors.textSecondary }]}>
-                  {leadEligible ? 'Receiving leads' : 'Not receiving leads'}
-                </Text>
-              </View>
-              <Switch
-                value={leadEligible}
-                onValueChange={handleToggleLeadEligible}
-                trackColor={{ false: '#D1D5DB', true: '#2563EB' }}
-                thumbColor="#FFFFFF"
-              />
-            </View>
-
-            {/* Service Counties - only when lead eligible */}
-            {leadEligible && (
-              <View style={{ marginTop: 12 }}>
-                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary, marginTop: 0 }]}>Service Counties</Text>
-                {countyFilter.length > 0 && (
-                  <View style={localStyles.countyTags}>
-                    {countyFilter.map((county) => (
-                      <View key={county} style={localStyles.countyTag}>
-                        <Text style={localStyles.countyTagText}>{county}</Text>
-                        <TouchableOpacity
-                          onPress={() => {
-                            setCountyFilter(countyFilter.filter(c => c !== county));
-                            setHasChanges(true);
-                          }}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
-                          <Text style={localStyles.countyTagRemove}>×</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </View>
-                )}
-                <TextInput
-                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
-                  value={countyInput}
-                  onChangeText={setCountyInput}
-                  placeholder="Add another county..."
-                  placeholderTextColor={colors.textSecondary}
-                  returnKeyType="done"
-                />
-                {countyInput.trim().length > 0 && (
-                  <View style={[localStyles.countySuggestions, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-                    {FLORIDA_COUNTIES
-                      .filter(c =>
-                        c.toLowerCase().includes(countyInput.trim().toLowerCase()) &&
-                        !countyFilter.includes(c)
-                      )
-                      .slice(0, 6)
-                      .map(county => (
-                        <TouchableOpacity
-                          key={county}
-                          style={localStyles.countySuggestionItem}
-                          onPress={() => {
-                            setCountyFilter([...countyFilter, county]);
-                            setCountyInput('');
-                            setHasChanges(true);
-                          }}
-                        >
-                          <Text style={{ color: colors.textPrimary, fontSize: 15 }}>{county}</Text>
-                        </TouchableOpacity>
-                      ))
-                    }
-                    {FLORIDA_COUNTIES.filter(c =>
-                      c.toLowerCase().includes(countyInput.trim().toLowerCase()) &&
-                      !countyFilter.includes(c)
-                    ).length === 0 && (
-                      <View style={localStyles.countySuggestionItem}>
-                        <Text style={{ color: colors.textSecondary, fontSize: 14 }}>No matching counties</Text>
-                      </View>
-                    )}
-                  </View>
-                )}
-              </View>
-            )}
-
-            <View style={localStyles.divider} />
-
             {/* Name Row */}
             <View style={localStyles.fieldRow}>
               <View style={{ flex: 1 }}>
@@ -711,69 +683,16 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
                 )}
               </View>
             </View>
-
-            {/* Save Button */}
-            {(hasChanges || savedFlash) && (
-              <TouchableOpacity
-                style={[localStyles.saveButton, { backgroundColor: savedFlash ? '#16A34A' : '#2563EB' }]}
-                onPress={handleSaveRealtorProfile}
-                disabled={saving || savedFlash}
-              >
-                {saving ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={localStyles.saveButtonText}>{savedFlash ? 'Saved!' : 'Save Changes'}</Text>
-                )}
-              </TouchableOpacity>
-            )}
-
-            <View style={localStyles.divider} />
-
-            {/* Signed in as */}
-            <Text style={[localStyles.signedInText, { color: colors.textSecondary }]}>
-              Signed in as:  <Text style={{ color: colors.textPrimary, fontWeight: '600' }}>{session?.user?.email}</Text>
-            </Text>
-
-            {/* Change Password */}
-            <TouchableOpacity onPress={() => {
-              Alert.alert(
-                'Change Password',
-                'A password reset email will be sent to your email address.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Send Reset Email',
-                    onPress: async () => {
-                      const { error } = await supabase.auth.resetPasswordForEmail(session?.user?.email || '');
-                      if (error) {
-                        Alert.alert('Error', error.message);
-                      } else {
-                        Alert.alert('Success', 'Check your email for the password reset link.');
-                      }
-                    },
-                  },
-                ]
-              );
-            }}>
-              <Text style={localStyles.changePasswordText}>Change Password</Text>
-            </TouchableOpacity>
           </View>
         )}
 
-        {isRealtor && loadingProfile && (
-          <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border, alignItems: 'center', padding: 24 }]}>
-            <ActivityIndicator size="small" color="#2563EB" />
-            <Text style={{ color: colors.textSecondary, marginTop: 8 }}>Loading profile...</Text>
-          </View>
-        )}
-
-        {/* Loan Officer Profile Fields */}
-        {isLoanOfficer && !loadingProfile && (
+        {/* Realtor lead settings */}
+        {tab === 'leads' && isRealtor && !loadingProfile && (
           <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
             {/* Lead Participation */}
             <View style={localStyles.toggleRow}>
               <View style={{ flex: 1 }}>
-                <Text style={[localStyles.sectionTitle, { color: colors.textPrimary, marginBottom: 0 }]}>Lead Participation</Text>
+                <Text style={[localStyles.sectionTitle, { color: colors.textPrimary, marginBottom: 0 }]}>Receive new leads</Text>
                 <Text style={[localStyles.toggleSubtext, { color: colors.textSecondary }]}>
                   {leadEligible ? 'Receiving leads' : 'Not receiving leads'}
                 </Text>
@@ -786,8 +705,76 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
               />
             </View>
 
-            <View style={localStyles.divider} />
+            {/* Service Counties - only when lead eligible */}
+            {leadEligible && (
+              <View style={{ marginTop: 12 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary, marginTop: 0 }]}>Service Counties</Text>
+                {countyFilter.length > 0 && (
+                  <View style={localStyles.countyTags}>
+                    {countyFilter.map((county) => (
+                      <View key={county} style={localStyles.countyTag}>
+                        <Text style={localStyles.countyTagText}>{county}</Text>
+                        <TouchableOpacity
+                          onPress={() => {
+                            setCountyFilter(countyFilter.filter(c => c !== county));
+                            setHasChanges(true);
+                          }}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
+                          <Text style={localStyles.countyTagRemove}>×</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
+                <TextInput
+                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                  value={countyInput}
+                  onChangeText={setCountyInput}
+                  placeholder="Add another county..."
+                  placeholderTextColor={colors.textSecondary}
+                  returnKeyType="done"
+                />
+                {countyInput.trim().length > 0 && (
+                  <View style={[localStyles.countySuggestions, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+                    {FLORIDA_COUNTIES
+                      .filter(c =>
+                        c.toLowerCase().includes(countyInput.trim().toLowerCase()) &&
+                        !countyFilter.includes(c)
+                      )
+                      .slice(0, 6)
+                      .map(county => (
+                        <TouchableOpacity
+                          key={county}
+                          style={localStyles.countySuggestionItem}
+                          onPress={() => {
+                            setCountyFilter([...countyFilter, county]);
+                            setCountyInput('');
+                            setHasChanges(true);
+                          }}
+                        >
+                          <Text style={{ color: colors.textPrimary, fontSize: 15 }}>{county}</Text>
+                        </TouchableOpacity>
+                      ))
+                    }
+                    {FLORIDA_COUNTIES.filter(c =>
+                      c.toLowerCase().includes(countyInput.trim().toLowerCase()) &&
+                      !countyFilter.includes(c)
+                    ).length === 0 && (
+                      <View style={localStyles.countySuggestionItem}>
+                        <Text style={{ color: colors.textSecondary, fontSize: 14 }}>No matching counties</Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        )}
 
+        {/* Loan officer details */}
+        {tab === 'profile' && isLoanOfficer && !loadingProfile && (
+          <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
             {/* Name Row */}
             <View style={localStyles.fieldRow}>
               <View style={{ flex: 1 }}>
@@ -977,61 +964,57 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
                 )}
               </View>
             </View>
+          </View>
+        )}
 
-            {/* Save Button */}
-            {(hasChanges || savedFlash) && (
-              <TouchableOpacity
-                style={[localStyles.saveButton, { backgroundColor: savedFlash ? '#16A34A' : '#2563EB' }]}
-                onPress={handleSaveLOProfile}
-                disabled={saving || savedFlash}
-              >
-                {saving ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={localStyles.saveButtonText}>{savedFlash ? 'Saved!' : 'Save Changes'}</Text>
-                )}
-              </TouchableOpacity>
+        {/* Loan officer lead settings */}
+        {tab === 'leads' && isLoanOfficer && !loadingProfile && (
+          <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+            {/* Lead Participation */}
+            <View style={localStyles.toggleRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.sectionTitle, { color: colors.textPrimary, marginBottom: 0 }]}>Receive new leads</Text>
+                <Text style={[localStyles.toggleSubtext, { color: colors.textSecondary }]}>
+                  {leadEligible ? 'Receiving leads' : 'Not receiving leads'}
+                </Text>
+              </View>
+              <Switch
+                value={leadEligible}
+                onValueChange={handleToggleLeadEligible}
+                trackColor={{ false: '#D1D5DB', true: '#2563EB' }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
+          </View>
+        )}
+
+        {/* Save Button */}
+        {tab !== 'account' && hasProfile && (hasChanges || savedFlash) && (
+          <TouchableOpacity
+            style={[localStyles.saveButton, { backgroundColor: savedFlash ? '#16A34A' : '#2563EB' }]}
+            onPress={isRealtor ? handleSaveRealtorProfile : handleSaveLOProfile}
+            disabled={saving || savedFlash}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={localStyles.saveButtonText}>{savedFlash ? 'Saved!' : 'Save Changes'}</Text>
             )}
-
-            <View style={localStyles.divider} />
-
-            {/* Signed in as */}
-            <Text style={[localStyles.signedInText, { color: colors.textSecondary }]}>
-              Signed in as:  <Text style={{ color: colors.textPrimary, fontWeight: '600' }}>{session?.user?.email}</Text>
-            </Text>
-
-            {/* Change Password */}
-            <TouchableOpacity onPress={() => {
-              Alert.alert(
-                'Change Password',
-                'A password reset email will be sent to your email address.',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Send Reset Email',
-                    onPress: async () => {
-                      const { error } = await supabase.auth.resetPasswordForEmail(session?.user?.email || '');
-                      if (error) {
-                        Alert.alert('Error', error.message);
-                      } else {
-                        Alert.alert('Success', 'Check your email for the password reset link.');
-                      }
-                    },
-                  },
-                ]
-              );
-            }}>
-              <Text style={localStyles.changePasswordText}>Change Password</Text>
-            </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
         )}
 
-        {isLoanOfficer && loadingProfile && (
-          <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border, alignItems: 'center', padding: 24 }]}>
-            <ActivityIndicator size="small" color="#2563EB" />
-            <Text style={{ color: colors.textSecondary, marginTop: 8 }}>Loading profile...</Text>
-          </View>
-        )}
+        {tab === 'account' && (
+          <>
+            <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+              <Text style={[localStyles.signedInText, { color: colors.textSecondary }]}>
+                Signed in as:  <Text style={{ color: colors.textPrimary, fontWeight: '600' }}>{session?.user?.email}</Text>
+              </Text>
+              {hasProfile && (
+                <TouchableOpacity accessibilityRole="button" onPress={handleChangePassword}>
+                  <Text style={localStyles.changePasswordText}>Change Password</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
         <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
           <TouchableOpacity style={localStyles.menuRow} onPress={onSignOut}>
@@ -1064,13 +1047,8 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
             <Text style={localStyles.deleteButtonText}>Delete Account</Text>
           </TouchableOpacity>
         </View>
-
-        <TouchableOpacity
-          style={[localStyles.doneButton, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}
-          onPress={onBack}
-        >
-          <Text style={[localStyles.doneButtonText, { color: colors.textPrimary }]}>Done</Text>
-        </TouchableOpacity>
+          </>
+        )}
       </ScrollView>
 
       {/* Delete Account Modal */}
@@ -1155,7 +1133,7 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -1164,35 +1142,19 @@ const localStyles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    height: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    borderBottomWidth: 1,
+    backgroundColor: '#0B1220',
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingHorizontal: 16,
   },
-  backButton: {
-    height: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-    minWidth: 70,
-  },
-  backButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
-    marginLeft: 2,
-  },
-  headerTitle: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  headerRightSpacer: {
-    minWidth: 70,
-    height: 40,
-  },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
+  headerTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '800' },
+  tabs: { flexDirection: 'row', gap: 22, marginTop: 6 },
+  tab: { paddingVertical: 10, borderBottomWidth: 3, borderBottomColor: 'transparent' },
+  tabActive: { borderBottomColor: '#3B82F6' },
+  tabText: { color: '#94A3B8', fontSize: 15, fontWeight: '600' },
+  tabTextActive: { color: '#FFFFFF' },
+  linkButton: { alignSelf: 'flex-start', paddingVertical: 5 },
+  linkText: { color: '#2563EB', fontSize: 15, fontWeight: '600' },
   content: {
     padding: 16,
     gap: 12,
@@ -1232,30 +1194,6 @@ const localStyles = StyleSheet.create({
     flex: 1,
     gap: 10,
   },
-  primaryButton: {
-    height: 42,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 14,
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  secondaryButton: {
-    height: 42,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 14,
-  },
-  secondaryButtonText: {
-    fontWeight: '700',
-    fontSize: 14,
-  },
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1270,18 +1208,6 @@ const localStyles = StyleSheet.create({
   menuRowText: {
     fontSize: 15,
     fontWeight: '700',
-  },
-  doneButton: {
-    height: 48,
-    borderRadius: 14,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 6,
-  },
-  doneButtonText: {
-    fontSize: 15,
-    fontWeight: '800',
   },
   toggleRow: {
     flexDirection: 'row',

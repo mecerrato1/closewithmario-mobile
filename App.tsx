@@ -678,6 +678,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     if (leadsTabPresses === seenLeadsTabPresses.current) return;
     seenLeadsTabPresses.current = leadsTabPresses;
     if (selectedLead) closeSelectedLead();
+    setShowProfileSettings(false);
     setShowTodayCalls(false);
     setShowDashboard(false);
   }, [leadsTabPresses]);
