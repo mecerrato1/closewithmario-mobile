@@ -1,5 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { senderNames } from './src/features/leads/senderName';
+import { isTextSuggestion, readableStatuses, suggestedMessage } from './src/features/leads/followUpText';
+import { fetchSenderContact } from './src/lib/senderContact';
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   StyleSheet,
@@ -1204,13 +1206,16 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const { phone, suggestedAction, leadId, source } = selectedAiAttention;
     
     // Extract the quoted message from the AI suggestion
-    const quoteMatch = suggestedAction.match(/['"]([^'"]+)['"]/);
-    const aiMessage = quoteMatch ? quoteMatch[1] : suggestedAction.replace(/^Send a text:\s*/i, '').trim();
+    const aiMessage = suggestedMessage(suggestedAction);
     
-    // Get LO info from session
-    const { loFullname } = senderNames(null, session?.user?.user_metadata?.full_name);
-    const loPhone = session?.user?.user_metadata?.phone || '[Phone]';
-    const loEmail = session?.user?.email || '[Email]';
+    // Sign with the sender's own record, as the lead screen does.
+    const contact =
+      session?.user?.id && session.user.email
+        ? await fetchSenderContact(session.user.id, session.user.email)
+        : null;
+    const { loFullname } = senderNames(contact, session?.user?.user_metadata?.full_name);
+    const loPhone = contact?.phone || session?.user?.user_metadata?.phone || '[Phone]';
+    const loEmail = contact?.email || session?.user?.email || '[Email]';
 
     // Build the full message with AI suggestion + signature
     const messageBody = `${aiMessage}\n\n- ${loFullname}\n📞 ${loPhone}\n📧 ${loEmail}`;
@@ -3914,7 +3919,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             </View>
             
             <Text style={aiRecommendationStyles.reason}>
-              {selectedAiAttention?.reason || 'No additional details available.'}
+              {readableStatuses(selectedAiAttention?.reason || 'No additional details available.')}
             </Text>
             
             {selectedAiAttention?.suggestedAction && (
@@ -3924,7 +3929,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   <Text style={aiRecommendationStyles.suggestionText}>
                     {selectedAiAttention.suggestedAction}
                   </Text>
-                  {selectedAiAttention.suggestedAction.toLowerCase().includes('send a text') && selectedAiAttention.phone && (
+                  {isTextSuggestion(selectedAiAttention.suggestedAction) && selectedAiAttention.phone && (
                     <Text style={aiRecommendationStyles.tapHint}>
                       👆 Tap button below to send
                     </Text>
@@ -3933,7 +3938,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               </View>
             )}
             
-            {selectedAiAttention?.suggestedAction?.toLowerCase().includes('send a text') && selectedAiAttention?.phone ? (
+            {isTextSuggestion(selectedAiAttention?.suggestedAction) && selectedAiAttention?.phone ? (
               <TouchableOpacity accessibilityRole="button"
                 style={aiRecommendationStyles.sendTextButton}
                 onPress={handleAiSuggestedTextFromModal}

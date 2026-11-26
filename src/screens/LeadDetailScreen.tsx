@@ -34,6 +34,8 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { senderNames } from '../features/leads/senderName';
+import { isTextSuggestion, readableStatuses, suggestedMessage } from '../features/leads/followUpText';
+import { fetchSenderContact } from '../lib/senderContact';
 import { Session } from '@supabase/supabase-js';
 import { Audio, InterruptionModeIOS } from 'expo-av';
 import { File as FSFile, Paths } from 'expo-file-system';
@@ -4726,8 +4728,7 @@ export function LeadDetailView({
     // Extract the quoted message from the AI suggestion
     // Format: "Send a text: 'Hi Andres and Maria, just checking in...'"
     const suggestion = aiAttention.suggestedAction;
-    const quoteMatch = suggestion.match(/['"]([^'"]+)['"]/);
-    const aiMessage = quoteMatch ? quoteMatch[1] : suggestion.replace(/^Send a text:\s*/i, '').trim();
+    const aiMessage = suggestedMessage(suggestion);
     
     const fname = record.first_name || 'there';
     const { loFullname } = senderNames(currentLOInfo, session?.user?.user_metadata?.full_name);
@@ -4797,104 +4798,18 @@ export function LeadDetailView({
   };
 
   // Check if AI suggestion is a "Send a text" recommendation
-  const isTextSuggestion = aiAttention?.suggestedAction?.toLowerCase().includes('send a text');
+  const canSendSuggestion = isTextSuggestion(aiAttention?.suggestedAction);
 
   // Load current loan officer info
   useEffect(() => {
-    const loadLOInfo = async () => {
-      if (!session?.user?.id || !session?.user?.email) return;
-      
-      try {
-        // Hardcoded contact info for super admins
-        const superAdminContacts: Record<string, { firstName: string; lastName: string; phone: string; email: string; aiDraftAccess: boolean; company: string }> = {
-          'mario@closewithmario.com': { firstName: 'Mario', lastName: 'Cerrato', phone: '3052192788', email: 'mcerrato@loandepot.com', aiDraftAccess: true, company: 'loanDepot' },
-          'mario@regallending.com': { firstName: 'Mario', lastName: 'Cerrato', phone: '3052192788', email: 'mario@regallending.com', aiDraftAccess: true, company: 'Regal Lending' },
-        };
-        
-        const emailLower = session.user.email.toLowerCase();
-        
-        // Check if this is a super admin with hardcoded contact info
-        if (superAdminContacts[emailLower]) {
-          console.log('Using hardcoded super admin contact info');
-          setCurrentLOInfo(superAdminContacts[emailLower]);
-          setIsLicensedRealtor(true);
-          return;
-        }
-        
-        // First try to get by user_id (for regular loan officers)
-        let memberId = await getUserTeamMemberId(session.user.id, 'loan_officer');
-        console.log('LO Member ID by user_id:', memberId);
-        
-        // If no member ID found, try to find by email (for super admins who might be LOs)
-        if (!memberId) {
-          const { data: loByEmail } = await supabase
-            .from('loan_officers')
-            .select('id')
-            .eq('email', emailLower)
-            .eq('active', true)
-            .maybeSingle();
-          
-          memberId = loByEmail?.id || null;
-          console.log('LO Member ID by email:', memberId);
-        }
-        
-        if (memberId) {
-          const { data, error } = await supabase
-            .from('loan_officers')
-            .select('first_name, last_name, phone, email, ai_draft_access, company, is_licensed_realtor')
-            .eq('id', memberId)
-            .single();
-          
-          console.log('LO Data fetched:', data);
-          console.log('LO Fetch error:', error);
-          
-          if (data && !error) {
-            const loInfo = { 
-              firstName: data.first_name, 
-              lastName: data.last_name,
-              phone: data.phone || '',
-              email: data.email || '',
-              aiDraftAccess: !!(data as any).ai_draft_access,
-              company: (data as any).company || '',
-            };
-            console.log('Setting LO Info:', loInfo);
-            setCurrentLOInfo(loInfo);
-            setIsLicensedRealtor(!!(data as any).is_licensed_realtor);
-          }
-        } else {
-          // No LO record found - check if user is a realtor
-          console.log('No LO record found, checking realtors table');
-          const realtorMemberId = await getUserTeamMemberId(session.user.id, 'realtor');
-          
-          if (realtorMemberId) {
-            const { data: realtorData, error: realtorError } = await supabase
-              .from('realtors')
-              .select('first_name, last_name, phone, email, brokerage')
-              .eq('id', realtorMemberId)
-              .single();
-            
-            if (realtorData && !realtorError) {
-              const realtorInfo = {
-                firstName: realtorData.first_name || '',
-                lastName: realtorData.last_name || '',
-                phone: realtorData.phone || '',
-                email: realtorData.email || '',
-                aiDraftAccess: false,
-                company: realtorData.brokerage || '',
-              };
-              console.log('Setting Realtor Info as current user info:', realtorInfo);
-              setCurrentLOInfo(realtorInfo);
-            }
-          } else {
-            console.log('No realtor record found either');
-          }
-        }
-      } catch (e) {
-        console.error('Error loading LO info:', e);
-      }
-    };
-
-    loadLOInfo();
+    const userId = session?.user?.id;
+    const userEmail = session?.user?.email;
+    if (!userId || !userEmail) return;
+    void fetchSenderContact(userId, userEmail).then((contact) => {
+      if (!contact) return;
+      setCurrentLOInfo(contact);
+      setIsLicensedRealtor(contact.isLicensedRealtor);
+    });
   }, [session?.user?.id, session?.user?.email]);
 
   // Bootstrap supplies the first bounded activity page. The focused endpoint is
@@ -6420,19 +6335,18 @@ export function LeadDetailView({
                   </View>
                   {aiAttention?.reason && (
                     <Text style={{ fontSize: 12, color: '#475569', marginLeft: 18, marginBottom: 4, lineHeight: 17 }}>
-                      {aiAttention.reason}
+                      {readableStatuses(aiAttention.reason)}
                     </Text>
                   )}
                   {aiAttention?.suggestedAction && (() => {
                     const sugAction = aiAttention.suggestedAction || '';
-                    const isTextSug = sugAction.toLowerCase().includes('send a text') || sugAction.toLowerCase().includes('text:');
+                    const isTextSug = isTextSuggestion(sugAction);
                     if (isTextSug && phone) {
                       return (
                         <TouchableOpacity
                           onPress={() => {
                             // Extract quoted message from AI suggestion
-                            const quoteMatch = sugAction.match(/['"]([^'"]+)['"]/);
-                            const aiMessage = quoteMatch ? quoteMatch[1] : sugAction.replace(/^Send a text:\s*/i, '').trim();
+                            const aiMessage = suggestedMessage(sugAction);
                             // Pre-fill custom message and open template modal
                             setCustomMessageText(aiMessage);
                             setShowCustomMessage(true);
@@ -6444,7 +6358,7 @@ export function LeadDetailView({
                         >
                           <Ionicons name="chatbubble-ellipses-outline" size={13} color="#1D4ED8" style={{ marginRight: 5 }} />
                           <Text style={{ fontSize: 12, color: '#1D4ED8', fontWeight: '600', lineHeight: 17, flex: 1 }}>
-                            Tap to send: {aiAttention.suggestedAction.replace(/^Send a text:\s*/i, '').replace(/^['"]|['"]$/g, '').substring(0, 60)}…
+                            Tap to send: {suggestedMessage(sugAction).substring(0, 60)}…
                           </Text>
                         </TouchableOpacity>
                       );
@@ -8498,25 +8412,25 @@ export function LeadDetailView({
                 </View>
                 
                 <Text style={aiRecommendationStyles.reason}>
-                  {aiAttention?.reason || 'No additional details available.'}
+                  {readableStatuses(aiAttention?.reason || 'No additional details available.')}
                 </Text>
                 
                 {aiAttention?.suggestedAction && (
                   <TouchableOpacity 
                     style={[
                       aiRecommendationStyles.suggestionContainer,
-                      isTextSuggestion && phone && aiRecommendationStyles.suggestionTappable
+                      canSendSuggestion && phone && aiRecommendationStyles.suggestionTappable
                     ]}
-                    onPress={isTextSuggestion && phone ? handleAiSuggestedText : undefined}
-                    activeOpacity={isTextSuggestion && phone ? 0.7 : 1}
-                    disabled={!isTextSuggestion || !phone}
+                    onPress={canSendSuggestion && phone ? handleAiSuggestedText : undefined}
+                    activeOpacity={canSendSuggestion && phone ? 0.7 : 1}
+                    disabled={!canSendSuggestion || !phone}
                   >
                     <Text style={aiRecommendationStyles.suggestionIcon}>💡</Text>
                     <View style={{ flex: 1 }}>
                       <Text style={aiRecommendationStyles.suggestionText}>
                         {aiAttention.suggestedAction}
                       </Text>
-                      {isTextSuggestion && phone && (
+                      {canSendSuggestion && phone && (
                         <Text style={aiRecommendationStyles.tapToSend}>
                           👆 Tap to send this text
                         </Text>
