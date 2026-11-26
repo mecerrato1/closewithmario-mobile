@@ -17,6 +17,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import { AiTextingCard, ServiceCountiesCard } from '../features/settings/LeadsSettings';
+import { LinksSettings } from '../features/settings/LinksSettings';
+import { SecuritySettings } from '../features/settings/SecuritySettings';
 import type { Session } from '@supabase/supabase-js';
 import { useThemeColors } from '../styles/theme';
 import { supabase } from '../lib/supabase';
@@ -111,7 +114,7 @@ const FLORIDA_COUNTIES = [
   'Suwannee', 'Taylor', 'Union', 'Volusia', 'Wakulla', 'Walton', 'Washington',
 ];
 
-type SettingsTab = 'profile' | 'leads' | 'account';
+type SettingsTab = 'profile' | 'business' | 'leads' | 'links' | 'account';
 
 type ProfileSettingsScreenProps = {
   session: Session | null;
@@ -163,7 +166,8 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
   const [tab, setTab] = useState<SettingsTab>('profile');
   const tabs: { key: SettingsTab; label: string }[] = [
     { key: 'profile', label: 'Profile' },
-    ...(hasProfile ? [{ key: 'leads' as const, label: 'Leads' }] : []),
+    ...(hasProfile ? [{ key: 'business' as const, label: 'Business' }, { key: 'leads' as const, label: 'Leads' }] : []),
+    ...(isLoanOfficer ? [{ key: 'links' as const, label: 'Links' }] : []),
     { key: 'account', label: 'Account' },
   ];
 
@@ -507,7 +511,7 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
           </TouchableOpacity>
           <Text style={localStyles.headerTitle}>Settings</Text>
         </View>
-        <View style={localStyles.tabs}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={localStyles.tabs}>
           {tabs.map((item) => {
             const active = item.key === tab;
             return (
@@ -522,7 +526,7 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
               </TouchableOpacity>
             );
           })}
-        </View>
+        </ScrollView>
       </View>
 
       <ScrollView
@@ -563,7 +567,7 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
           </View>
         )}
 
-        {tab !== 'account' && hasProfile && loadingProfile && (
+        {(tab === 'profile' || tab === 'business' || tab === 'leads') && hasProfile && loadingProfile && (
           <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border, alignItems: 'center', padding: 24 }]}>
             <ActivityIndicator size="small" color="#2563EB" />
             <Text style={{ color: colors.textSecondary, marginTop: 8 }}>Loading profile...</Text>
@@ -609,7 +613,7 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
               autoCapitalize="none"
             />
 
-            {/* Phone / Brokerage Row */}
+            {/* Phone */}
             <View style={localStyles.fieldRow}>
               <View style={{ flex: 1 }}>
                 <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Phone</Text>
@@ -620,16 +624,6 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
                   placeholder="(555) 555-5555"
                   placeholderTextColor={colors.textSecondary}
                   keyboardType="phone-pad"
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Brokerage</Text>
-                <TextInput
-                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
-                  value={brokerage}
-                  onChangeText={(t) => { setBrokerage(t); setHasChanges(true); }}
-                  placeholder="Brokerage"
-                  placeholderTextColor={colors.textSecondary}
                 />
               </View>
             </View>
@@ -682,6 +676,120 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
                   </View>
                 )}
               </View>
+            </View>
+          </View>
+        )}
+
+        {/* Business details */}
+        {tab === 'business' && isRealtor && !loadingProfile && (
+          <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+            <View style={localStyles.fieldRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Brokerage</Text>
+                <TextInput
+                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                  value={brokerage}
+                  onChangeText={(t) => { setBrokerage(t); setHasChanges(true); }}
+                  placeholder="Brokerage"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+            </View>
+          </View>
+        )}
+
+        {tab === 'business' && isLoanOfficer && !loadingProfile && (
+          <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+            <View style={localStyles.fieldRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>NMLS ID</Text>
+                <TextInput
+                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                  value={nmlsId}
+                  onChangeText={(t) => { setNmlsId(t); setHasChanges(true); }}
+                  placeholder="NMLS ID"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="number-pad"
+                />
+              </View>
+            </View>
+
+            {/* Company / Company NMLS Row */}
+            <View style={localStyles.fieldRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Company</Text>
+                <TextInput
+                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                  value={company}
+                  onChangeText={(t) => { setCompany(t); setHasChanges(true); }}
+                  placeholder="Company"
+                  placeholderTextColor={colors.textSecondary}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Company NMLS</Text>
+                <TextInput
+                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                  value={companyNmlsId}
+                  onChangeText={(t) => { setCompanyNmlsId(t); setHasChanges(true); }}
+                  placeholder="Company NMLS"
+                  placeholderTextColor={colors.textSecondary}
+                  keyboardType="number-pad"
+                />
+              </View>
+            </View>
+
+            {/* Licensed Realtor Section */}
+            <View style={{ marginTop: 8, marginBottom: 4 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                  <Ionicons name="home-outline" size={18} color="#2563EB" style={{ marginRight: 8 }} />
+                  <Text style={[localStyles.fieldLabel, { color: colors.textPrimary, marginBottom: 0, fontWeight: '600' }]}>Licensed Realtor</Text>
+                </View>
+                <Switch
+                  value={isLicensedRealtor}
+                  onValueChange={(v) => { setIsLicensedRealtor(v); setHasChanges(true); }}
+                  trackColor={{ false: '#D1D5DB', true: '#2563EB' }}
+                />
+              </View>
+              {isLicensedRealtor && (
+                <View style={{ gap: 8, marginTop: 4 }}>
+                  <View>
+                    <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Brokerage Name</Text>
+                    <TextInput
+                      style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                      value={realtorBrokerageName}
+                      onChangeText={(t) => { setRealtorBrokerageName(t); setHasChanges(true); }}
+                      placeholder="Brokerage Name"
+                      placeholderTextColor={colors.textSecondary}
+                    />
+                  </View>
+                  <View style={localStyles.fieldRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>License Number</Text>
+                      <TextInput
+                        style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                        value={realtorLicenseNumber}
+                        onChangeText={(t) => { setRealtorLicenseNumber(t); setHasChanges(true); }}
+                        placeholder="License #"
+                        placeholderTextColor={colors.textSecondary}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Realtor Email</Text>
+                      <TextInput
+                        style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
+                        value={realtorEmail}
+                        onChangeText={(t) => { setRealtorEmail(t); setHasChanges(true); }}
+                        placeholder="Realtor Email"
+                        placeholderTextColor={colors.textSecondary}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                      />
+                    </View>
+                  </View>
+                </View>
+              )}
             </View>
           </View>
         )}
@@ -811,7 +919,7 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
               autoCapitalize="none"
             />
 
-            {/* Phone / NMLS ID Row */}
+            {/* Phone */}
             <View style={localStyles.fieldRow}>
               <View style={{ flex: 1 }}>
                 <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Phone</Text>
@@ -824,95 +932,6 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
                   keyboardType="phone-pad"
                 />
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>NMLS ID</Text>
-                <TextInput
-                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
-                  value={nmlsId}
-                  onChangeText={(t) => { setNmlsId(t); setHasChanges(true); }}
-                  placeholder="NMLS ID"
-                  placeholderTextColor={colors.textSecondary}
-                  keyboardType="number-pad"
-                />
-              </View>
-            </View>
-
-            {/* Company / Company NMLS Row */}
-            <View style={localStyles.fieldRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Company</Text>
-                <TextInput
-                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
-                  value={company}
-                  onChangeText={(t) => { setCompany(t); setHasChanges(true); }}
-                  placeholder="Company"
-                  placeholderTextColor={colors.textSecondary}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Company NMLS</Text>
-                <TextInput
-                  style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
-                  value={companyNmlsId}
-                  onChangeText={(t) => { setCompanyNmlsId(t); setHasChanges(true); }}
-                  placeholder="Company NMLS"
-                  placeholderTextColor={colors.textSecondary}
-                  keyboardType="number-pad"
-                />
-              </View>
-            </View>
-
-            {/* Licensed Realtor Section */}
-            <View style={{ marginTop: 8, marginBottom: 4 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                  <Ionicons name="home-outline" size={18} color="#2563EB" style={{ marginRight: 8 }} />
-                  <Text style={[localStyles.fieldLabel, { color: colors.textPrimary, marginBottom: 0, fontWeight: '600' }]}>Licensed Realtor</Text>
-                </View>
-                <Switch
-                  value={isLicensedRealtor}
-                  onValueChange={(v) => { setIsLicensedRealtor(v); setHasChanges(true); }}
-                  trackColor={{ false: '#D1D5DB', true: '#2563EB' }}
-                />
-              </View>
-              {isLicensedRealtor && (
-                <View style={{ gap: 8, marginTop: 4 }}>
-                  <View>
-                    <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Brokerage Name</Text>
-                    <TextInput
-                      style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
-                      value={realtorBrokerageName}
-                      onChangeText={(t) => { setRealtorBrokerageName(t); setHasChanges(true); }}
-                      placeholder="Brokerage Name"
-                      placeholderTextColor={colors.textSecondary}
-                    />
-                  </View>
-                  <View style={localStyles.fieldRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>License Number</Text>
-                      <TextInput
-                        style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
-                        value={realtorLicenseNumber}
-                        onChangeText={(t) => { setRealtorLicenseNumber(t); setHasChanges(true); }}
-                        placeholder="License #"
-                        placeholderTextColor={colors.textSecondary}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={[localStyles.fieldLabel, { color: colors.textSecondary }]}>Realtor Email</Text>
-                      <TextInput
-                        style={[localStyles.fieldInput, { color: colors.textPrimary, backgroundColor: colors.background, borderColor: colors.border }]}
-                        value={realtorEmail}
-                        onChangeText={(t) => { setRealtorEmail(t); setHasChanges(true); }}
-                        placeholder="Realtor Email"
-                        placeholderTextColor={colors.textSecondary}
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                      />
-                    </View>
-                  </View>
-                </View>
-              )}
             </View>
 
             {/* Language Row */}
@@ -988,8 +1007,23 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
           </View>
         )}
 
+        {tab === 'leads' && isLoanOfficer && !loadingProfile && loId && (
+          <>
+            <AiTextingCard loId={loId} />
+            <ServiceCountiesCard loId={loId} />
+          </>
+        )}
+
+        {tab === 'links' && loId && <LinksSettings loId={loId} />}
+
+        {tab === 'business' && isLoanOfficer && (
+          <Text style={[localStyles.signedInText, { color: colors.textSecondary, textAlign: 'center' }]}>
+            Add or change documents and signatures on the website.
+          </Text>
+        )}
+
         {/* Save Button */}
-        {tab !== 'account' && hasProfile && (hasChanges || savedFlash) && (
+        {(tab === 'profile' || tab === 'business' || (tab === 'leads' && isRealtor)) && hasProfile && (hasChanges || savedFlash) && (
           <TouchableOpacity
             style={[localStyles.saveButton, { backgroundColor: savedFlash ? '#16A34A' : '#2563EB' }]}
             onPress={isRealtor ? handleSaveRealtorProfile : handleSaveLOProfile}
@@ -1015,6 +1049,8 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
                 </TouchableOpacity>
               )}
             </View>
+
+            <SecuritySettings onSignOut={onSignOut} />
 
         <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
           <TouchableOpacity style={localStyles.menuRow} onPress={onSignOut}>
@@ -1148,7 +1184,7 @@ const localStyles = StyleSheet.create({
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
   headerTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '800' },
-  tabs: { flexDirection: 'row', gap: 22, marginTop: 6 },
+  tabs: { flexDirection: 'row', flexGrow: 1, gap: 20, marginTop: 6 },
   tab: { paddingVertical: 10, borderBottomWidth: 3, borderBottomColor: 'transparent' },
   tabActive: { borderBottomColor: '#3B82F6' },
   tabText: { color: '#94A3B8', fontSize: 15, fontWeight: '600' },
