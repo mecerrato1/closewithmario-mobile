@@ -6,6 +6,7 @@ import {
   type CrmLeadScopeResolution,
 } from './crmLeadScope';
 import { unwrapLookup } from '../features/session/lookup';
+import { isSuperAdminModeOn, resetSuperAdminMode } from '../features/session/superAdminMode';
 
 export type UserRole =
   | 'super_admin'
@@ -51,6 +52,7 @@ export function clearRoleCaches() {
   roleCache.clear();
   teamMemberCache.clear();
   crmLeadScopeCache.clear();
+  resetSuperAdminMode();
 }
 
 function roleCacheKey(userId: string, email: string) {
@@ -86,6 +88,9 @@ export async function getUserRole(
   email: string
 ): Promise<UserRole> {
   const emailLower = email.toLowerCase();
+  // Never cached, so switching it off returns the account's own role.
+  if (isSuperAdminModeOn(emailLower)) return 'super_admin';
+
   const cacheKey = roleCacheKey(userId, emailLower);
   const cachedRole = readSessionCache(roleCache, cacheKey);
   if (cachedRole) return cachedRole;
@@ -268,6 +273,8 @@ export async function getUserCrmLeadScope(
   role?: UserRole
 ): Promise<UserCrmLeadScope> {
   const emailLower = email.toLowerCase();
+  if (isSuperAdminModeOn(emailLower)) return 'all';
+
   const cacheKey = roleCacheKey(userId, emailLower);
   const cachedScope = readSessionCache(crmLeadScopeCache, cacheKey);
   if (cachedScope) return cachedScope;

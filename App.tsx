@@ -34,6 +34,7 @@ import {
   Alert,
   Image,
   Linking,
+  Switch,
 } from 'react-native';
 import { GestureHandlerRootView, Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -49,6 +50,8 @@ import {
   type UserCrmLeadScope,
   type UserRole,
 } from './src/lib/roles';
+import { canToggleSuperAdmin, setSuperAdminMode } from './src/features/session/superAdminMode';
+import { useSuperAdminMode } from './src/features/session/useSuperAdminMode';
 import { TEXT_TEMPLATES, fillTemplate, getTemplateText, getTemplateName, type TemplateVariables } from './src/lib/textTemplates';
 import type { Lead, MetaLead, SelectedLeadRef, LoanOfficer, Realtor, Activity, AttentionBadge } from './src/lib/types/leads';
 import { STATUSES, STATUS_DISPLAY_MAP, STATUS_COLOR_MAP, getLeadAlert, formatStatus, getLeadLastTouchedValue, getTimeAgo, sortLeadsByLastTouchedDesc } from './src/lib/leadsHelpers';
@@ -198,6 +201,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [showLeadFilters, setShowLeadFilters] = useState(false);
   const [loanOfficers, setLoanOfficers] = useState<Array<{ id: string; name: string }>>([]);
   const [userRole, setUserRole] = useState<UserRole>('buyer');
+  const superAdminMode = useSuperAdminMode(session?.user?.email);
   const [searchQuery, setSearchQuery] = useState('');
   const [showTeamManagement, setShowTeamManagement] = useState(false);
   const [showAdsLibrary, setShowAdsLibrary] = useState(false);
@@ -494,6 +498,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   };
 
   useEffect(() => {
+    // A quick second flip of the Super Admin switch must not be overwritten by the first.
+    let stale = false;
     const init = async () => {
       if (!session?.user?.id || !session?.user?.email) {
         setInitialError('No user session found');
@@ -513,12 +519,14 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           session.user.email,
           role
         );
+        if (stale) return;
         console.log('User role:', role);
         setUserRole(role);
         setCrmLeadScope(scope);
         setRoleReady(true);
 
-        if (role === 'loan_officer') {
+        // Super Admin mode is still this loan officer, for leads they add.
+        if (role === 'loan_officer' || superAdminMode) {
           const memberId = await getUserTeamMemberId(session.user.id, 'loan_officer');
           setTeamMemberId(memberId);
         }
@@ -576,7 +584,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     };
 
     init();
-  }, [initializationAttempt, session?.user?.id]);
+    return () => {
+      stale = true;
+    };
+  }, [initializationAttempt, session?.user?.id, superAdminMode]);
 
   // State for opening directly to a specific lead tab from notifications
   const [notificationTargetTab, setNotificationTargetTab] = useState<'messages' | 'dm' | null>(null);
@@ -988,7 +999,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       
       console.log('🔍 Saving lead - userRole:', userRole, 'teamMemberId:', teamMemberId, 'email:', session?.user?.email);
       
-      if (userRole === 'loan_officer' && teamMemberId) {
+      if ((userRole === 'loan_officer' || superAdminMode) && teamMemberId) {
         loId = teamMemberId;
         console.log('✅ Using teamMemberId as loId:', loId);
       } else if (session?.user?.email) {
@@ -1401,7 +1412,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         onBack={() => setShowProfileSettings(false)}
         onSignOut={onSignOut}
         realtorProfilePicUrl={realtorProfilePicUrl}
-        userRole={userRole}
+        // Super Admin mode keeps the account's own settings tabs.
+        userRole={superAdminMode ? 'loan_officer' : userRole}
       />
     );
   }
@@ -1734,6 +1746,34 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             onPress={() => setShowProfileMenu(false)}
           >
             <View style={[styles.profileMenuContent, { backgroundColor: colors.cardBackground }]}>
+              {canToggleSuperAdmin(session?.user?.email) && (
+                <>
+                  <View style={styles.profileMenuItem}>
+                    <View style={styles.profileMenuIconContainer}>
+                      <Ionicons name="shield-outline" size={20} color={colors.textPrimary} />
+                    </View>
+                    <View style={{ flex: 1, marginRight: 8 }}>
+                      <Text style={[styles.profileMenuText, { flex: 0, color: colors.textPrimary }]}>Super Admin</Text>
+                      <Text style={styles.superAdminHint}>
+                        {superAdminMode ? 'Showing everyone' : 'Showing only yours'}
+                      </Text>
+                    </View>
+                    <Switch
+                      accessibilityLabel="Super Admin"
+                      value={superAdminMode}
+                      trackColor={{ true: brand.colors.accent }}
+                      onValueChange={(on) => {
+                        setShowProfileMenu(false);
+                        setSelectedLOFilter(null);
+                        setSelectedSourceFilter('all');
+                        setSuperAdminMode(session?.user?.email, on);
+                      }}
+                    />
+                  </View>
+                  <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
+                </>
+              )}
+
               {(canManageTeam(userRole) || canViewAdsLibrary(userRole)) && (
                 <>
                   {canManageTeam(userRole) && (
@@ -1833,7 +1873,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           <Animated.View style={[styles.dashTopRow, { transform: [{ translateY: dashboardUserInfoTranslateY }] }]}>
             <View style={{ flex: 1, height: 60, justifyContent: 'center' }}>
               <Animated.View style={{ opacity: dashboardContentOpacity }}>
-                <Text style={styles.dashLabel}>DASHBOARD</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={styles.dashLabel}>DASHBOARD</Text>
+                  {superAdminMode ? <Text style={styles.superAdminTag}>SUPER ADMIN</Text> : null}
+                </View>
                 <Text style={styles.dashGreeting} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                   Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {userFirstName}
                 </Text>
@@ -2373,7 +2416,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           >
             <Ionicons name="chevron-back" size={26} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.leadsTopTitle}>Leads</Text>
+          <Text style={styles.leadsTopTitle}>
+            Leads
+            {superAdminMode ? <Text style={styles.superAdminTitleTag}>  SUPER ADMIN</Text> : null}
+          </Text>
           {showListControls && (
             <>
               <TouchableOpacity accessibilityRole="button"

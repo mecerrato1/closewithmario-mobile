@@ -10,6 +10,7 @@ import CalculatorTabScreen from './tabs/CalculatorTabScreen';
 import MessagesTabScreen from './tabs/MessagesTabScreen';
 import { getUserRole, type UserRole } from '../lib/roles';
 import { ACCOUNT_LOOKUP_ERROR_MESSAGE } from '../features/session/lookup';
+import { useSuperAdminMode } from '../features/session/useSuperAdminMode';
 
 interface AuthenticatedRootProps {
   session: Session;
@@ -50,6 +51,7 @@ export default function AuthenticatedRoot({
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [roleFailed, setRoleFailed] = useState(false);
   const [roleAttempt, setRoleAttempt] = useState(0);
+  const superAdminMode = useSuperAdminMode(session?.user?.email);
 
   useEffect(() => {
     // Reset first so nothing from a previous account can render for this one.
@@ -105,6 +107,8 @@ export default function AuthenticatedRoot({
       </View>
     );
   }
+
+  const effectiveRole: UserRole = superAdminMode ? 'super_admin' : userRole;
 
   const handleTabChange = (tab: TabKey) => {
     if (tab === 'leads') {
@@ -177,7 +181,7 @@ export default function AuthenticatedRoot({
             session={session} 
             onClose={handleNavigateToDashboard} 
             onNavigateToLead={handleNavigateToLead}
-            userRole={userRole}
+            userRole={effectiveRole}
           />
         );
       case 'loan_officers':
@@ -193,7 +197,7 @@ export default function AuthenticatedRoot({
         return (
           <MessagesTabScreen
             session={session}
-            userRole={userRole}
+            userRole={effectiveRole}
             onNavigateToLead={handleNavigateToLead}
           />
         );
@@ -205,7 +209,7 @@ export default function AuthenticatedRoot({
   return (
     <View style={styles.container}>
       <View style={styles.content}>{renderContent()}</View>
-      <BottomTabs activeTab={activeTab} onTabChange={handleTabChange} userRole={userRole} />
+      <BottomTabs activeTab={activeTab} onTabChange={handleTabChange} userRole={effectiveRole} />
     </View>
   );
 }
