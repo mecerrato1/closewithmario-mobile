@@ -31,9 +31,14 @@ import {
   useWindowDimensions,
   ActionSheetIOS,
   type ImageSourcePropType,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { senderNames } from '../features/leads/senderName';
+import { LeadDetailHeader } from '../features/leads/LeadDetailHeader';
+import { activityPreview } from '../features/leads/leadPipeline';
+import { dayLabel, timeLabel } from '../features/leads/leadRowPresentation';
 import { isTextSuggestion, readableStatuses, suggestedMessage } from '../features/leads/followUpText';
 import { fetchSenderContact } from '../lib/senderContact';
 import { Session } from '@supabase/supabase-js';
@@ -2574,7 +2579,12 @@ export function LeadDetailView({
   const { colors, isDark } = useThemeColors();
   const { width: windowWidth } = useWindowDimensions();
   const isMobileSectionCollapseEnabled = Platform.OS === 'ios' || Platform.OS === 'android';
-  const [activeDetailTab, setActiveDetailTab] = useState<'details' | 'messages' | 'dm'>('details');
+  const [activeDetailTab, setActiveDetailTab] = useState<'activity' | 'info' | 'messages' | 'dm'>('activity');
+  // The header shrinks once you scroll into the lead.
+  const [headerScrolled, setHeaderScrolled] = useState(false);
+  const [openActivityIds, setOpenActivityIds] = useState<ReadonlySet<string>>(new Set());
+  const messagesAreaRef = useRef<View>(null);
+  const [messagesAreaTop, setMessagesAreaTop] = useState<number | undefined>(undefined);
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const [dmUnreadCount, setDmUnreadCount] = useState(0);
   const [taskNote, setTaskNote] = useState('');
@@ -3150,14 +3160,14 @@ export function LeadDetailView({
   }, [crmLeadSource, fetchCrmApi, record?.id, session?.access_token]);
 
   useEffect(() => {
-    if (activeDetailTab !== 'details') {
+    if (activeDetailTab === 'messages' || activeDetailTab === 'dm') {
       return;
     }
     loadLeadScenarios().catch(() => undefined);
   }, [activeDetailTab, loadLeadScenarios]);
 
   useEffect(() => {
-    if (activeDetailTab !== 'details' || scenarioLinks.length === 0) {
+    if (activeDetailTab !== 'info' || scenarioLinks.length === 0) {
       return;
     }
 
@@ -3169,7 +3179,7 @@ export function LeadDetailView({
   }, [activeDetailTab, scenarioLinks.length]);
 
   useEffect(() => {
-    if (!record || activeDetailTab !== 'details') {
+    if (!record || activeDetailTab !== 'info') {
       setSavedIncomeAnalyses([]);
       return;
     }
@@ -4952,11 +4962,64 @@ export function LeadDetailView({
     }
   }, [record?.id, fullName]);
 
-  // Reset to Details tab when navigating to a different lead unless a notification targets a tab.
+  const toggleActivityOpen = (id: string) => {
+    setOpenActivityIds((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  };
+
+  // Collapse only when there is clearly more to scroll than the header gives back,
+  // otherwise a short page would bounce between the two sizes.
+  const handleDetailScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    if (!headerScrolled && contentOffset.y > 40 && contentSize.height - layoutMeasurement.height > 220) {
+      setHeaderScrolled(true);
+    } else if (headerScrolled && contentOffset.y <= 0) {
+      setHeaderScrolled(false);
+    }
+  };
+
+  const measureMessagesArea = () => {
+    messagesAreaRef.current?.measureInWindow((_x, y) => setMessagesAreaTop(y));
+  };
+
+  const shortActivityTime = (value: string) => `${dayLabel(value) === 'Today' ? '' : `${dayLabel(value)}, `}${timeLabel(value)}`;
+
+  const keyFacts: Array<{ label: string; value: string }> = (() => {
+    if (!record) return [];
+    const lead = record as Lead;
+    const meta = record as MetaLead;
+    const form = (isMeta ? meta.form_data : null) || {};
+    const fromForm = (word: string) => Object.entries(form).find(([key]) => key.toLowerCase().includes(word))?.[1];
+    const purpose = isMeta ? meta.loan_purpose || form.loan_purpose : lead.loan_purpose;
+    const price = isMeta
+      ? meta.price_range || form.price_range || fromForm('price')
+      : lead.price != null ? `$${lead.price.toLocaleString()}` : null;
+    const credit = isMeta
+      ? meta.credit_range || form.credit_range || fromForm('credit')
+      : lead.credit_score != null ? String(lead.credit_score) : null;
+    const language = (record.preferred_language || (isMeta ? form.preferred_language : null))?.trim();
+    const facts: Array<[string, string | null | undefined]> = [
+      ['Loan', [purpose, price].filter(Boolean).join(' · ')],
+      ['Credit', credit],
+      ['Language', language ? language.charAt(0).toUpperCase() + language.slice(1) : null],
+      ['Phone', phone ? formatPhoneNumber(phone) : null],
+      ['Email', email],
+      ['Source', dealSnapshotSourceLabel || (isMeta ? 'Meta ad' : lead.source)],
+      ['Added', new Date(record.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })],
+    ];
+    return facts.flatMap(([label, value]) => (value ? [{ label, value: String(value) }] : []));
+  })();
+
+  // Reset to Activity when navigating to a different lead unless a notification targets a tab.
   useEffect(() => {
     if (!initialDetailTab) {
-      setActiveDetailTab('details');
+      setActiveDetailTab('activity');
     }
+    setHeaderScrolled(false);
+    setOpenActivityIds(new Set());
   }, [initialDetailTab, record?.id]);
 
   // Set language preference based on lead's preferred_language
@@ -5910,368 +5973,93 @@ export function LeadDetailView({
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar style="light" />
-      {/* Unified Header — Name + Status + Navigation */}
-      <View style={styles.detailHeader}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backButtonText}>✕</Text>
-        </TouchableOpacity>
-        <View style={styles.detailHeaderCenter}>
-          <Text style={styles.detailHeaderTitle} numberOfLines={1}>{fullName}</Text>
-          {phone ? (
-            <Text style={styles.detailHeaderSubtitle}>
-              {formatPhoneNumber(phone)}
-            </Text>
-          ) : null}
-        </View>
-        <View style={styles.navButtons}>
-          <TouchableOpacity 
-            onPress={handlePrevious} 
-            style={[styles.navButton, !hasPrevious && styles.navButtonDisabled]}
-            disabled={!hasPrevious}
-          >
-            <Text style={[styles.navButtonText, !hasPrevious && styles.navButtonTextDisabled]}>‹</Text>
-          </TouchableOpacity>
-          <Text style={styles.detailHeaderCount}>{currentIndex + 1}/{navigableList.length}</Text>
-          <TouchableOpacity 
-            onPress={handleNext} 
-            style={[styles.navButton, !hasNext && styles.navButtonDisabled]}
-            disabled={!hasNext}
-          >
-            <Text style={[styles.navButtonText, !hasNext && styles.navButtonTextDisabled]}>›</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <LeadDetailHeader
+        name={fullName}
+        phone={phone ? formatPhoneNumber(phone) : ''}
+        status={record.status || 'new'}
+        compact={headerScrolled || activeDetailTab === 'messages' || activeDetailTab === 'dm'}
+        position={`${currentIndex + 1}/${navigableList.length}`}
+        onClose={onBack}
+        onPrevious={hasPrevious ? handlePrevious : undefined}
+        onNext={hasNext ? handleNext : undefined}
+        onStatusPress={() => setShowStatusPicker(true)}
+        onCall={hasCallableContacts ? handleCall : undefined}
+        onText={phone ? handleText : undefined}
+        onSchedule={() => setShowCallbackModal(true)}
+        onEmail={email ? handleEmail : undefined}
+        tabs={[
+          { key: 'activity' as const, label: 'Activity' },
+          { key: 'info' as const, label: 'Info' },
+          ...(showMessagesTab
+            ? [{ key: 'messages' as const, label: 'Messages', badge: messageUnreadCount > 0 ? formatTabBadgeCount(messageUnreadCount) : null }]
+            : []),
+          ...(showDmTab
+            ? [{ key: 'dm' as const, label: 'DMs', badge: dmUnreadCount > 0 ? formatTabBadgeCount(dmUnreadCount) : null }]
+            : []),
+        ]}
+        activeTab={activeDetailTab}
+        onTabPress={(tab) => {
+          setHeaderScrolled(false);
+          setActiveDetailTab(tab);
+          if (tab === 'messages') {
+            setMessageUnreadCount(0);
+            onMarkMessagesRead?.(selected.id);
+          }
+        }}
+      />
 
-      {/* Status + Deal Snapshot Bar */}
-      <View style={[styles.dealSnapshotBar, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dealSnapshotRow}>
-          <TouchableOpacity onPress={() => setShowStatusPicker(true)} activeOpacity={0.7}>
-            <View style={[
-              styles.dealChip,
-              { backgroundColor: STATUS_COLOR_MAP[status || 'new']?.bg || '#F5F5F5', borderColor: STATUS_COLOR_MAP[status || 'new']?.border || '#E2E8F0' }
-            ]}>
-              <Text style={[styles.dealChipText, { color: STATUS_COLOR_MAP[status || 'new']?.text || '#666' }]}>
-                {status ? formatStatus(status) : 'N/A'}
-              </Text>
-              <Text style={{ fontSize: 10, color: STATUS_COLOR_MAP[status || 'new']?.text || '#666', marginLeft: 2 }}>▼</Text>
+      {/* Status Picker Modal */}
+      <Modal
+        visible={showStatusPicker}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowStatusPicker(false)}
+      >
+        <TouchableOpacity 
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowStatusPicker(false)}
+        >
+          <View style={styles.statusPickerContainer}>
+            <View style={styles.statusPickerHeader}>
+              <Text style={styles.statusPickerTitle}>Change Status</Text>
+              <TouchableOpacity onPress={() => setShowStatusPicker(false)}>
+                <Text style={styles.statusPickerClose}>✕</Text>
+              </TouchableOpacity>
             </View>
-          </TouchableOpacity>
-          {(() => {
-            const chips: Array<{ label: string; value: string }> = [];
-            if (!isMeta) {
-              const lead = record as Lead;
-              if (lead.loan_purpose) chips.push({ label: '', value: lead.loan_purpose });
-              if (lead.price != null) chips.push({ label: '', value: `$${lead.price.toLocaleString()}` });
-              if (lead.credit_score != null) chips.push({ label: '', value: `Credit: ${lead.credit_score}` });
-            } else {
-              const meta = record as MetaLead;
-              const fd = meta.form_data || {};
-              if (meta.loan_purpose) chips.push({ label: '', value: meta.loan_purpose });
-              else if (fd.loan_purpose) chips.push({ label: '', value: fd.loan_purpose });
-              const priceRange = meta.price_range || fd.price_range || Object.entries(fd).find(([k]) => k.toLowerCase().includes('price'))?.[1];
-              const creditRange = meta.credit_range || fd.credit_range || Object.entries(fd).find(([k]) => k.toLowerCase().includes('credit'))?.[1];
-              if (priceRange) chips.push({ label: '', value: priceRange });
-              if (creditRange) chips.push({ label: '', value: `Credit: ${creditRange}` });
-            }
-            const preferredLanguage = (
-              (record as Lead | MetaLead).preferred_language ||
-              (isMeta ? (record as MetaLead).form_data?.preferred_language : null)
-            )?.trim();
-            if (preferredLanguage) {
-              chips.splice(chips.length > 0 ? 1 : 0, 0, {
-                label: 'Language',
-                value: preferredLanguage.charAt(0).toUpperCase() + preferredLanguage.slice(1),
-              });
-            }
-            return chips.map((chip, i) => (
-              <View key={i} style={[styles.dealChip, { backgroundColor: '#F1F5F9', borderColor: '#E2E8F0' }]}>
-                {chip.label ? <Text style={styles.dealChipLabel}>{chip.label}</Text> : null}
-                <Text style={styles.dealChipValue} numberOfLines={1}>{chip.value}</Text>
-              </View>
-            ));
-          })()}
-        </ScrollView>
-        <Text style={styles.dealSnapshotTimestamp}>
-          {dealSnapshotSourceLabel ? (
-            <>
-              <Ionicons
-                name={getDealSnapshotSourceIcon(dealSnapshotSourceLabel)}
-                size={12}
-                color={colors.textPrimary}
-              />
-              {' '}
-              <Text style={{ fontWeight: '700', color: colors.textPrimary }}>
-                {dealSnapshotSourceLabel}
-              </Text>
-            </>
-          ) : null}
-          {dealSnapshotSourceLabel ? ' • ' : ''}
-          {new Date(record.created_at).toLocaleDateString('en-US', {
-            month: 'short', 
-            day: 'numeric',
-            year: 'numeric'
-          })} • {new Date(record.created_at).toLocaleTimeString('en-US', { 
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true
-          })}
-        </Text>
-      </View>
-
-      {/* Pipeline Stepper */}
-      {(() => {
-        const PIPELINE_STAGES = [
-          { key: 'new', label: 'New' },
-          { key: 'attempting_contact', label: 'Contact' },
-          { key: 'contacted', label: 'Talked' },
-          { key: 'gathering_docs', label: 'Docs' },
-          { key: 'qualified', label: 'Pre-Appr' },
-          { key: 'in_process', label: 'In Proc' },
-          { key: 'closed', label: 'Closed' },
-        ];
-        const SIDE_STATUSES: Record<string, { label: string; color: string; icon: string }> = {
-          working_on_credit: { label: 'Working on Credit', color: '#DC2626', icon: 'build-outline' },
-          nurturing: { label: 'Nurturing', color: '#F9A825', icon: 'leaf-outline' },
-          unqualified: { label: 'Unqualified', color: '#C62828', icon: 'remove-circle-outline' },
-          lost_deal: { label: 'Lost Deal', color: '#616161', icon: 'close-circle-outline' },
-        };
-        const currentStatus = record.status || 'new';
-        const currentIdx = PIPELINE_STAGES.findIndex(s => s.key === currentStatus);
-        const isOnPipeline = currentIdx >= 0;
-        const sideInfo = SIDE_STATUSES[currentStatus];
-
-        return (
-          <View style={[styles.pipelineStepper, { backgroundColor: colors.cardBackground, borderBottomColor: colors.border }]}>
-            <View style={styles.pipelineTrack}>
-              {PIPELINE_STAGES.map((stage, idx) => {
-                const isCompleted = isOnPipeline && idx < currentIdx;
-                const isCurrent = isOnPipeline && idx === currentIdx;
-                const isFuture = !isOnPipeline || idx > currentIdx;
-                const stageColors = STATUS_COLOR_MAP[stage.key] || STATUS_COLOR_MAP['new'];
-
+            <ScrollView style={styles.statusPickerScroll}>
+              {STATUSES.map((s) => {
+                const active = s === status;
+                const colors = STATUS_COLOR_MAP[s] || STATUS_COLOR_MAP['new'];
                 return (
-                  <React.Fragment key={stage.key}>
-                    {idx > 0 && (
-                      <View style={[
-                        styles.pipelineLine,
-                        { backgroundColor: isCompleted ? (STATUS_COLOR_MAP[PIPELINE_STAGES[idx - 1].key]?.text || INK) : (isDark ? '#334155' : '#E2E8F0') },
-                      ]} />
-                    )}
-                    <TouchableOpacity
-                      style={styles.pipelineStage}
-                      onPress={() => {
-                        void handleDetailStatusChange(stage.key);
-                      }}
-                      activeOpacity={0.7}
-                    >
-                      <View style={[
-                        styles.pipelineDot,
-                        isCurrent && { backgroundColor: stageColors.text, borderColor: stageColors.text },
-                        isCompleted && { backgroundColor: stageColors.text, borderColor: stageColors.text },
-                        isFuture && { backgroundColor: 'transparent', borderColor: isDark ? '#475569' : '#CBD5E1' },
-                      ]}>
-                        {isCompleted && (
-                          <Ionicons name="checkmark" size={10} color="#FFFFFF" />
-                        )}
-                        {isCurrent && (
-                          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#FFFFFF' }} />
-                        )}
-                      </View>
-                      <Text style={[
-                        styles.pipelineLabel,
-                        isCurrent && { color: stageColors.text, fontWeight: '700' },
-                        isCompleted && { color: stageColors.text },
-                        isFuture && { color: isDark ? colors.textSecondary : '#94A3B8' },
-                      ]} numberOfLines={1}>{stage.label}</Text>
-                    </TouchableOpacity>
-                  </React.Fragment>
+                  <TouchableOpacity
+                    key={s}
+                    style={[
+                      styles.statusPickerOption,
+                      active && styles.statusPickerOptionActive,
+                    ]}
+                    onPress={async () => {
+                      setShowStatusPicker(false);
+                      await handleDetailStatusChange(s);
+                    }}
+                  >
+                    <View style={[styles.statusPickerBadge, { backgroundColor: colors.bg }]}>
+                      <Text style={[styles.statusPickerBadgeText, { color: colors.text }]}>
+                        {formatStatus(s)}
+                      </Text>
+                    </View>
+                    {active && <Text style={styles.statusPickerCheck}>✓</Text>}
+                  </TouchableOpacity>
                 );
               })}
-            </View>
-            {!isOnPipeline && sideInfo && (
-              <View style={[styles.pipelineSideBadge, { backgroundColor: sideInfo.color + '18', borderColor: sideInfo.color + '40' }]}>
-                <Ionicons name={sideInfo.icon as any} size={14} color={sideInfo.color} style={{ marginRight: 6 }} />
-                <Text style={[styles.pipelineSideLabel, { color: sideInfo.color }]}>{sideInfo.label}</Text>
-              </View>
-            )}
+            </ScrollView>
           </View>
-        );
-      })()}
-
-      {/* Fixed Action Bar — always visible */}
-      <View style={[styles.actionBar, { backgroundColor: colors.cardBackground, borderBottomWidth: 1, borderBottomColor: colors.border }]}>
-        <TouchableOpacity
-          style={[styles.actionBarItem, !hasCallableContacts && styles.actionBarItemDisabled]}
-          onPress={handleCall}
-          disabled={!hasCallableContacts}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.actionBarIcon, !hasCallableContacts && styles.actionBarIconDisabled]}>
-            <Ionicons name="call-outline" size={20} color={hasCallableContacts ? '#2563EB' : '#94A3B8'} />
-          </View>
-          <Text style={[styles.actionBarLabel, !hasCallableContacts && styles.actionBarLabelDisabled]}>Call</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionBarItem, !phone && styles.actionBarItemDisabled]}
-          onPress={handleText}
-          disabled={!phone}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.actionBarIcon, !phone && styles.actionBarIconDisabled]}>
-            <Ionicons name="chatbubble-outline" size={20} color={phone ? '#2563EB' : '#94A3B8'} />
-          </View>
-          <Text style={[styles.actionBarLabel, !phone && styles.actionBarLabelDisabled]}>Text</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionBarItem]}
-          onPress={() => setShowCallbackModal(true)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.actionBarIcon}>
-            <Ionicons name="calendar-outline" size={20} color={'#2563EB'} />
-          </View>
-          <Text style={styles.actionBarLabel}>Schedule</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionBarItem, !email && styles.actionBarItemDisabled]}
-          onPress={handleEmail}
-          disabled={!email}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.actionBarIcon, !email && styles.actionBarIconDisabled]}>
-            <Ionicons name="mail-outline" size={20} color={email ? '#2563EB' : '#94A3B8'} />
-          </View>
-          <Text style={[styles.actionBarLabel, !email && styles.actionBarLabelDisabled]}>Email</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionBarItem, !hasSavableContacts && styles.actionBarItemDisabled]}
-          onPress={handleSaveContact}
-          disabled={!hasSavableContacts}
-          activeOpacity={0.7}
-        >
-          <View style={[styles.actionBarIcon, !hasSavableContacts && styles.actionBarIconDisabled]}>
-            <Ionicons name="person-add-outline" size={20} color={hasSavableContacts ? '#2563EB' : '#94A3B8'} />
-          </View>
-          <Text style={[styles.actionBarLabel, !hasSavableContacts && styles.actionBarLabelDisabled]}>Save</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Tab Bar - Details / Messages / DM */}
-      {hasDetailTabs && (
-        <View style={detailTabStyles.tabBar}>
-          <TouchableOpacity
-            style={[
-              detailTabStyles.tab,
-              activeDetailTab === 'details' && detailTabStyles.tabActive,
-            ]}
-            onPress={() => setActiveDetailTab('details')}
-          >
-            <Ionicons
-              name="information-circle-outline"
-              size={18}
-              color={activeDetailTab === 'details' ? '#2563EB' : '#64748B'}
-            />
-            <Text
-              style={[
-                detailTabStyles.tabText,
-                activeDetailTab === 'details' && detailTabStyles.tabTextActive,
-              ]}
-            >
-              Details
-            </Text>
-          </TouchableOpacity>
-
-          {showMessagesTab && (
-            <TouchableOpacity
-              style={[
-                detailTabStyles.tab,
-                activeDetailTab === 'messages' && detailTabStyles.tabActive,
-              ]}
-              onPress={() => {
-                setActiveDetailTab('messages');
-                setMessageUnreadCount(0);
-                onMarkMessagesRead?.(selected.id);
-              }}
-            >
-              <Ionicons
-                name="chatbubbles-outline"
-                size={18}
-                color={activeDetailTab === 'messages' ? '#2563EB' : '#64748B'}
-              />
-              <Text
-                style={[
-                  detailTabStyles.tabText,
-                  activeDetailTab === 'messages' && detailTabStyles.tabTextActive,
-                ]}
-              >
-                Messages
-              </Text>
-              {messageUnreadCount > 0 && (
-                <View
-                  style={[
-                    detailTabStyles.tabBadge,
-                    activeDetailTab === 'messages' && detailTabStyles.tabBadgeActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      detailTabStyles.tabBadgeText,
-                      activeDetailTab === 'messages' && detailTabStyles.tabBadgeTextActive,
-                    ]}
-                  >
-                    {formatTabBadgeCount(messageUnreadCount)}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          )}
-
-          {showDmTab && (
-            <TouchableOpacity
-              style={[
-                detailTabStyles.tab,
-                activeDetailTab === 'dm' && detailTabStyles.tabActive,
-              ]}
-              onPress={() => setActiveDetailTab('dm')}
-            >
-              <Ionicons
-                name={metaDmTabIcon}
-                size={18}
-                color={activeDetailTab === 'dm' ? '#2563EB' : '#64748B'}
-              />
-              <Text
-                style={[
-                  detailTabStyles.tabText,
-                  activeDetailTab === 'dm' && detailTabStyles.tabTextActive,
-                ]}
-              >
-                DM
-              </Text>
-              {dmUnreadCount > 0 && (
-                <View
-                  style={[
-                    detailTabStyles.tabBadge,
-                    activeDetailTab === 'dm' && detailTabStyles.tabBadgeActive,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      detailTabStyles.tabBadgeText,
-                      activeDetailTab === 'dm' && detailTabStyles.tabBadgeTextActive,
-                    ]}
-                  >
-                    {formatTabBadgeCount(dmUnreadCount)}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
+      </Modal>
 
       {/* Messages / DM Tab Content */}
       {activeDetailTab === 'messages' && phone ? (
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1 }} ref={messagesAreaRef} onLayout={measureMessagesArea}>
           <SmsMessaging
             leadId={record.id}
             leadPhone={phone}
@@ -6279,6 +6067,7 @@ export function LeadDetailView({
             leadSource={isMeta ? 'meta_ads' : 'leads'}
             initialSmsOptIn={record.sms_opt_in}
             initialSmsOptedOut={record.sms_opted_out}
+            keyboardOffset={messagesAreaTop}
             onMessageSent={() => {
               if (onInvalidateAttention && record) {
                 onInvalidateAttention(record.id);
@@ -6287,13 +6076,14 @@ export function LeadDetailView({
           />
         </View>
       ) : activeDetailTab === 'dm' && isMeta ? (
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1 }} ref={messagesAreaRef} onLayout={measureMessagesArea}>
           <MetaDmMessaging
             leadId={record.id}
             leadSource="meta"
             leadName={fullName}
             leadPhone={phone || null}
             leadEmail={email || null}
+            keyboardOffset={messagesAreaTop}
             onConversationRead={() => {
               void loadDetailMessageIndicators().then((counts) => {
                 setMessageUnreadCount(counts.messageUnreadCount);
@@ -6308,10 +6098,14 @@ export function LeadDetailView({
           />
         </View>
       ) : (
-        /* Details Tab Content */
+        /* Activity and Info */
         <ScrollView
           contentContainerStyle={{ paddingBottom: 32, backgroundColor: colors.background }}
           showsVerticalScrollIndicator={false}
+          key={activeDetailTab}
+          keyboardShouldPersistTaps="handled"
+          scrollEventThrottle={16}
+          onScroll={handleDetailScroll}
           refreshControl={
             <RefreshControl
               refreshing={detailLoad.refreshing}
@@ -6328,119 +6122,50 @@ export function LeadDetailView({
             />
           }
         >
-          <View style={[styles.detailCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-
-            {/* AI Attention Card */}
+          {activeDetailTab === 'activity' ? (
+          <View style={leadTabStyles.page}>
             {attentionBadge && (() => {
-              const priorityColors = aiPriorityColors || { dot: attentionBadge.color, bg: '#FEF2F2', border: attentionBadge.color };
-              const stripEmoji = (s: string) => s.replace(/^[\p{Emoji}\p{Emoji_Presentation}\p{Emoji_Modifier_Base}\p{Emoji_Component}\u200d\ufe0f\s]+/u, '').trim();
+              const tone = aiPriorityColors || { dot: attentionBadge.color, bg: '#FEF2F2', border: attentionBadge.color };
+              const label = attentionBadge.label.replace(/^[^A-Za-z0-9À-ÿ]+/, '').trim();
+              const suggestion = aiAttention?.suggestedAction || '';
+              const canSend = Boolean(suggestion && phone && isTextSuggestion(suggestion));
               return (
-                <TouchableOpacity
-                  style={{
-                    backgroundColor: priorityColors.bg,
-                    borderLeftWidth: 4,
-                    borderLeftColor: priorityColors.border,
-                    borderRadius: 10,
-                    padding: 12,
-                    marginBottom: 10,
-                  }}
-                  onPress={() => aiAttention?.reason && setShowAiRecommendation(true)}
-                  activeOpacity={aiAttention?.reason ? 0.7 : 1}
-                >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: aiAttention?.reason ? 6 : 0 }}>
-                    <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: priorityColors.dot, marginRight: 8 }} />
-                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#1E293B', flex: 1 }}>
-                      {stripEmoji(attentionBadge.label)}
-                    </Text>
-                  </View>
-                  {aiAttention?.reason && (
-                    <Text style={{ fontSize: 12, color: '#475569', marginLeft: 18, marginBottom: 4, lineHeight: 17 }}>
-                      {readableStatuses(aiAttention.reason)}
-                    </Text>
-                  )}
-                  {aiAttention?.suggestedAction && (() => {
-                    const sugAction = aiAttention.suggestedAction || '';
-                    const isTextSug = isTextSuggestion(sugAction);
-                    if (isTextSug && phone) {
-                      return (
-                        <TouchableOpacity
-                          onPress={() => {
-                            // Extract quoted message from AI suggestion
-                            const aiMessage = suggestedMessage(sugAction);
-                            // Pre-fill custom message and open template modal
-                            setCustomMessageText(aiMessage);
-                            setShowCustomMessage(true);
-                            setTemplateMode('text');
-                            setShowTemplateModal(true);
-                          }}
-                          activeOpacity={0.6}
-                          style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 18, backgroundColor: '#E8F0FE', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, marginTop: 2 }}
-                        >
-                          <Ionicons name="chatbubble-ellipses-outline" size={13} color="#1D4ED8" style={{ marginRight: 5 }} />
-                          <Text style={{ fontSize: 12, color: '#1D4ED8', fontWeight: '600', lineHeight: 17, flex: 1 }}>
-                            Tap to send: {suggestedMessage(sugAction).substring(0, 60)}…
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    }
-                    return (
-                      <Text style={{ fontSize: 12, color: '#1D4ED8', fontWeight: '600', marginLeft: 18, lineHeight: 17 }}>
-                        Suggested: {aiAttention.suggestedAction}
+                <View style={[leadTabStyles.attention, { backgroundColor: tone.bg, borderColor: tone.border }]}>
+                  <Text style={leadTabStyles.attentionTitle}>{label}</Text>
+                  {suggestion && !canSend ? (
+                    <Text style={leadTabStyles.attentionText} numberOfLines={3}>{suggestion}</Text>
+                  ) : null}
+                  {canSend ? (
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      style={leadTabStyles.attentionSend}
+                      onPress={() => {
+                        // Pre-fill the suggested message and open the template composer.
+                        setCustomMessageText(suggestedMessage(suggestion));
+                        setShowCustomMessage(true);
+                        setTemplateMode('text');
+                        setShowTemplateModal(true);
+                      }}
+                    >
+                      <Ionicons name="chatbubble-ellipses-outline" size={14} color="#1D4ED8" />
+                      <Text style={leadTabStyles.link} numberOfLines={2}>
+                        Send: {suggestedMessage(suggestion)}
                       </Text>
-                    );
-                  })()}
-                </TouchableOpacity>
+                    </TouchableOpacity>
+                  ) : null}
+                  {aiAttention?.reason ? (
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      style={{ alignSelf: 'flex-start', marginTop: 6 }}
+                      onPress={() => setShowAiRecommendation(true)}
+                    >
+                      <Text style={leadTabStyles.link}>Why?</Text>
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
               );
             })()}
-          
-          {/* Status Picker Modal */}
-          <Modal
-            visible={showStatusPicker}
-            transparent={true}
-            animationType="fade"
-            onRequestClose={() => setShowStatusPicker(false)}
-          >
-            <TouchableOpacity 
-              style={styles.modalOverlay}
-              activeOpacity={1}
-              onPress={() => setShowStatusPicker(false)}
-            >
-              <View style={styles.statusPickerContainer}>
-                <View style={styles.statusPickerHeader}>
-                  <Text style={styles.statusPickerTitle}>Change Status</Text>
-                  <TouchableOpacity onPress={() => setShowStatusPicker(false)}>
-                    <Text style={styles.statusPickerClose}>✕</Text>
-                  </TouchableOpacity>
-                </View>
-                <ScrollView style={styles.statusPickerScroll}>
-                  {STATUSES.map((s) => {
-                    const active = s === status;
-                    const colors = STATUS_COLOR_MAP[s] || STATUS_COLOR_MAP['new'];
-                    return (
-                      <TouchableOpacity
-                        key={s}
-                        style={[
-                          styles.statusPickerOption,
-                          active && styles.statusPickerOptionActive,
-                        ]}
-                        onPress={async () => {
-                          setShowStatusPicker(false);
-                          await handleDetailStatusChange(s);
-                        }}
-                      >
-                        <View style={[styles.statusPickerBadge, { backgroundColor: colors.bg }]}>
-                          <Text style={[styles.statusPickerBadgeText, { color: colors.text }]}>
-                            {formatStatus(s)}
-                          </Text>
-                        </View>
-                        {active && <Text style={styles.statusPickerCheck}>✓</Text>}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            </TouchableOpacity>
-          </Modal>
 
           {/* Mark Docs Received Button - shown when status is gathering_docs and not already logged */}
           {status === 'gathering_docs' && !docsReceivedLogged && (
@@ -6473,9 +6198,607 @@ export function LeadDetailView({
             </View>
           )}
 
-          {/* Divider */}
-          <View style={styles.sectionDivider} />
+            <View style={leadTabStyles.historyHeading}>
+              <Text style={[leadTabStyles.historyTitle, { color: colors.textPrimary }]}>History</Text>
+              <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityState={{ expanded: expandedSections.logActivity }}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={leadTabStyles.logToggle}
+                onPress={() => toggleSectionExpanded('logActivity')}
+              >
+                <Ionicons name={expandedSections.logActivity ? 'close' : 'add'} size={18} color="#1D4ED8" />
+                <Text style={leadTabStyles.link}>{expandedSections.logActivity ? 'Close' : 'Log activity'}</Text>
+              </TouchableOpacity>
+            </View>
 
+          {/* Tasks / Logging Section */}
+          {expandedSections.logActivity && (
+            <>
+              {/* Activity Type Buttons */}
+              <View style={styles.activityTypeRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.activityTypeButton,
+                    selectedActivityType === 'call' && styles.activityTypeButtonActive,
+                  ]}
+                  onPress={() => setSelectedActivityType('call')}
+                >
+                  <Text style={[
+                    styles.activityTypeText,
+                    selectedActivityType === 'call' && styles.activityTypeTextActive,
+                  ]}>
+                    <Ionicons
+                      name="call-outline"
+                      size={14}
+                      color={selectedActivityType === 'call' ? '#059669' : '#64748B'}
+                    />{' '}
+                    Call
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.activityTypeButton,
+                    selectedActivityType === 'text' && styles.activityTypeButtonActive,
+                  ]}
+                  onPress={() => setSelectedActivityType('text')}
+                >
+                  <Text style={[
+                    styles.activityTypeText,
+                    selectedActivityType === 'text' && styles.activityTypeTextActive,
+                  ]}>
+                    <Ionicons
+                      name="chatbubble-ellipses-outline"
+                      size={14}
+                      color={selectedActivityType === 'text' ? '#059669' : '#64748B'}
+                    />{' '}
+                    Text
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.activityTypeButton,
+                    selectedActivityType === 'email' && styles.activityTypeButtonActive,
+                  ]}
+                  onPress={() => setSelectedActivityType('email')}
+                >
+                  <Text style={[
+                    styles.activityTypeText,
+                    selectedActivityType === 'email' && styles.activityTypeTextActive,
+                  ]}>
+                    <Ionicons
+                      name="mail-outline"
+                      size={14}
+                      color={selectedActivityType === 'email' ? '#059669' : '#64748B'}
+                    />{' '}
+                    Email
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.activityTypeButton,
+                    selectedActivityType === 'note' && styles.activityTypeButtonActive,
+                  ]}
+                  onPress={() => setSelectedActivityType('note')}
+                >
+                  <Text style={[
+                    styles.activityTypeText,
+                    selectedActivityType === 'note' && styles.activityTypeTextActive,
+                  ]}>
+                    <Ionicons
+                      name="document-text-outline"
+                      size={14}
+                      color={selectedActivityType === 'note' ? '#059669' : '#64748B'}
+                    />{' '}
+                    Note
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Quick Phrases Button */}
+              <TouchableOpacity
+                style={styles.quickPhrasesButton}
+                onPress={() => setShowQuickPhrases(!showQuickPhrases)}
+              >
+                <Text style={styles.quickPhrasesButtonText}>
+                  <Ionicons name="list-circle-outline" size={16} color="#0F172A" />{' '}
+                  Quick Phrases {showQuickPhrases ? '▲' : '▼'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Quick Phrases List */}
+              {showQuickPhrases && (
+                <View style={styles.quickPhrasesList}>
+                  {quickPhrases.map((phrase, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.quickPhraseItem}
+                      onPress={() => handleQuickPhrase(phrase)}
+                    >
+                      <Text style={styles.quickPhraseText}>{phrase}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              
+              {/* Activity Input */}
+              <View style={[styles.activityInputCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+                <TextInput
+                  style={styles.activityInput}
+                  placeholder={`Enter ${selectedActivityType} details...`}
+                  placeholderTextColor="#999"
+                  value={taskNote}
+                  onChangeText={setTaskNote}
+                  multiline
+                />
+                
+                {/* Voice Note Section */}
+                {pendingVoiceNoteUri ? (
+                  <View style={styles.voiceNotePreviewContainer}>
+                    <View style={styles.voiceNotePreviewRow}>
+                      <TouchableOpacity
+                        style={styles.voiceNotePlayButton}
+                        onPress={togglePreviewPlayback}
+                      >
+                        <Ionicons 
+                          name={isPlayingPreview ? 'pause' : 'play'} 
+                          size={20} 
+                          color={'#2563EB'}
+                        />
+                      </TouchableOpacity>
+                      <Text style={styles.voiceNotePreviewText}>
+                        {isPlayingPreview ? 'Playing...' : 'Voice note ready'}
+                      </Text>
+                    </View>
+                    <View style={styles.voiceNotePreviewActions}>
+                      <TouchableOpacity
+                        style={styles.voiceNoteDiscardButton}
+                        onPress={discardVoiceNote}
+                      >
+                        <Ionicons name="trash-outline" size={16} color="#DC2626" />
+                        <Text style={styles.voiceNoteDiscardText}>Discard</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          styles.voiceNoteSaveButton,
+                          uploadingVoiceNote && { opacity: 0.6 },
+                        ]}
+                        onPress={confirmAndSaveVoiceNote}
+                        disabled={uploadingVoiceNote}
+                      >
+                        <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
+                        <Text style={styles.voiceNoteSaveText}>
+                          {uploadingVoiceNote ? 'Saving...' : 'Log Voice Note'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <View style={styles.voiceNoteRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.voiceNoteRecordButton,
+                        isRecording && styles.voiceNoteRecordButtonActive,
+                      ]}
+                      onPress={() => {
+                        if (isRecording) {
+                          stopRecordingForPreview();
+                        } else {
+                          startVoiceRecording();
+                        }
+                      }}
+                      disabled={uploadingVoiceNote}
+                    >
+                      <Ionicons 
+                        name={isRecording ? 'stop-circle' : 'mic'} 
+                        size={18} 
+                        color="#FFFFFF" 
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text style={styles.voiceNoteRecordButtonText}>
+                        {isRecording ? 'Stop' : 'Voice Note'}
+                      </Text>
+                    </TouchableOpacity>
+
+                    <Text style={styles.voiceNoteHint}>
+                      {isRecording
+                        ? 'Recording… tap to stop'
+                        : 'Optional: log a quick voice note'}
+                    </Text>
+                  </View>
+                )}
+                
+                <Animated.View style={{ transform: [{ scale: logButtonScale }] }}>
+                  <TouchableOpacity
+                    style={[
+                      styles.logActivityButton,
+                      (!taskNote.trim() || savingActivity) && styles.logActivityButtonDisabled,
+                    ]}
+                    onPress={() => {
+                      if (!taskNote.trim() || savingActivity) return;
+                      animateLogButton();
+                      handleAddTask();
+                    }}
+                    disabled={!taskNote.trim() || savingActivity}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                      {!savingActivity && (
+                        <Ionicons
+                          name={getActivityIconName(selectedActivityType)}
+                          size={16}
+                          color="#FFFFFF"
+                          style={{ marginRight: 6 }}
+                        />
+                      )}
+                      <Text style={styles.logActivityButtonText}>
+                        {savingActivity
+                          ? 'Saving...'
+                          : `Log ${getActivityLabel(selectedActivityType)}`}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </Animated.View>
+              </View>
+            </>
+          )}
+
+          {loadingActivities ? (
+            <ActivityIndicator size="small" color="#007aff" style={{ marginTop: 12 }} />
+          ) : activities.length > 0 ? (
+            <View style={styles.tasksList}>
+              {activities.map((activity) => {
+                const isVoice = Boolean(activity.audio_url || activity.has_audio);
+                const title = isVoice ? 'Voice note' : getActivityLabel(activity.activity_type);
+                const iconName = isVoice ? 'mic-outline' : getActivityIconName(activity.activity_type);
+
+                if (!openActivityIds.has(activity.id)) {
+                  const preview = activityPreview(activity);
+                  return (
+                    <TouchableOpacity
+                      key={activity.id}
+                      accessibilityRole="button"
+                      accessibilityHint="Shows the whole entry"
+                      style={leadTabStyles.entry}
+                      onPress={() => toggleActivityOpen(activity.id)}
+                    >
+                      <View style={leadTabStyles.entryIcon}>
+                        <Ionicons name={iconName} size={16} color="#1D4ED8" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <View style={leadTabStyles.entryTop}>
+                          <Text style={leadTabStyles.entryTitle} numberOfLines={1}>{title}</Text>
+                          <Text style={leadTabStyles.entryTime}>{shortActivityTime(activity.created_at)}</Text>
+                        </View>
+                        {preview ? <Text style={leadTabStyles.entryPreview} numberOfLines={2}>{preview}</Text> : null}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }
+
+                return (
+                <View key={activity.id} style={[styles.activityHistoryItem, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+                  <View style={styles.activityHistoryHeader}>
+                    <TouchableOpacity
+                      accessibilityRole="button"
+                      accessibilityHint="Closes this entry"
+                      style={styles.activityHistoryHeaderLeft}
+                      onPress={() => toggleActivityOpen(activity.id)}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Ionicons
+                          name={activity.audio_url || activity.has_audio ? 'mic-outline' : getActivityIconName(activity.activity_type)}
+                          size={14}
+                          color={colors.textPrimary}
+                          style={{ marginRight: 6 }}
+                        />
+                        <Text style={[styles.activityHistoryType, isDark && { color: '#60A5FA' }]}>
+                          {activity.audio_url || activity.has_audio
+                            ? 'Voice note'
+                            : getActivityLabel(activity.activity_type)}
+                        </Text>
+                      </View>
+                      <Text style={[styles.activityHistoryTimestamp, { color: colors.textSecondary }]}>
+                        {formatTime(activity.created_at)}
+                      </Text>
+                    </TouchableOpacity>
+                    {/* Delete button: super_admin always, or LO for their own "My Lead" leads */}
+                    {(propUserRole === 'super_admin' || (!isMeta && (record as Lead).source === 'My Lead')) && (
+                      <TouchableOpacity
+                        onPress={() => handleDeleteActivity(activity.id)}
+                        disabled={deletingActivityId === activity.id}
+                        style={styles.deleteActivityButton}
+                      >
+                        {deletingActivityId === activity.id ? (
+                          <ActivityIndicator size="small" color="#DC2626" />
+                        ) : (
+                          <Ionicons
+                            name="trash-outline"
+                            size={16}
+                            color="#DC2626"
+                          />
+                        )}
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  
+                  {activity.notes && activity.activity_type !== 'email' ? (
+                    <Text style={[styles.activityHistoryNote, { color: colors.textPrimary }]}>
+                      {activity.notes}
+                    </Text>
+                  ) : null}
+                  
+                  {activity.activity_type === 'email' && (() => {
+                    const hasLoadedBody = activityBodyState.bodies.has(activity.id);
+                    const loadedBody = activityBodyState.bodies.get(activity.id);
+                    const displayActivity = hasLoadedBody
+                      ? { ...activity, body: loadedBody ?? null }
+                      : activity;
+                    const toRecipients = formatEmailRecipientList(getActivityRecipientList(displayActivity, 'to'));
+                    const ccRecipients = formatEmailRecipientList(getActivityRecipientList(displayActivity, 'cc'));
+                    const emailBody = getEmailBodyContent(displayActivity);
+                    const hasHtmlBody = Boolean(displayActivity.body && HTML_TAG_PATTERN.test(displayActivity.body));
+                    const hasTableHtml = Boolean(displayActivity.body && HTML_TABLE_PATTERN.test(displayActivity.body));
+                    const isOfficeWordHtml = Boolean(
+                      displayActivity.body && OFFICE_WORD_HTML_PATTERN.test(displayActivity.body)
+                    );
+                    const sanitizedEmailHtml = displayActivity.body ? sanitizeEmailHtml(displayActivity.body) : '';
+                    const shouldUseEmailWebView = hasTableHtml && !(Platform.OS === 'android' && isOfficeWordHtml);
+                    const isLoadingBody = activityBodyState.loadingIds.has(activity.id);
+                    const bodyError = activityBodyState.errors.get(activity.id);
+                    const canLoadBody = activity.has_body === true && !activity.body && !hasLoadedBody;
+                    const showEmbeddedScrollHint = Boolean(emailBody && shouldUseEmailWebView);
+                    const hasHeaders = Boolean(
+                      activity.subject ||
+                      activity.from_email ||
+                      toRecipients ||
+                      ccRecipients
+                    );
+
+                    if (!hasHeaders && !emailBody && !canLoadBody && !bodyError) return null;
+
+                    return (
+                      <>
+                        {hasHeaders ? (
+                          <View
+                            style={[
+                              styles.emailHeaderContainer,
+                              { backgroundColor: activityCardSurface, borderColor: colors.border },
+                            ]}
+                          >
+                            {activity.subject ? (
+                              <Text style={[styles.emailHeaderText, { color: colors.textSecondary }]}>
+                                <Text style={[styles.emailHeaderLabel, { color: colors.textPrimary }]}>Subject:</Text> {activity.subject}
+                              </Text>
+                            ) : null}
+                            {activity.from_email ? (
+                              <Text style={[styles.emailHeaderText, { color: colors.textSecondary }]}>
+                                <Text style={[styles.emailHeaderLabel, { color: colors.textPrimary }]}>From:</Text> {activity.from_email}
+                              </Text>
+                            ) : null}
+                            {toRecipients ? (
+                              <Text style={[styles.emailHeaderText, { color: colors.textSecondary }]}>
+                                <Text style={[styles.emailHeaderLabel, { color: colors.textPrimary }]}>To:</Text> {toRecipients}
+                              </Text>
+                            ) : null}
+                            {ccRecipients ? (
+                              <Text style={[styles.emailHeaderText, { color: colors.textSecondary }]}>
+                                <Text style={[styles.emailHeaderLabel, { color: colors.textPrimary }]}>Cc:</Text> {ccRecipients}
+                              </Text>
+                            ) : null}
+                          </View>
+                        ) : null}
+
+                        {canLoadBody || (bodyError && !hasLoadedBody) ? (
+                          <TouchableOpacity
+                            style={{
+                              alignSelf: 'flex-start',
+                              marginTop: 8,
+                              paddingHorizontal: 12,
+                              paddingVertical: 8,
+                              borderRadius: 8,
+                              backgroundColor: INK,
+                            }}
+                            onPress={() => void activityBodyState.load(activity.id)}
+                            disabled={isLoadingBody}
+                          >
+                            {isLoadingBody ? (
+                              <ActivityIndicator size="small" color="#FFFFFF" />
+                            ) : (
+                              <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>
+                                {bodyError ? 'Retry full email' : 'Load full email'}
+                              </Text>
+                            )}
+                          </TouchableOpacity>
+                        ) : null}
+
+                        {bodyError ? (
+                          <Text style={[styles.activityHistoryNote, { marginTop: 6, color: colors.textPrimary }]}>
+                            {bodyError}
+                          </Text>
+                        ) : null}
+
+                        {emailBody ? (
+                          shouldUseEmailWebView ? (
+                            <>
+                              <View
+                                style={[
+                                  styles.emailWebViewContainer,
+                                  { backgroundColor: emailTableSurface },
+                                ]}
+                              >
+                                <WebView
+                                  style={[styles.emailWebView, { backgroundColor: emailTableSurface }]}
+                                  originWhitelist={['*']}
+                                  source={{
+                                    html: buildEmailHtmlDocument(displayActivity.body || '', {
+                                      backgroundColor: emailTableSurface,
+                                      textColor: emailTableTextColor,
+                                      linkColor: '#2563EB',
+                                    }),
+                                  }}
+                                  javaScriptEnabled={false}
+                                  scrollEnabled={true}
+                                  nestedScrollEnabled={true}
+                                  showsVerticalScrollIndicator={true}
+                                  setSupportMultipleWindows={false}
+                                  androidLayerType="software"
+                                  onShouldStartLoadWithRequest={(request) => {
+                                    if (request.url === 'about:blank') {
+                                      return true;
+                                    }
+
+                                    Linking.openURL(request.url).catch((error) => {
+                                      console.error('Error opening email link:', error);
+                                    });
+                                    return false;
+                                  }}
+                                />
+                              </View>
+                              {showEmbeddedScrollHint ? (
+                                <Text style={[styles.emailScrollHint, { color: colors.textSecondary }]}>
+                                  Scroll for more
+                                </Text>
+                              ) : null}
+                            </>
+                          ) : (
+                            <>
+                              <View
+                                style={[
+                                  styles.emailBodyContainer,
+                                  {
+                                    backgroundColor: emailBodySurface,
+                                    borderColor: colors.border,
+                                    borderWidth: isDark ? 1 : 0,
+                                    maxHeight: undefined,
+                                  },
+                                ]}
+                              >
+                                {hasHtmlBody ? (
+                                <RenderHTML
+                                  contentWidth={emailContentWidth}
+                                  source={{ html: sanitizedEmailHtml }}
+                                  ignoredDomTags={EMAIL_HTML_IGNORED_TAGS}
+                                  baseStyle={emailHtmlBaseStyle}
+                                  tagsStyles={emailHtmlTagStyles}
+                                />
+                                ) : (
+                                  <Text style={[styles.emailBodyText, { color: colors.textPrimary }]}>
+                                    {emailBody}
+                                  </Text>
+                                )}
+                              </View>
+                            </>
+                          )
+                        ) : null}
+                      </>
+                    );
+                  })()}
+                  
+                  {/* Voice note playback button */}
+                  {(activity.audio_url || activity.has_audio) && (
+                    <TouchableOpacity
+                      style={[
+                        styles.voiceNoteButton,
+                        playingActivityId === activity.id && styles.voiceNoteButtonActive,
+                      ]}
+                      onPress={() => handlePlayVoiceNote(activity)}
+                    >
+                      <Text style={styles.voiceNoteButtonText}>
+                        {playingActivityId === activity.id ? '▶ Playing…' : '▶ Play voice note'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  
+                  {/* Call recording playback button (parsed from notes) */}
+                  {!activity.audio_url && !activity.has_audio && activity.activity_type === 'call' && (() => {
+                    const recordingUrl = parseRecordingUrl(activity.notes);
+                    if (!recordingUrl) return null;
+                    return (
+                      <TouchableOpacity
+                        style={[
+                          styles.callRecordingButton,
+                          playingActivityId === activity.id && styles.callRecordingButtonActive,
+                        ]}
+                        onPress={() => handlePlayVoiceNote(activity, recordingUrl)}
+                      >
+                        <Ionicons 
+                          name={playingActivityId === activity.id ? 'pause-circle' : 'play-circle'} 
+                          size={20} 
+                          color="#FFFFFF" 
+                          style={{ marginRight: 8 }}
+                        />
+                        <Text style={styles.callRecordingButtonText}>
+                          {playingActivityId === activity.id ? 'Playing Call Recording…' : 'Play Call Recording'}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })()}
+                  
+                  {activity.user_email && (
+                    <Text style={[styles.activityUserEmail, { color: colors.textSecondary }]}>
+                      by {activity.user_email}
+                    </Text>
+                  )}
+                </View>
+                );
+              })}
+              {activitiesHasMore ? (
+                <TouchableOpacity
+                  style={{
+                    alignSelf: 'center',
+                    marginTop: 12,
+                    paddingHorizontal: 18,
+                    paddingVertical: 10,
+                  }}
+                  onPress={() => void loadOlderActivities()}
+                  disabled={loadingMoreActivities}
+                >
+                  {loadingMoreActivities ? (
+                    <ActivityIndicator size="small" color={'#2563EB'} />
+                  ) : (
+                    <Text style={{ color: '#2563EB', fontWeight: '700' }}>
+                      Load older activity
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : activitiesHasMore ? (
+            <View style={{ alignItems: 'center', marginTop: 12 }}>
+              <Text style={[styles.noTasksText, { color: colors.textSecondary }]}>
+                No recent activity to show
+              </Text>
+              <TouchableOpacity
+                style={{ paddingHorizontal: 18, paddingVertical: 10 }}
+                onPress={() => void loadOlderActivities()}
+                disabled={loadingMoreActivities}
+              >
+                {loadingMoreActivities ? (
+                  <ActivityIndicator size="small" color={'#2563EB'} />
+                ) : (
+                  <Text style={{ color: '#2563EB', fontWeight: '700' }}>
+                    Load older activity
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <Text style={[styles.noTasksText, { color: colors.textSecondary }]}>
+              No activity logged yet
+            </Text>
+          )}
+          </View>
+          ) : (
+          <View style={leadTabStyles.page}>
+            <View style={leadTabStyles.facts}>
+              {keyFacts.map((fact, index) => (
+                <View key={fact.label} style={[leadTabStyles.fact, index > 0 && leadTabStyles.factDivider]}>
+                  <Text style={leadTabStyles.factLabel}>{fact.label}</Text>
+                  <Text style={leadTabStyles.factValue} selectable>{fact.value}</Text>
+                </View>
+              ))}
+            </View>
+          <View style={[styles.detailCard, { marginHorizontal: 0, backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
           {/* LO Picker Modal (used by inline LO dropdown) */}
           {(propUserRole === 'super_admin' || propUserRole === 'realtor') && (
             <Modal
@@ -6661,7 +6984,7 @@ export function LeadDetailView({
           {/* Basic fields */}
           {renderCollapsibleSectionHeader(
             'details',
-            'Details',
+            'Full details',
             'information-circle-outline',
             hasAdAttribution && (previewAdId || adImage) ? (
               <TouchableOpacity
@@ -7147,7 +7470,7 @@ export function LeadDetailView({
           )}
 
           <View style={{ marginTop: 16 }}>
-            {renderCollapsibleSectionHeader('team', 'Assignments & Roles', 'people-outline')}
+            {renderCollapsibleSectionHeader('team', 'People and roles', 'people-outline')}
             {isSectionExpanded('team') && (
               <>
                 {/* LO Assignment */}
@@ -7317,565 +7640,21 @@ export function LeadDetailView({
             </>
           )}
 
-          {/* Divider */}
-          <View style={styles.sectionDivider} />
-
-          {/* Tasks / Logging Section */}
-          {renderCollapsibleSectionHeader('logActivity', 'Log Activity', 'create-outline')}
-          {isSectionExpanded('logActivity') && (
-            <>
-              {/* Activity Type Buttons */}
-              <View style={styles.activityTypeRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.activityTypeButton,
-                    selectedActivityType === 'call' && styles.activityTypeButtonActive,
-                  ]}
-                  onPress={() => setSelectedActivityType('call')}
-                >
-                  <Text style={[
-                    styles.activityTypeText,
-                    selectedActivityType === 'call' && styles.activityTypeTextActive,
-                  ]}>
-                    <Ionicons
-                      name="call-outline"
-                      size={14}
-                      color={selectedActivityType === 'call' ? '#059669' : '#64748B'}
-                    />{' '}
-                    Call
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.activityTypeButton,
-                    selectedActivityType === 'text' && styles.activityTypeButtonActive,
-                  ]}
-                  onPress={() => setSelectedActivityType('text')}
-                >
-                  <Text style={[
-                    styles.activityTypeText,
-                    selectedActivityType === 'text' && styles.activityTypeTextActive,
-                  ]}>
-                    <Ionicons
-                      name="chatbubble-ellipses-outline"
-                      size={14}
-                      color={selectedActivityType === 'text' ? '#059669' : '#64748B'}
-                    />{' '}
-                    Text
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.activityTypeButton,
-                    selectedActivityType === 'email' && styles.activityTypeButtonActive,
-                  ]}
-                  onPress={() => setSelectedActivityType('email')}
-                >
-                  <Text style={[
-                    styles.activityTypeText,
-                    selectedActivityType === 'email' && styles.activityTypeTextActive,
-                  ]}>
-                    <Ionicons
-                      name="mail-outline"
-                      size={14}
-                      color={selectedActivityType === 'email' ? '#059669' : '#64748B'}
-                    />{' '}
-                    Email
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.activityTypeButton,
-                    selectedActivityType === 'note' && styles.activityTypeButtonActive,
-                  ]}
-                  onPress={() => setSelectedActivityType('note')}
-                >
-                  <Text style={[
-                    styles.activityTypeText,
-                    selectedActivityType === 'note' && styles.activityTypeTextActive,
-                  ]}>
-                    <Ionicons
-                      name="document-text-outline"
-                      size={14}
-                      color={selectedActivityType === 'note' ? '#059669' : '#64748B'}
-                    />{' '}
-                    Note
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Quick Phrases Button */}
-              <TouchableOpacity
-                style={styles.quickPhrasesButton}
-                onPress={() => setShowQuickPhrases(!showQuickPhrases)}
-              >
-                <Text style={styles.quickPhrasesButtonText}>
-                  <Ionicons name="list-circle-outline" size={16} color="#0F172A" />{' '}
-                  Quick Phrases {showQuickPhrases ? '▲' : '▼'}
-                </Text>
-              </TouchableOpacity>
-
-              {/* Quick Phrases List */}
-              {showQuickPhrases && (
-                <View style={styles.quickPhrasesList}>
-                  {quickPhrases.map((phrase, index) => (
-                    <TouchableOpacity
-                      key={index}
-                      style={styles.quickPhraseItem}
-                      onPress={() => handleQuickPhrase(phrase)}
-                    >
-                      <Text style={styles.quickPhraseText}>{phrase}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              )}
-              
-              {/* Activity Input */}
-              <View style={[styles.activityInputCard, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-                <TextInput
-                  style={styles.activityInput}
-                  placeholder={`Enter ${selectedActivityType} details...`}
-                  placeholderTextColor="#999"
-                  value={taskNote}
-                  onChangeText={setTaskNote}
-                  multiline
-                />
-                
-                {/* Voice Note Section */}
-                {pendingVoiceNoteUri ? (
-                  <View style={styles.voiceNotePreviewContainer}>
-                    <View style={styles.voiceNotePreviewRow}>
-                      <TouchableOpacity
-                        style={styles.voiceNotePlayButton}
-                        onPress={togglePreviewPlayback}
-                      >
-                        <Ionicons 
-                          name={isPlayingPreview ? 'pause' : 'play'} 
-                          size={20} 
-                          color={'#2563EB'}
-                        />
-                      </TouchableOpacity>
-                      <Text style={styles.voiceNotePreviewText}>
-                        {isPlayingPreview ? 'Playing...' : 'Voice note ready'}
-                      </Text>
-                    </View>
-                    <View style={styles.voiceNotePreviewActions}>
-                      <TouchableOpacity
-                        style={styles.voiceNoteDiscardButton}
-                        onPress={discardVoiceNote}
-                      >
-                        <Ionicons name="trash-outline" size={16} color="#DC2626" />
-                        <Text style={styles.voiceNoteDiscardText}>Discard</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          styles.voiceNoteSaveButton,
-                          uploadingVoiceNote && { opacity: 0.6 },
-                        ]}
-                        onPress={confirmAndSaveVoiceNote}
-                        disabled={uploadingVoiceNote}
-                      >
-                        <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
-                        <Text style={styles.voiceNoteSaveText}>
-                          {uploadingVoiceNote ? 'Saving...' : 'Log Voice Note'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ) : (
-                  <View style={styles.voiceNoteRow}>
-                    <TouchableOpacity
-                      style={[
-                        styles.voiceNoteRecordButton,
-                        isRecording && styles.voiceNoteRecordButtonActive,
-                      ]}
-                      onPress={() => {
-                        if (isRecording) {
-                          stopRecordingForPreview();
-                        } else {
-                          startVoiceRecording();
-                        }
-                      }}
-                      disabled={uploadingVoiceNote}
-                    >
-                      <Ionicons 
-                        name={isRecording ? 'stop-circle' : 'mic'} 
-                        size={18} 
-                        color="#FFFFFF" 
-                        style={{ marginRight: 6 }}
-                      />
-                      <Text style={styles.voiceNoteRecordButtonText}>
-                        {isRecording ? 'Stop' : 'Voice Note'}
-                      </Text>
-                    </TouchableOpacity>
-
-                    <Text style={styles.voiceNoteHint}>
-                      {isRecording
-                        ? 'Recording… tap to stop'
-                        : 'Optional: log a quick voice note'}
-                    </Text>
-                  </View>
-                )}
-                
-                <Animated.View style={{ transform: [{ scale: logButtonScale }] }}>
-                  <TouchableOpacity
-                    style={[
-                      styles.logActivityButton,
-                      (!taskNote.trim() || savingActivity) && styles.logActivityButtonDisabled,
-                    ]}
-                    onPress={() => {
-                      if (!taskNote.trim() || savingActivity) return;
-                      animateLogButton();
-                      handleAddTask();
-                    }}
-                    disabled={!taskNote.trim() || savingActivity}
-                  >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
-                      {!savingActivity && (
-                        <Ionicons
-                          name={getActivityIconName(selectedActivityType)}
-                          size={16}
-                          color="#FFFFFF"
-                          style={{ marginRight: 6 }}
-                        />
-                      )}
-                      <Text style={styles.logActivityButtonText}>
-                        {savingActivity
-                          ? 'Saving...'
-                          : `Log ${getActivityLabel(selectedActivityType)}`}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                </Animated.View>
-              </View>
-            </>
-          )}
-
-          {/* Divider */}
-          <View style={styles.sectionDivider} />
-
-          {/* Activity History */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
-            <Ionicons
-              name="time-outline"
-              size={16}
-              color={colors.textPrimary}
-              style={{ marginRight: 6 }}
-            />
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Activity History</Text>
-          </View>
-
-          {loadingActivities ? (
-            <ActivityIndicator size="small" color="#007aff" style={{ marginTop: 12 }} />
-          ) : activities.length > 0 ? (
-            <View style={styles.tasksList}>
-              {activities.map((activity) => (
-                <View key={activity.id} style={[styles.activityHistoryItem, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-                  <View style={styles.activityHistoryHeader}>
-                    <View style={styles.activityHistoryHeaderLeft}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                        <Ionicons
-                          name={activity.audio_url || activity.has_audio ? 'mic-outline' : getActivityIconName(activity.activity_type)}
-                          size={14}
-                          color={colors.textPrimary}
-                          style={{ marginRight: 6 }}
-                        />
-                        <Text style={[styles.activityHistoryType, isDark && { color: '#60A5FA' }]}>
-                          {activity.audio_url || activity.has_audio
-                            ? 'Voice note'
-                            : getActivityLabel(activity.activity_type)}
-                        </Text>
-                      </View>
-                      <Text style={[styles.activityHistoryTimestamp, { color: colors.textSecondary }]}>
-                        {formatTime(activity.created_at)}
-                      </Text>
-                    </View>
-                    {/* Delete button: super_admin always, or LO for their own "My Lead" leads */}
-                    {(propUserRole === 'super_admin' || (!isMeta && (record as Lead).source === 'My Lead')) && (
-                      <TouchableOpacity
-                        onPress={() => handleDeleteActivity(activity.id)}
-                        disabled={deletingActivityId === activity.id}
-                        style={styles.deleteActivityButton}
-                      >
-                        {deletingActivityId === activity.id ? (
-                          <ActivityIndicator size="small" color="#DC2626" />
-                        ) : (
-                          <Ionicons
-                            name="trash-outline"
-                            size={16}
-                            color="#DC2626"
-                          />
-                        )}
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                  
-                  {activity.notes && activity.activity_type !== 'email' ? (
-                    <Text style={[styles.activityHistoryNote, { color: colors.textPrimary }]}>
-                      {activity.notes}
-                    </Text>
-                  ) : null}
-                  
-                  {activity.activity_type === 'email' && (() => {
-                    const hasLoadedBody = activityBodyState.bodies.has(activity.id);
-                    const loadedBody = activityBodyState.bodies.get(activity.id);
-                    const displayActivity = hasLoadedBody
-                      ? { ...activity, body: loadedBody ?? null }
-                      : activity;
-                    const toRecipients = formatEmailRecipientList(getActivityRecipientList(displayActivity, 'to'));
-                    const ccRecipients = formatEmailRecipientList(getActivityRecipientList(displayActivity, 'cc'));
-                    const emailBody = getEmailBodyContent(displayActivity);
-                    const hasHtmlBody = Boolean(displayActivity.body && HTML_TAG_PATTERN.test(displayActivity.body));
-                    const hasTableHtml = Boolean(displayActivity.body && HTML_TABLE_PATTERN.test(displayActivity.body));
-                    const isOfficeWordHtml = Boolean(
-                      displayActivity.body && OFFICE_WORD_HTML_PATTERN.test(displayActivity.body)
-                    );
-                    const sanitizedEmailHtml = displayActivity.body ? sanitizeEmailHtml(displayActivity.body) : '';
-                    const shouldUseEmailWebView = hasTableHtml && !(Platform.OS === 'android' && isOfficeWordHtml);
-                    const isLoadingBody = activityBodyState.loadingIds.has(activity.id);
-                    const bodyError = activityBodyState.errors.get(activity.id);
-                    const canLoadBody = activity.has_body === true && !activity.body && !hasLoadedBody;
-                    const showEmbeddedScrollHint = Boolean(emailBody && shouldUseEmailWebView);
-                    const hasHeaders = Boolean(
-                      activity.subject ||
-                      activity.from_email ||
-                      toRecipients ||
-                      ccRecipients
-                    );
-
-                    if (!hasHeaders && !emailBody && !canLoadBody && !bodyError) return null;
-
-                    return (
-                      <>
-                        {hasHeaders ? (
-                          <View
-                            style={[
-                              styles.emailHeaderContainer,
-                              { backgroundColor: activityCardSurface, borderColor: colors.border },
-                            ]}
-                          >
-                            {activity.subject ? (
-                              <Text style={[styles.emailHeaderText, { color: colors.textSecondary }]}>
-                                <Text style={[styles.emailHeaderLabel, { color: colors.textPrimary }]}>Subject:</Text> {activity.subject}
-                              </Text>
-                            ) : null}
-                            {activity.from_email ? (
-                              <Text style={[styles.emailHeaderText, { color: colors.textSecondary }]}>
-                                <Text style={[styles.emailHeaderLabel, { color: colors.textPrimary }]}>From:</Text> {activity.from_email}
-                              </Text>
-                            ) : null}
-                            {toRecipients ? (
-                              <Text style={[styles.emailHeaderText, { color: colors.textSecondary }]}>
-                                <Text style={[styles.emailHeaderLabel, { color: colors.textPrimary }]}>To:</Text> {toRecipients}
-                              </Text>
-                            ) : null}
-                            {ccRecipients ? (
-                              <Text style={[styles.emailHeaderText, { color: colors.textSecondary }]}>
-                                <Text style={[styles.emailHeaderLabel, { color: colors.textPrimary }]}>Cc:</Text> {ccRecipients}
-                              </Text>
-                            ) : null}
-                          </View>
-                        ) : null}
-
-                        {canLoadBody || (bodyError && !hasLoadedBody) ? (
-                          <TouchableOpacity
-                            style={{
-                              alignSelf: 'flex-start',
-                              marginTop: 8,
-                              paddingHorizontal: 12,
-                              paddingVertical: 8,
-                              borderRadius: 8,
-                              backgroundColor: INK,
-                            }}
-                            onPress={() => void activityBodyState.load(activity.id)}
-                            disabled={isLoadingBody}
-                          >
-                            {isLoadingBody ? (
-                              <ActivityIndicator size="small" color="#FFFFFF" />
-                            ) : (
-                              <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>
-                                {bodyError ? 'Retry full email' : 'Load full email'}
-                              </Text>
-                            )}
-                          </TouchableOpacity>
-                        ) : null}
-
-                        {bodyError ? (
-                          <Text style={[styles.activityHistoryNote, { marginTop: 6, color: colors.textPrimary }]}>
-                            {bodyError}
-                          </Text>
-                        ) : null}
-
-                        {emailBody ? (
-                          shouldUseEmailWebView ? (
-                            <>
-                              <View
-                                style={[
-                                  styles.emailWebViewContainer,
-                                  { backgroundColor: emailTableSurface },
-                                ]}
-                              >
-                                <WebView
-                                  style={[styles.emailWebView, { backgroundColor: emailTableSurface }]}
-                                  originWhitelist={['*']}
-                                  source={{
-                                    html: buildEmailHtmlDocument(displayActivity.body || '', {
-                                      backgroundColor: emailTableSurface,
-                                      textColor: emailTableTextColor,
-                                      linkColor: '#2563EB',
-                                    }),
-                                  }}
-                                  javaScriptEnabled={false}
-                                  scrollEnabled={true}
-                                  nestedScrollEnabled={true}
-                                  showsVerticalScrollIndicator={true}
-                                  setSupportMultipleWindows={false}
-                                  androidLayerType="software"
-                                  onShouldStartLoadWithRequest={(request) => {
-                                    if (request.url === 'about:blank') {
-                                      return true;
-                                    }
-
-                                    Linking.openURL(request.url).catch((error) => {
-                                      console.error('Error opening email link:', error);
-                                    });
-                                    return false;
-                                  }}
-                                />
-                              </View>
-                              {showEmbeddedScrollHint ? (
-                                <Text style={[styles.emailScrollHint, { color: colors.textSecondary }]}>
-                                  Scroll for more
-                                </Text>
-                              ) : null}
-                            </>
-                          ) : (
-                            <>
-                              <View
-                                style={[
-                                  styles.emailBodyContainer,
-                                  {
-                                    backgroundColor: emailBodySurface,
-                                    borderColor: colors.border,
-                                    borderWidth: isDark ? 1 : 0,
-                                    maxHeight: undefined,
-                                  },
-                                ]}
-                              >
-                                {hasHtmlBody ? (
-                                <RenderHTML
-                                  contentWidth={emailContentWidth}
-                                  source={{ html: sanitizedEmailHtml }}
-                                  ignoredDomTags={EMAIL_HTML_IGNORED_TAGS}
-                                  baseStyle={emailHtmlBaseStyle}
-                                  tagsStyles={emailHtmlTagStyles}
-                                />
-                                ) : (
-                                  <Text style={[styles.emailBodyText, { color: colors.textPrimary }]}>
-                                    {emailBody}
-                                  </Text>
-                                )}
-                              </View>
-                            </>
-                          )
-                        ) : null}
-                      </>
-                    );
-                  })()}
-                  
-                  {/* Voice note playback button */}
-                  {(activity.audio_url || activity.has_audio) && (
-                    <TouchableOpacity
-                      style={[
-                        styles.voiceNoteButton,
-                        playingActivityId === activity.id && styles.voiceNoteButtonActive,
-                      ]}
-                      onPress={() => handlePlayVoiceNote(activity)}
-                    >
-                      <Text style={styles.voiceNoteButtonText}>
-                        {playingActivityId === activity.id ? '▶ Playing…' : '▶ Play voice note'}
-                      </Text>
-                    </TouchableOpacity>
-                  )}
-                  
-                  {/* Call recording playback button (parsed from notes) */}
-                  {!activity.audio_url && !activity.has_audio && activity.activity_type === 'call' && (() => {
-                    const recordingUrl = parseRecordingUrl(activity.notes);
-                    if (!recordingUrl) return null;
-                    return (
-                      <TouchableOpacity
-                        style={[
-                          styles.callRecordingButton,
-                          playingActivityId === activity.id && styles.callRecordingButtonActive,
-                        ]}
-                        onPress={() => handlePlayVoiceNote(activity, recordingUrl)}
-                      >
-                        <Ionicons 
-                          name={playingActivityId === activity.id ? 'pause-circle' : 'play-circle'} 
-                          size={20} 
-                          color="#FFFFFF" 
-                          style={{ marginRight: 8 }}
-                        />
-                        <Text style={styles.callRecordingButtonText}>
-                          {playingActivityId === activity.id ? 'Playing Call Recording…' : 'Play Call Recording'}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })()}
-                  
-                  {activity.user_email && (
-                    <Text style={[styles.activityUserEmail, { color: colors.textSecondary }]}>
-                      by {activity.user_email}
-                    </Text>
-                  )}
-                </View>
-              ))}
-              {activitiesHasMore ? (
-                <TouchableOpacity
-                  style={{
-                    alignSelf: 'center',
-                    marginTop: 12,
-                    paddingHorizontal: 18,
-                    paddingVertical: 10,
-                  }}
-                  onPress={() => void loadOlderActivities()}
-                  disabled={loadingMoreActivities}
-                >
-                  {loadingMoreActivities ? (
-                    <ActivityIndicator size="small" color={'#2563EB'} />
-                  ) : (
-                    <Text style={{ color: '#2563EB', fontWeight: '700' }}>
-                      Load older activity
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          ) : activitiesHasMore ? (
-            <View style={{ alignItems: 'center', marginTop: 12 }}>
-              <Text style={[styles.noTasksText, { color: colors.textSecondary }]}>
-                No recent activity to show
+            <TouchableOpacity
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !hasSavableContacts }}
+              disabled={!hasSavableContacts}
+              style={leadTabStyles.saveContact}
+              onPress={handleSaveContact}
+            >
+              <Ionicons name="person-add-outline" size={17} color={hasSavableContacts ? '#2563EB' : '#94A3B8'} />
+              <Text style={[leadTabStyles.saveContactText, !hasSavableContacts && { color: '#94A3B8' }]}>
+                Save to contacts
               </Text>
-              <TouchableOpacity
-                style={{ paddingHorizontal: 18, paddingVertical: 10 }}
-                onPress={() => void loadOlderActivities()}
-                disabled={loadingMoreActivities}
-              >
-                {loadingMoreActivities ? (
-                  <ActivityIndicator size="small" color={'#2563EB'} />
-                ) : (
-                  <Text style={{ color: '#2563EB', fontWeight: '700' }}>
-                    Load older activity
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <Text style={[styles.noTasksText, { color: colors.textSecondary }]}>
-              No activity logged yet
-            </Text>
+            </TouchableOpacity>
+          </View>
+          </View>
           )}
-        </View>
       </ScrollView>
       )}
 
@@ -9382,53 +9161,27 @@ const collapsibleSectionStyles = StyleSheet.create({
 });
 
 // Styles for the Detail/Messages tab bar
-const detailTabStyles = StyleSheet.create({
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    paddingHorizontal: 16,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    gap: 6,
-  },
-  tabActive: {
-    borderBottomWidth: 2,
-    borderBottomColor: INK,
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#64748B',
-  },
-  tabTextActive: {
-    color: '#2563EB',
-    fontWeight: '600',
-  },
-  tabBadge: {
-    minWidth: 18,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 999,
-    backgroundColor: '#EF4444',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tabBadgeActive: {
-    backgroundColor: '#DC2626',
-  },
-  tabBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  tabBadgeTextActive: {
-    color: '#FFFFFF',
-  },
+const leadTabStyles = StyleSheet.create({
+  page: { paddingHorizontal: 10, paddingTop: 10 },
+  attention: { borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 6 },
+  attentionTitle: { color: '#0F172A', fontSize: 15, fontWeight: '700' },
+  attentionText: { color: '#334155', fontSize: 13, lineHeight: 18, marginTop: 3 },
+  attentionSend: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 },
+  link: { color: '#1D4ED8', fontSize: 13, fontWeight: '600', flexShrink: 1 },
+  historyHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4, marginTop: 10, marginBottom: 8 },
+  historyTitle: { fontSize: 16, fontWeight: '700' },
+  logToggle: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  entry: { flexDirection: 'row', gap: 10, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 10, marginBottom: 6 },
+  entryIcon: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#E8F0FE', alignItems: 'center', justifyContent: 'center' },
+  entryTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  entryTitle: { flex: 1, color: '#0F172A', fontSize: 14, fontWeight: '600' },
+  entryTime: { color: '#64748B', fontSize: 12 },
+  entryPreview: { color: '#64748B', fontSize: 13, lineHeight: 18, marginTop: 2 },
+  facts: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 14, paddingHorizontal: 12, marginBottom: 10 },
+  fact: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 9 },
+  factDivider: { borderTopWidth: 1, borderTopColor: '#EEF2F7' },
+  factLabel: { color: '#64748B', fontSize: 13 },
+  factValue: { color: '#0F172A', fontSize: 14, flex: 1, textAlign: 'right' },
+  saveContact: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 14, marginTop: 8 },
+  saveContactText: { color: '#0F172A', fontSize: 16, fontWeight: '700' },
 });

@@ -29,6 +29,8 @@ type LeadSource = 'organic' | 'meta';
 type MetaDmMessage = MetaDmHistoryMessage;
 
 interface MetaDmMessagingProps {
+  /** Distance from the top of the screen, so the keyboard doesn't cover the composer. */
+  keyboardOffset?: number;
   leadId: string;
   leadSource: LeadSource;
   conversationId?: string | null;
@@ -118,6 +120,7 @@ function getOutboundStatusText(message: MetaDmMessage) {
 }
 
 export function MetaDmMessaging({
+  keyboardOffset,
   leadId,
   leadSource,
   conversationId,
@@ -486,7 +489,7 @@ export function MetaDmMessaging({
     <KeyboardAvoidingView
       style={[dmStyles.container, { backgroundColor: colors.background }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 84 : 0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? keyboardOffset ?? 84 : 0}
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={dmStyles.container}>

@@ -95,6 +95,8 @@ function formatAttachmentMeta(attachment: SmsMediaAttachment) {
 }
 
 interface SmsMessagingProps {
+  /** Distance from the top of the screen, so the keyboard doesn't cover the composer. */
+  keyboardOffset?: number;
   leadId: string;
   leadPhone: string;
   leadName: string;
@@ -111,6 +113,7 @@ const API_BASE_URL = (
 ).replace(/\/$/, '');
 
 export function SmsMessaging({
+  keyboardOffset,
   leadId,
   leadPhone,
   leadName,
@@ -817,7 +820,7 @@ export function SmsMessaging({
     <KeyboardAvoidingView
       style={smsStyles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 240 : 0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? keyboardOffset ?? 240 : 0}
     >
       {/* Header */}
       {showHeader ? (
