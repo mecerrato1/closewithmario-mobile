@@ -1,4 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
+import { senderNames } from './src/features/leads/senderName';
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   StyleSheet,
@@ -1207,7 +1208,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const aiMessage = quoteMatch ? quoteMatch[1] : suggestedAction.replace(/^Send a text:\s*/i, '').trim();
     
     // Get LO info from session
-    const loFullname = session?.user?.user_metadata?.full_name || 'Mario';
+    const { loFullname } = senderNames(null, session?.user?.user_metadata?.full_name);
     const loPhone = session?.user?.user_metadata?.phone || '[Phone]';
     const loEmail = session?.user?.email || '[Email]';
 

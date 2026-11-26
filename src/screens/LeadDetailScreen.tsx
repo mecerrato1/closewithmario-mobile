@@ -33,6 +33,7 @@ import {
   type ImageSourcePropType,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { senderNames } from '../features/leads/senderName';
 import { Session } from '@supabase/supabase-js';
 import { Audio, InterruptionModeIOS } from 'expo-av';
 import { File as FSFile, Paths } from 'expo-file-system';
@@ -4489,10 +4490,7 @@ export function LeadDetailView({
 
     const variables: TemplateVariables = {
       fname: r.first_name || 'there',
-      loFullname: currentLOInfo 
-        ? `${currentLOInfo.firstName} ${currentLOInfo.lastName}`.trim() 
-        : 'Mario',
-      loFname: currentLOInfo?.firstName || 'Mario',
+      ...senderNames(currentLOInfo, session?.user?.user_metadata?.full_name),
       loPhone: currentLOInfo?.phone || '[Phone]',
       loEmail: currentLOInfo?.email || '[Email]',
       company: currentLOInfo?.company || '[Company]',
@@ -4732,9 +4730,7 @@ export function LeadDetailView({
     const aiMessage = quoteMatch ? quoteMatch[1] : suggestion.replace(/^Send a text:\s*/i, '').trim();
     
     const fname = record.first_name || 'there';
-    const loFullname = currentLOInfo 
-      ? `${currentLOInfo.firstName} ${currentLOInfo.lastName}`.trim() 
-      : 'Mario';
+    const { loFullname } = senderNames(currentLOInfo, session?.user?.user_metadata?.full_name);
     const loPhone = currentLOInfo?.phone || '[Phone]';
     const loEmail = currentLOInfo?.email || '[Email]';
 
@@ -8080,10 +8076,7 @@ export function LeadDetailView({
                       || '';
                     const variables: TemplateVariables = {
                       fname: record.first_name || 'there',
-                      loFullname: currentLOInfo 
-                        ? `${currentLOInfo.firstName} ${currentLOInfo.lastName}`.trim() 
-                        : 'Mario',
-                      loFname: currentLOInfo?.firstName || 'Mario',
+                      ...senderNames(currentLOInfo, session?.user?.user_metadata?.full_name),
                       loPhone: currentLOInfo?.phone || '[Phone]',
                       loEmail: currentLOInfo?.email || '[Email]',
                       company: currentLOInfo?.company || '[Company]',
