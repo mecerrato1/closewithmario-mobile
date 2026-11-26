@@ -1,5 +1,6 @@
 // src/screens/tabs/ScenariosTabScreen.tsx
 import React from 'react';
+import { StatusBar } from 'expo-status-bar';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../../styles/theme';
@@ -15,6 +16,7 @@ export default function ScenariosTabScreen({ onClose }: ScenariosTabScreenProps)
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header with close button */}
       <View style={[styles.header, { backgroundColor: colors.headerBackground }]}>
+        <StatusBar style="light" />
         <View style={styles.headerSpacer} />
         <Text style={styles.headerTitle}>Scenarios</Text>
         {onClose ? (

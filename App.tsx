@@ -2167,6 +2167,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             transform: [{ translateY: dashboardHeaderTranslateY }],
           }
         ]}>
+          <StatusBar style="light" />
           {/* User Info Row - Counter-translates to appear fixed */}
           <Animated.View style={{ transform: [{ translateY: dashboardUserInfoTranslateY }] }}>
             <View style={styles.newHeaderTop}>
@@ -2849,6 +2850,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           height: headerHeight,
         }
       ]}>
+        <StatusBar style="light" />
         <Animated.View style={[
           styles.headerContent,
           { transform: [{ scale: headerTitleScale }] }
@@ -2862,7 +2864,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             <Text style={styles.homeButtonText}>← Dashboard</Text>
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
-            <Text style={styles.headerTitle}>{brand.displayName}</Text>
+            <Text style={styles.headerTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
+              {brand.displayName}
+            </Text>
             <Text style={styles.headerSubtitle}>Lead Management</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>

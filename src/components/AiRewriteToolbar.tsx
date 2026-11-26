@@ -240,7 +240,7 @@ const s = StyleSheet.create({
   },
   tonePickerList: {
     marginTop: 8,
-    backgroundColor: '#F8F5FF',
+    backgroundColor: '#F3F7FE',
     borderRadius: 12,
     overflow: 'hidden',
   },
@@ -310,7 +310,7 @@ const s = StyleSheet.create({
   },
   refineInput: {
     flex: 1,
-    backgroundColor: '#F5F0FF',
+    backgroundColor: '#F3F7FE',
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 8,

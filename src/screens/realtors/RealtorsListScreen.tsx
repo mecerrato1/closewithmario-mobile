@@ -1,5 +1,6 @@
 // src/screens/realtors/RealtorsListScreen.tsx
 import React, { useState } from 'react';
+import { StatusBar } from 'expo-status-bar';
 import {
   View,
   Text,
@@ -136,6 +137,7 @@ export default function RealtorsListScreen({
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: INK }]}>
+        <StatusBar style="light" />
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>
             Realtors <Text style={styles.headerCount}>({displayedCount})</Text>

@@ -5945,7 +5945,7 @@ export function LeadDetailView({
   if (!record) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <StatusBar style="light" />
         <View style={styles.detailHeader}>
           <TouchableOpacity onPress={onBack} style={styles.backButton}>
             <Text style={styles.backButtonText}>✕</Text>
@@ -5978,7 +5978,7 @@ export function LeadDetailView({
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <StatusBar style="light" />
       {/* Unified Header — Name + Status + Navigation */}
       <View style={styles.detailHeader}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
@@ -6519,7 +6519,7 @@ export function LeadDetailView({
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
-                  backgroundColor: '#F5F0FF',
+                  backgroundColor: '#F3F7FE',
                   borderRadius: 12,
                   padding: 14,
                   borderWidth: 1,
@@ -6534,7 +6534,7 @@ export function LeadDetailView({
                   <Text style={{ fontSize: 15, fontWeight: '600', color: '#2563EB' }}>
                     {savingDocsReceived ? 'Saving…' : 'Mark Docs Received'}
                   </Text>
-                  <Text style={{ fontSize: 12, color: '#93C5FD', marginTop: 2 }}>
+                  <Text style={{ fontSize: 12, color: '#5B6472', marginTop: 2 }}>
                     Logs activity & stops AI doc reminders
                   </Text>
                 </View>

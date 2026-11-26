@@ -1,5 +1,6 @@
 // src/screens/realtors/RealtorDetailScreen.tsx
 import React, { useState, useEffect, useRef } from 'react';
+import { StatusBar } from 'expo-status-bar';
 import {
   View,
   Text,
@@ -596,6 +597,7 @@ export default function RealtorDetailScreen({
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: INK }]}>
+        <StatusBar style="light" />
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>

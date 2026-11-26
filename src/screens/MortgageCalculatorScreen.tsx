@@ -1,5 +1,6 @@
 // src/screens/MortgageCalculatorScreen.tsx
 import React, { useState, useEffect, useMemo } from 'react';
+import { StatusBar } from 'expo-status-bar';
 import {
   View,
   Text,
@@ -761,6 +762,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
     >
       {/* Header */}
       <View style={styles.header}>
+        <StatusBar style="light" />
         <View style={{ width: 40 }} />
         <Text style={styles.headerTitle}>Mortgage Calculator</Text>
         <TouchableOpacity onPress={onClose} style={styles.closeButton}>

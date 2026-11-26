@@ -1435,7 +1435,7 @@ export const styles = StyleSheet.create({
     borderBottomColor: '#F1F5F9',
   },
   statusPickerItemActive: {
-    backgroundColor: '#F8F4FF',
+    backgroundColor: '#F3F7FE',
   },
   statusPickerItemLeft: {
     flexDirection: 'row',
@@ -1534,7 +1534,7 @@ export const styles = StyleSheet.create({
     borderBottomColor: '#F1F5F9',
   },
   statusPickerOptionActive: {
-    backgroundColor: '#F8F4FF',
+    backgroundColor: '#F3F7FE',
   },
   statusPickerBadge: {
     paddingHorizontal: 12,

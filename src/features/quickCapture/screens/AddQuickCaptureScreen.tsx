@@ -1,6 +1,7 @@
 // src/features/quickCapture/screens/AddQuickCaptureScreen.tsx
 
 import React, { useState, useCallback } from 'react';
+import { StatusBar } from 'expo-status-bar';
 import {
   View,
   Text,
@@ -288,6 +289,7 @@ export default function AddQuickCaptureScreen({
 
       {/* Header */}
       <View style={styles.header}>
+        <StatusBar style="light" />
         <TouchableOpacity onPress={onBack} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { StatusBar } from 'expo-status-bar';
 import {
   View,
   Text,
@@ -638,6 +639,7 @@ export default function MessagesTabScreen({
         <View
           style={[styles.header, { backgroundColor: colors.headerBackground }]}
         >
+          <StatusBar style="light" />
           <Text style={styles.headerTitle}>Messages</Text>
           <Text style={styles.headerSubtitle}>
             Recent SMS, MMS, and DM conversations

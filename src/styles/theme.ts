@@ -3,7 +3,7 @@ import { useColorScheme } from 'react-native';
 export const lightColors = {
   background: '#F8FAFC',
   cardBackground: '#FFFFFF',
-  headerBackground: '#2563EB',
+  headerBackground: '#0B1220',
   textPrimary: '#0F172A',
   textSecondary: '#64748B',
   border: '#E2E8F0',

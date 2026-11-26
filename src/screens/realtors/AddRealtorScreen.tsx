@@ -1,5 +1,6 @@
 // src/screens/realtors/AddRealtorScreen.tsx
 import React, { useState, useEffect, useMemo } from 'react';
+import { StatusBar } from 'expo-status-bar';
 import {
   View,
   Text,
@@ -235,6 +236,7 @@ export default function AddRealtorScreen({ userId, onBack, onSuccess }: AddRealt
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.headerBackground }]}>
+        <StatusBar style="light" />
         <TouchableOpacity style={styles.backButton} onPress={onBack}>
           <Ionicons name="close" size={24} color="#FFFFFF" />
         </TouchableOpacity>
