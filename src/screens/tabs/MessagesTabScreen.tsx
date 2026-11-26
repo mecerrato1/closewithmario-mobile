@@ -29,7 +29,6 @@ import type {
   PendingScenarioUpdateChange,
   ThreadSource,
 } from '../../features/messages/messageTypes';
-import { themedStyles } from '../../brand/themedStyles';
 
 type FilterMode = 'all' | 'unread';
 
@@ -43,7 +42,7 @@ interface MessagesTabScreenProps {
   onNavigateToLead?: (leadId: string, source: ThreadSource) => void;
 }
 
-const ACCENT = '#7C3AED';
+const ACCENT = '#2563EB';
 const AMBER = '#D97706';
 
 function getMetaDmInboxIcon(
@@ -505,7 +504,7 @@ export default function MessagesTabScreen({
       : item.channel === 'scenario_update'
       ? AMBER
       : item.channel === 'dm'
-      ? '#4338CA'
+      ? '#1D4ED8'
       : ACCENT;
 
     return (
@@ -816,7 +815,7 @@ export default function MessagesTabScreen({
   );
 }
 
-const styles = themedStyles({
+const styles = StyleSheet.create({
   safeAreaShell: {
     flex: 1,
   },
@@ -876,7 +875,7 @@ const styles = themedStyles({
     borderRadius: 999,
   },
   filterChipActive: {
-    backgroundColor: '#EDE9FE',
+    backgroundColor: '#E8F0FE',
   },
   filterChipInactive: {
     backgroundColor: '#F1F5F9',
@@ -959,10 +958,10 @@ const styles = themedStyles({
     borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#F3F7FE',
   },
   avatarCircleSms: {
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#F3F7FE',
   },
   avatarCircleDm: {
     backgroundColor: '#EEF2FF',
@@ -1021,7 +1020,7 @@ const styles = themedStyles({
     color: '#475569',
   },
   channelBadgeTextDm: {
-    color: '#4338CA',
+    color: '#1D4ED8',
   },
   channelBadgeTextScenario: {
     color: '#B45309',
@@ -1108,7 +1107,7 @@ const styles = themedStyles({
     borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#F3F7FE',
   },
   threadHeaderContent: {
     flex: 1,
@@ -1128,7 +1127,7 @@ const styles = themedStyles({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#F3F7FE',
   },
   leadDetailsButtonText: {
     fontSize: 12,

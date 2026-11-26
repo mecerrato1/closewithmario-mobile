@@ -31,9 +31,8 @@ import SelectRealtorModal from '../components/SelectRealtorModal';
 import type { QuickCapture, QuickCaptureAttachment } from '../types';
 import { findMatchingLeads, searchLeads, mergeIntoExistingLead, type MatchedLead } from '../services/leadMatchService';
 import LeadMergeView from '../components/LeadMergeView';
-import { themedStyles } from '../../../brand/themedStyles';
 
-const PLUM = '#4C1D95';
+const INK = '#0B1220';
 
 interface QuickCaptureDetailScreenProps {
   captureId: string;
@@ -374,7 +373,7 @@ export default function QuickCaptureDetailScreen({
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={PLUM} />
+        <ActivityIndicator size="large" color={'#2563EB'} />
       </View>
     );
   }
@@ -435,7 +434,7 @@ export default function QuickCaptureDetailScreen({
             }}
             activeOpacity={0.7}
           >
-            <Ionicons name="arrow-back" size={16} color="#6D28D9" />
+            <Ionicons name="arrow-back" size={16} color="#1D4ED8" />
             <Text style={styles.backToLeadText}>Back to Lead</Text>
           </TouchableOpacity>
         )}
@@ -450,7 +449,7 @@ export default function QuickCaptureDetailScreen({
                   capture.status === 'open'
                     ? '#ECFDF5'
                     : capture.status === 'converted'
-                    ? '#F5F3FF'
+                    ? '#F3F7FE'
                     : '#F3F4F6',
               },
             ]}
@@ -463,7 +462,7 @@ export default function QuickCaptureDetailScreen({
                     capture.status === 'open'
                       ? '#059669'
                       : capture.status === 'converted'
-                      ? PLUM
+                      ? INK
                       : '#6B7280',
                 },
               ]}
@@ -545,7 +544,7 @@ export default function QuickCaptureDetailScreen({
                 <Ionicons
                   name={realtorId ? 'person-circle' : 'person-add-outline'}
                   size={20}
-                  color={realtorId ? PLUM : '#9CA3AF'}
+                  color={realtorId ? '#2563EB' : '#9CA3AF'}
                 />
                 <Text
                   style={[
@@ -576,7 +575,7 @@ export default function QuickCaptureDetailScreen({
             {/* Read-only view */}
             <View style={styles.infoSection}>
               <View style={styles.infoRow}>
-                <Ionicons name="person-outline" size={18} color={PLUM} />
+                <Ionicons name="person-outline" size={18} color={'#2563EB'} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.infoLabel}>Name</Text>
                   <Text style={styles.infoValue}>
@@ -585,12 +584,12 @@ export default function QuickCaptureDetailScreen({
                 </View>
               </View>
               <View style={styles.infoRow}>
-                <Ionicons name="call-outline" size={18} color={PLUM} />
+                <Ionicons name="call-outline" size={18} color={'#2563EB'} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.infoLabel}>Phone</Text>
                   {capture.phone ? (
                     <TouchableOpacity onPress={handleCall}>
-                      <Text style={[styles.infoValue, { color: PLUM }]}>
+                      <Text style={[styles.infoValue, { color: '#2563EB' }]}>
                         {formatPhoneDisplay(capture.phone)}
                       </Text>
                     </TouchableOpacity>
@@ -600,12 +599,12 @@ export default function QuickCaptureDetailScreen({
                 </View>
               </View>
               <View style={styles.infoRow}>
-                <Ionicons name="mail-outline" size={18} color={PLUM} />
+                <Ionicons name="mail-outline" size={18} color={'#2563EB'} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.infoLabel}>Email</Text>
                   {capture.email ? (
                     <TouchableOpacity onPress={handleEmail}>
-                      <Text style={[styles.infoValue, { color: PLUM }]}>
+                      <Text style={[styles.infoValue, { color: '#2563EB' }]}>
                         {capture.email}
                       </Text>
                     </TouchableOpacity>
@@ -615,7 +614,7 @@ export default function QuickCaptureDetailScreen({
                 </View>
               </View>
               <View style={styles.infoRow}>
-                <Ionicons name="home-outline" size={18} color={PLUM} />
+                <Ionicons name="home-outline" size={18} color={'#2563EB'} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.infoLabel}>Loan Type</Text>
                   {capture.loan_type ? (
@@ -628,7 +627,7 @@ export default function QuickCaptureDetailScreen({
                 </View>
               </View>
               <View style={styles.infoRow}>
-                <Ionicons name="business-outline" size={18} color={PLUM} />
+                <Ionicons name="business-outline" size={18} color={'#2563EB'} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.infoLabel}>Linked Realtor</Text>
                   {realtorName ? (
@@ -638,7 +637,7 @@ export default function QuickCaptureDetailScreen({
                       }
                       disabled={!onRealtorPress || !capture.realtor_id}
                     >
-                      <Text style={[styles.infoValue, onRealtorPress && capture.realtor_id ? { color: PLUM } : {}]}>
+                      <Text style={[styles.infoValue, onRealtorPress && capture.realtor_id ? { color: '#2563EB' } : {}]}>
                         {realtorName}
                       </Text>
                     </TouchableOpacity>
@@ -718,7 +717,7 @@ export default function QuickCaptureDetailScreen({
                   style={styles.linkExistingBtn}
                   onPress={() => setShowSearchModal(true)}
                 >
-                  <Ionicons name="link-outline" size={20} color={PLUM} />
+                  <Ionicons name="link-outline" size={20} color={'#2563EB'} />
                   <Text style={styles.linkExistingBtnText}>Link to Existing Lead</Text>
                 </TouchableOpacity>
               </>
@@ -728,7 +727,7 @@ export default function QuickCaptureDetailScreen({
                 style={styles.actionBtn}
                 onPress={() => setEditing(true)}
               >
-                <Ionicons name="create-outline" size={18} color={PLUM} />
+                <Ionicons name="create-outline" size={18} color={'#2563EB'} />
                 <Text style={styles.actionBtnText}>Edit</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -925,7 +924,7 @@ export default function QuickCaptureDetailScreen({
                 onChangeText={handleSearchLeads}
                 autoFocus
               />
-              {searching && <ActivityIndicator size="small" color={PLUM} />}
+              {searching && <ActivityIndicator size="small" color={'#2563EB'} />}
             </View>
             <FlatList
               data={searchResults}
@@ -989,7 +988,7 @@ export default function QuickCaptureDetailScreen({
   );
 }
 
-const styles = themedStyles({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
@@ -997,19 +996,19 @@ const styles = themedStyles({
   backToLeadBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#F3F7FE',
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
+    borderColor: '#BFD3FB',
     marginBottom: 12,
     gap: 8,
   },
   backToLeadText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#6D28D9',
+    color: '#1D4ED8',
   },
   loadingContainer: {
     flex: 1,
@@ -1028,7 +1027,7 @@ const styles = themedStyles({
   },
   backLinkText: {
     fontSize: 15,
-    color: PLUM,
+    color: '#2563EB',
     fontWeight: '600',
   },
   header: {
@@ -1038,7 +1037,7 @@ const styles = themedStyles({
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: 16,
     paddingHorizontal: 16,
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },
@@ -1136,8 +1135,8 @@ const styles = themedStyles({
     alignItems: 'center',
   },
   segmentedBtnActive: {
-    backgroundColor: PLUM,
-    borderColor: PLUM,
+    backgroundColor: INK,
+    borderColor: INK,
   },
   segmentedText: {
     fontSize: 13,
@@ -1236,7 +1235,7 @@ const styles = themedStyles({
     gap: 8,
     paddingVertical: 14,
     borderRadius: 10,
-    backgroundColor: PLUM,
+    backgroundColor: INK,
   },
   convertBtnText: {
     fontSize: 15,
@@ -1258,7 +1257,7 @@ const styles = themedStyles({
   actionBtnText: {
     fontSize: 14,
     fontWeight: '600',
-    color: PLUM,
+    color: '#2563EB',
   },
   footer: {
     flexDirection: 'row',
@@ -1283,7 +1282,7 @@ const styles = themedStyles({
   },
   saveBtn: {
     flex: 1,
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: 'center',
@@ -1292,7 +1291,7 @@ const styles = themedStyles({
     gap: 8,
   },
   saveBtnDisabled: {
-    backgroundColor: '#A78BFA',
+    backgroundColor: '#93C5FD',
     opacity: 0.7,
   },
   saveText: {
@@ -1309,13 +1308,13 @@ const styles = themedStyles({
     paddingVertical: 14,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: PLUM,
-    backgroundColor: '#F5F3FF',
+    borderColor: INK,
+    backgroundColor: '#F3F7FE',
   },
   linkExistingBtnText: {
     fontSize: 15,
     fontWeight: '700',
-    color: PLUM,
+    color: '#2563EB',
   },
   // Modal styles
   modalOverlay: {
@@ -1372,7 +1371,7 @@ const styles = themedStyles({
   matchStatus: {
     fontSize: 11,
     fontWeight: '500',
-    color: PLUM,
+    color: '#2563EB',
     marginTop: 2,
   },
   createNewBtn: {

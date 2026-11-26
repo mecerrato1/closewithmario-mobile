@@ -17,7 +17,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRealtors } from '../../../hooks/useRealtors';
 import type { AssignedRealtor } from '../../../lib/types/realtors';
-import { themedStyles } from '../../../brand/themedStyles';
 
 interface SelectRealtorModalProps {
   visible: boolean;
@@ -95,7 +94,7 @@ export default function SelectRealtorModal({
             ) : null}
           </View>
           {isSelected && (
-            <Ionicons name="checkmark-circle" size={22} color="#7C3AED" />
+            <Ionicons name="checkmark-circle" size={22} color="#2563EB" />
           )}
         </TouchableOpacity>
       );
@@ -160,7 +159,7 @@ export default function SelectRealtorModal({
           {/* List */}
           {loading ? (
             <View style={styles.loadingWrap}>
-              <ActivityIndicator size="large" color="#7C3AED" />
+              <ActivityIndicator size="large" color="#2563EB" />
             </View>
           ) : (
             <FlatList
@@ -193,7 +192,7 @@ export default function SelectRealtorModal({
                 loadingMore ? (
                   <ActivityIndicator
                     style={styles.footerLoader}
-                    color="#7C3AED"
+                    color="#2563EB"
                   />
                 ) : error && realtors.length > 0 ? (
                   <TouchableOpacity
@@ -225,7 +224,7 @@ export default function SelectRealtorModal({
   );
 }
 
-const styles = themedStyles({
+const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -307,7 +306,7 @@ const styles = themedStyles({
   retryButton: {
     marginTop: 12,
     borderRadius: 8,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     paddingHorizontal: 18,
     paddingVertical: 9,
   },
@@ -323,7 +322,7 @@ const styles = themedStyles({
     alignSelf: 'center',
     marginVertical: 12,
     borderRadius: 8,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     paddingHorizontal: 18,
     paddingVertical: 9,
   },
@@ -337,7 +336,7 @@ const styles = themedStyles({
     gap: 12,
   },
   rowSelected: {
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#F3F7FE',
     borderRadius: 8,
     paddingHorizontal: 8,
   },
@@ -345,7 +344,7 @@ const styles = themedStyles({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     justifyContent: 'center',
     alignItems: 'center',
   },

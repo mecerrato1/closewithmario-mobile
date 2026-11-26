@@ -1,10 +1,11 @@
 // src/components/navigation/BottomTabs.tsx
 import React from 'react';
-import { View, Text, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, Platform,
+  StyleSheet,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../../styles/theme';
-import { useBrand } from '../../brand/BrandContext';
-import { themedStyles } from '../../brand/themedStyles';
+import { PUBLIC_BRAND } from '../../brand/brands';
 import { MIN_TOUCH_TARGET } from '../../brand/layout';
 
 import type { UserRole } from '../../lib/roles';
@@ -39,7 +40,7 @@ interface BottomTabsProps {
 export default function BottomTabs({ activeTab, onTabChange, userRole }: BottomTabsProps) {
   const tabs = userRole === 'realtor' ? REALTOR_TABS : DEFAULT_TABS;
   const { colors } = useThemeColors();
-  const brand = useBrand();
+  const brand = PUBLIC_BRAND;
 
   return (
     <View
@@ -76,7 +77,7 @@ export default function BottomTabs({ activeTab, onTabChange, userRole }: BottomT
   );
 }
 
-const styles = themedStyles({
+const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     borderTopWidth: 1,

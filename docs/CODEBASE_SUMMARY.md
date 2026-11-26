@@ -141,7 +141,6 @@ closewithmario-mobile/
 ├── docs/
 │   └── CODEBASE_SUMMARY.md         # This file
 ├── assets/
-│   ├── CWMLogo.png                 # Main logo
 │   ├── MortgageCalc.png            # ✨ Calculator tab icon
 │   ├── BrowardHPA_Ad.jpg           # Ad image for Broward HPA campaign
 │   ├── Fl_Renter_Ad.png            # Ad image for FL Renter campaign

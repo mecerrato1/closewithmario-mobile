@@ -18,9 +18,9 @@ const QuoteOfTheDay: React.FC<Props> = ({ userKey }) => {
         marginBottom: 12,
         padding: 16,
         borderRadius: 16,
-        backgroundColor: "rgba(91, 33, 182, 0.4)",
+        backgroundColor: "rgba(11, 18, 32, 0.4)",
         borderWidth: 1.5,
-        borderColor: "rgba(167, 139, 250, 0.5)",
+        borderColor: "rgba(147, 197, 253, 0.5)",
       }}
     >
       {/* Header row with icon */}

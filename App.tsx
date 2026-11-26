@@ -58,7 +58,7 @@ import {
 import { runSignOut } from './src/features/session/signOutCleanup';
 import { styles } from './src/styles/appStyles';
 import { useThemeColors } from './src/styles/theme';
-import { useBrand } from './src/brand/BrandContext';
+import { PUBLIC_BRAND } from './src/brand/brands';
 import { getAvatarUrl } from './src/utils/profilePicture';
 import AuthenticatedRoot from './src/screens/AuthenticatedRoot';
 import MfaGate from './src/screens/MfaGate';
@@ -81,7 +81,6 @@ import {
   type LeadCountContext,
 } from './src/features/leads/leadListPresentation';
 import { queryIncompleteTodayCallbacks } from './src/features/leads/todayCallbacksQuery';
-import { themedStyles } from './src/brand/themedStyles';
 
 // Enable LayoutAnimation on Android
 if (
@@ -158,7 +157,7 @@ function resolveNotificationOpenTab(
 
 function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandled, defaultToMyLeads, skipDashboard, onNavigateToCapture }: LeadsScreenProps) {
   const { colors, isDark } = useThemeColors();
-  const brand = useBrand();
+  const brand = PUBLIC_BRAND;
   const [initializing, setInitializing] = useState(true);
   const [initialError, setInitialError] = useState<string | null>(null);
   const [roleReady, setRoleReady] = useState(false);
@@ -2153,7 +2152,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           </TouchableOpacity>
         </Modal>
 
-        {/* Purple Gradient Header - Fixed height, moves up with scroll */}
+        {/* Gradient Header - Fixed height, moves up with scroll */}
         <Animated.View style={[
           styles.newDashboardHeader, 
           { 
@@ -2390,7 +2389,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 <View style={styles.dashboardSectionHeaderContent}>
                   <View style={styles.dashboardSectionTitleRow}>
                   <View style={styles.dashboardSectionIconWrap}>
-                    <Ionicons name="calendar-outline" size={18} color="#4F46E5" />
+                    <Ionicons name="calendar-outline" size={18} color="#1D4ED8" />
                   </View>
                   <View>
                     <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Today</Text>
@@ -2842,7 +2841,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         </TouchableOpacity>
       </Modal>
 
-      {/* Modern Purple Header with Stats and Search - Animated Collapsing */}
+      {/* Modern Header with Stats and Search - Animated Collapsing */}
       <Animated.View style={[
         styles.leadsHeaderContainer, 
         { 
@@ -3954,7 +3953,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 }
 
 // Styles for AI Recommendation Modal
-const aiRecommendationStyles = themedStyles({
+const aiRecommendationStyles = StyleSheet.create({
   container: {
     backgroundColor: '#1E293B',
     borderRadius: 16,
@@ -4017,7 +4016,7 @@ const aiRecommendationStyles = themedStyles({
     justifyContent: 'center',
   },
   closeButton: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',

@@ -44,10 +44,9 @@ import {
   formatDPAForText,
 } from '../utils/dpaCalculations';
 import DPAEntryModal from '../components/DPAEntryModal';
-import { themedStyles } from '../brand/themedStyles';
 
 const STORAGE_KEY = '@mortgage_calculator_inputs';
-const PLUM = '#4C1D95';
+const INK = '#0B1220';
 
 interface MortgageCalculatorScreenProps {
   onClose: () => void;
@@ -435,7 +434,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
     return value.replace(/,/g, '');
   };
 
-  const styles = themedStyles({
+  const styles = StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.background,
@@ -447,7 +446,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       paddingHorizontal: 16,
       paddingTop: Platform.OS === 'ios' ? 60 : 16,
       paddingBottom: 16,
-      backgroundColor: PLUM,
+      backgroundColor: INK,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
@@ -531,8 +530,8 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       alignItems: 'center',
     },
     loanTypeButtonActive: {
-      backgroundColor: PLUM,
-      borderColor: PLUM,
+      backgroundColor: INK,
+      borderColor: INK,
     },
     loanTypeButtonText: {
       fontSize: 14,
@@ -555,8 +554,8 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       alignItems: 'center',
     },
     termButtonActive: {
-      backgroundColor: PLUM,
-      borderColor: PLUM,
+      backgroundColor: INK,
+      borderColor: INK,
     },
     termButtonText: {
       fontSize: 14,
@@ -577,7 +576,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
     sliderValue: {
       fontSize: 18,
       fontWeight: '700',
-      color: PLUM,
+      color: '#2563EB',
       textAlign: 'center',
       marginBottom: 8,
     },
@@ -592,7 +591,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
     },
     sliderFill: {
       height: '100%',
-      backgroundColor: PLUM,
+      backgroundColor: INK,
       borderRadius: 7,
       opacity: 0.3,
     },
@@ -601,7 +600,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       width: 24,
       height: 24,
       borderRadius: 12,
-      backgroundColor: PLUM,
+      backgroundColor: INK,
       borderWidth: 3,
       borderColor: '#FFFFFF',
     },
@@ -621,8 +620,8 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       justifyContent: 'center',
     },
     checkboxChecked: {
-      backgroundColor: PLUM,
-      borderColor: PLUM,
+      backgroundColor: INK,
+      borderColor: INK,
     },
     checkboxLabel: {
       fontSize: 14,
@@ -630,11 +629,11 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       flex: 1,
     },
     resultCard: {
-      backgroundColor: PLUM,
+      backgroundColor: INK,
       borderRadius: 20,
       padding: 24,
       marginBottom: 20,
-      shadowColor: PLUM,
+      shadowColor: INK,
       shadowOffset: { width: 0, height: 8 },
       shadowOpacity: 0.3,
       shadowRadius: 16,
@@ -702,16 +701,16 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       justifyContent: 'space-between',
       paddingVertical: 14,
       paddingHorizontal: 16,
-      backgroundColor: isDark ? '#1F2937' : '#F3F0FF',
+      backgroundColor: isDark ? '#1F2937' : '#F6F7F9',
       borderRadius: 10,
       marginTop: 12,
       borderWidth: 1,
-      borderColor: isDark ? '#374151' : '#E9E3FF',
+      borderColor: isDark ? '#374151' : '#BFD3FB',
     },
     expandButtonText: {
       fontSize: 15,
       fontWeight: '600',
-      color: PLUM,
+      color: '#2563EB',
     },
     modalOverlay: {
       flex: 1,
@@ -934,7 +933,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: PLUM,
+                backgroundColor: INK,
                 borderRadius: 12,
                 paddingVertical: 14,
                 gap: 8,
@@ -1001,7 +1000,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
             <Text style={[styles.detailLabel, { fontSize: 16, fontWeight: '700', color: colors.textPrimary }]}>
               Total Cash to Close
             </Text>
-            <Text style={[styles.detailValue, { fontSize: 18, color: PLUM }]}>
+            <Text style={[styles.detailValue, { fontSize: 18, color: '#2563EB' }]}>
               {formatCurrencyDetailed(adjustedCashToClose)}
             </Text>
           </View>
@@ -1015,7 +1014,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
             <Ionicons
               name={showClosingBreakdown ? 'chevron-up' : 'chevron-down'}
               size={20}
-              color={PLUM}
+              color={'#2563EB'}
             />
           </TouchableOpacity>
           
@@ -1085,8 +1084,8 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               </View>
               {buyerPaysSellerTransfer && (
                 <View style={styles.detailRow}>
-                  <Text style={[styles.detailLabel, { color: PLUM }]}>Doc Stamps (Seller Transfer) ⚠️</Text>
-                  <Text style={[styles.detailValue, { color: PLUM }]}>
+                  <Text style={[styles.detailLabel, { color: '#2563EB' }]}>Doc Stamps (Seller Transfer) ⚠️</Text>
+                  <Text style={[styles.detailValue, { color: '#2563EB' }]}>
                     {formatCurrencyDetailed(priceValue * (county === 'Miami-Dade' ? 0.006 : 0.007))}
                   </Text>
                 </View>
@@ -1102,7 +1101,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
             <Ionicons
               name={showPrepaidsBreakdown ? 'chevron-up' : 'chevron-down'}
               size={20}
-              color={PLUM}
+              color={'#2563EB'}
             />
           </TouchableOpacity>
 
@@ -1134,10 +1133,10 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
                 <Text style={styles.detailValue}>{formatCurrency(results.baseLoanBeforeFee)}</Text>
               </View>
               <View style={styles.detailRow}>
-                <Text style={[styles.detailLabel, { color: PLUM }]}>
+                <Text style={[styles.detailLabel, { color: '#2563EB' }]}>
                   {loanType === 'FHA' ? 'FHA UFMIP (1.75%)' : `VA Funding Fee (${(results.feeRate * 100).toFixed(2)}%)`}
                 </Text>
-                <Text style={[styles.detailValue, { color: PLUM }]}>{formatCurrency(results.financedFee)}</Text>
+                <Text style={[styles.detailValue, { color: '#2563EB' }]}>{formatCurrency(results.financedFee)}</Text>
               </View>
               <View style={styles.detailRow}>
                 <Text style={[styles.detailLabel, { fontWeight: '600' }]}>Total Loan</Text>
@@ -1172,7 +1171,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               </View>
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>DPA Program{dpaEntries.length > 1 ? 's' : ''}</Text>
-                <Text style={[styles.detailValue, { color: PLUM, flex: 1, textAlign: 'right' }]} numberOfLines={2}>
+                <Text style={[styles.detailValue, { color: '#2563EB', flex: 1, textAlign: 'right' }]} numberOfLines={2}>
                   {dpaEntries.map(e => e.name || 'DPA').join(', ')}
                 </Text>
               </View>
@@ -1439,7 +1438,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
                     paddingVertical: 6,
                     paddingHorizontal: 8,
                     borderRadius: 6,
-                    backgroundColor: parseFloat(downPct) === pct ? PLUM : 'transparent',
+                    backgroundColor: parseFloat(downPct) === pct ? INK : 'transparent',
                   }}
                 >
                   <Text style={{ 
@@ -1474,7 +1473,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
                     onPress={() => setCustomRate('')}
                     style={{ paddingHorizontal: 8, paddingVertical: 4 }}
                   >
-                    <Text style={{ fontSize: 12, color: PLUM, fontWeight: '600' }}>
+                    <Text style={{ fontSize: 12, color: '#2563EB', fontWeight: '600' }}>
                       Reset to Live
                     </Text>
                   </TouchableOpacity>
@@ -1524,7 +1523,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
               <Text style={styles.inputLabel}>Discount Points (%)</Text>
               {parseFloat(discountPoints) > 0 && (
-                <Text style={{ fontSize: 12, color: PLUM, fontWeight: '600' }}>
+                <Text style={{ fontSize: 12, color: '#2563EB', fontWeight: '600' }}>
                   = {formatCurrency(discountPointsAmount)}
                 </Text>
               )}
@@ -1713,7 +1712,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
                        entry.type === 'loanAmount' ? `${entry.value}% of Loan Amount` :
                        'Fixed Amount'}
                     </Text>
-                    <Text style={{ fontSize: 18, fontWeight: '700', color: PLUM, marginTop: 8 }}>
+                    <Text style={{ fontSize: 18, fontWeight: '700', color: '#2563EB', marginTop: 8 }}>
                       {formatCurrency(entryAmount)}
                     </Text>
                     {entry.paymentType !== 'none' && (
@@ -1727,7 +1726,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
                       onPress={() => handleEditDPA(entry)}
                       style={{ padding: 8 }}
                     >
-                      <Ionicons name="pencil" size={20} color={PLUM} />
+                      <Ionicons name="pencil" size={20} color={'#2563EB'} />
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => handleDeleteDPA(entry.id)}
@@ -1750,16 +1749,16 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
               paddingVertical: 16,
               borderStyle: 'dashed',
               borderWidth: 2,
-              borderColor: PLUM,
-              backgroundColor: isDark ? 'rgba(124, 58, 237, 0.1)' : 'rgba(124, 58, 237, 0.05)',
+              borderColor: INK,
+              backgroundColor: isDark ? 'rgba(37, 99, 235, 0.1)' : 'rgba(37, 99, 235, 0.05)',
             }]}
             onPress={() => {
               setEditingDPA(null);
               setShowDPAModal(true);
             }}
           >
-            <Ionicons name="add-circle-outline" size={24} color={PLUM} />
-            <Text style={{ fontSize: 16, fontWeight: '600', color: PLUM, marginLeft: 8 }}>
+            <Ionicons name="add-circle-outline" size={24} color={'#2563EB'} />
+            <Text style={{ fontSize: 16, fontWeight: '600', color: '#2563EB', marginLeft: 8 }}>
               Add DPA Program
             </Text>
           </TouchableOpacity>

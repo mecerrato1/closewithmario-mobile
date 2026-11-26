@@ -12,7 +12,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import type { QuickCapture } from '../types';
 import type { MatchedLead } from '../services/leadMatchService';
-import { themedStyles } from '../../../brand/themedStyles';
 
 type MergeField = {
   key: string;
@@ -184,7 +183,7 @@ export default function LeadMergeView({
       </View>
 
       <View style={s.matchInfo}>
-        <Ionicons name="git-merge-outline" size={18} color="#7C3AED" />
+        <Ionicons name="git-merge-outline" size={18} color="#2563EB" />
         <Text style={s.matchInfoText}>
           Merging into <Text style={s.bold}>{existingName}</Text> ({sourceLabel} · {existingLead.matchReason})
         </Text>
@@ -226,7 +225,7 @@ export default function LeadMergeView({
                     {f.captureValue || '—'}
                   </Text>
                   {sel === 'capture' && f.captureValue && (
-                    <Ionicons name="checkmark-circle" size={16} color="#7C3AED" />
+                    <Ionicons name="checkmark-circle" size={16} color="#2563EB" />
                   )}
                 </TouchableOpacity>
 
@@ -250,7 +249,7 @@ export default function LeadMergeView({
                     {f.existingValue || '—'}
                   </Text>
                   {sel === 'existing' && f.existingValue && (
-                    <Ionicons name="checkmark-circle" size={16} color="#7C3AED" />
+                    <Ionicons name="checkmark-circle" size={16} color="#2563EB" />
                   )}
                 </TouchableOpacity>
               </View>
@@ -288,7 +287,7 @@ export default function LeadMergeView({
   );
 }
 
-const s = themedStyles({
+const s = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -314,7 +313,7 @@ const s = themedStyles({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#F3F7FE',
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 10,
@@ -338,7 +337,7 @@ const s = themedStyles({
   columnHeaderLeft: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#7C3AED',
+    color: '#2563EB',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -381,8 +380,8 @@ const s = themedStyles({
     backgroundColor: '#F9FAFB',
   },
   fieldOptionSelected: {
-    borderColor: '#7C3AED',
-    backgroundColor: '#F5F3FF',
+    borderColor: '#2563EB',
+    backgroundColor: '#F3F7FE',
   },
   fieldOptionEmpty: {
     opacity: 0.5,
@@ -393,7 +392,7 @@ const s = themedStyles({
     flex: 1,
   },
   fieldOptionTextSelected: {
-    color: '#7C3AED',
+    color: '#2563EB',
     fontWeight: '600',
   },
   fieldOptionTextEmpty: {
@@ -436,7 +435,7 @@ const s = themedStyles({
     gap: 6,
     paddingVertical: 14,
     borderRadius: 10,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
   },
   mergeBtnDisabled: {
     opacity: 0.5,

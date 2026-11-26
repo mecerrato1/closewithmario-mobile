@@ -18,9 +18,8 @@ import { useRealtors } from '../../hooks/useRealtors';
 import { AssignedRealtor, RelationshipStage } from '../../lib/types/realtors';
 import type { UserRole } from '../../lib/roles';
 import RealtorCard from '../../components/realtors/RealtorCard';
-import { themedStyles } from '../../brand/themedStyles';
 
-const PLUM = '#4C1D95';
+const INK = '#0B1220';
 
 interface RealtorsListScreenProps {
   userId: string | undefined;
@@ -79,7 +78,7 @@ export default function RealtorsListScreen({
               <Text
                 style={[
                   styles.filterTabText,
-                  { color: isSelected ? PLUM : colors.textSecondary },
+                  { color: isSelected ? '#2563EB' : colors.textSecondary },
                 ]}
               >
                 {option.label}
@@ -136,7 +135,7 @@ export default function RealtorsListScreen({
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: PLUM }]}>
+      <View style={[styles.header, { backgroundColor: INK }]}>
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>
             Realtors <Text style={styles.headerCount}>({displayedCount})</Text>
@@ -199,7 +198,7 @@ export default function RealtorsListScreen({
       {/* Loading State */}
       {loading && !refreshing ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={PLUM} />
+          <ActivityIndicator size="large" color={'#2563EB'} />
           <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
             Loading realtors...
           </Text>
@@ -214,7 +213,7 @@ export default function RealtorsListScreen({
           ListFooterComponent={
             loadingMore ? (
               <View style={styles.footerLoading}>
-                <ActivityIndicator size="small" color={PLUM} />
+                <ActivityIndicator size="small" color={'#2563EB'} />
               </View>
             ) : hasMore && !error ? (
               <TouchableOpacity
@@ -234,8 +233,8 @@ export default function RealtorsListScreen({
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={PLUM}
-              colors={[PLUM]}
+              tintColor="#2563EB"
+              colors={['#2563EB']}
             />
           }
           showsVerticalScrollIndicator={false}
@@ -335,7 +334,7 @@ export default function RealtorsListScreen({
   );
 }
 
-const styles = themedStyles({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -430,7 +429,7 @@ const styles = themedStyles({
     paddingVertical: 20,
   },
   loadMoreText: {
-    color: PLUM,
+    color: '#2563EB',
     fontSize: 14,
     fontWeight: '700',
   },
@@ -452,7 +451,7 @@ const styles = themedStyles({
   },
   filterTabActive: {
     borderBottomWidth: 2,
-    borderBottomColor: PLUM,
+    borderBottomColor: INK,
   },
   filterTabText: {
     fontSize: 14,
@@ -485,7 +484,7 @@ const styles = themedStyles({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 24,
@@ -546,7 +545,7 @@ const styles = themedStyles({
     fontSize: 13,
   },
   modalCloseButton: {
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',

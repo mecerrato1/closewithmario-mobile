@@ -23,7 +23,6 @@ import {
 import { useMetaDmConversation } from '../features/messages/useMetaDmConversation';
 import { usePaginatedMessageHistory } from '../features/messages/usePaginatedMessageHistory';
 import { useThemeColors } from '../styles/theme';
-import { themedStyles } from '../brand/themedStyles';
 import { SEND_TIMEOUT_MESSAGE, useSendGuard } from '../features/messages/sendGuard';
 
 type LeadSource = 'organic' | 'meta';
@@ -416,7 +415,7 @@ export function MetaDmMessaging({
           style={[
             dmStyles.messageBubble,
             isOutbound
-              ? [dmStyles.outboundBubble, { backgroundColor: PLUM }]
+              ? [dmStyles.outboundBubble, { backgroundColor: INK }]
               : [
                   dmStyles.inboundBubble,
                   {
@@ -475,7 +474,7 @@ export function MetaDmMessaging({
           { backgroundColor: colors.background },
         ]}
       >
-        <ActivityIndicator size="small" color={PLUM} />
+        <ActivityIndicator size="small" color={'#2563EB'} />
         <Text style={[dmStyles.loadingText, { color: colors.textSecondary }]}>
           Loading Messenger conversation...
         </Text>
@@ -508,7 +507,7 @@ export function MetaDmMessaging({
                   <Ionicons
                     name="chatbubble-ellipses-outline"
                     size={18}
-                    color={PLUM}
+                    color={'#2563EB'}
                   />
                 </View>
                 <View style={dmStyles.headerTextBlock}>
@@ -646,7 +645,7 @@ export function MetaDmMessaging({
                   disabled={loadingOlder}
                 >
                   {loadingOlder ? (
-                    <ActivityIndicator size="small" color={PLUM} />
+                    <ActivityIndicator size="small" color={'#2563EB'} />
                   ) : (
                     <Text style={dmStyles.loadOlderText}>
                       Load older messages
@@ -733,9 +732,9 @@ export function MetaDmMessaging({
   );
 }
 
-const PLUM = '#4C1D95';
+const INK = '#0B1220';
 
-const dmStyles = themedStyles({
+const dmStyles = StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -878,10 +877,10 @@ const dmStyles = themedStyles({
     paddingHorizontal: 14,
     marginBottom: 4,
     borderRadius: 18,
-    backgroundColor: '#EDE9FE',
+    backgroundColor: '#E8F0FE',
   },
   loadOlderText: {
-    color: PLUM,
+    color: '#2563EB',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -975,12 +974,12 @@ const dmStyles = themedStyles({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: '#C4B5FD',
+    backgroundColor: '#BFD3FB',
   },
 });
 

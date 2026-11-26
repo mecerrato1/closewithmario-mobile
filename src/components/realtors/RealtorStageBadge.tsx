@@ -2,7 +2,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { RelationshipStage, STAGE_CONFIG } from '../../lib/types/realtors';
-import { themedStyles } from '../../brand/themedStyles';
 
 interface RealtorStageBadgeProps {
   stage: RelationshipStage;
@@ -34,7 +33,7 @@ export default function RealtorStageBadge({ stage, size = 'small' }: RealtorStag
   );
 }
 
-const styles = themedStyles({
+const styles = StyleSheet.create({
   badge: {
     borderRadius: 12,
     alignSelf: 'flex-start',

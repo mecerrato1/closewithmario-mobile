@@ -12,13 +12,12 @@ import { useThemeColors } from '../styles/theme';
 import { useReferralAgreements } from '../hooks/useReferralAgreements';
 import type { ReferralAgreement, SignerStatus } from '../lib/types/referralAgreement';
 import { authenticatedFetch } from '../lib/authenticatedFetch';
-import { themedStyles } from '../brand/themedStyles';
 
 const API_BASE_URL = 'https://www.closewithmario.com';
 
 const STATUS_CONFIG: Record<ReferralAgreement['status'], { bg: string; text: string; label: string }> = {
   generated: { bg: '#F1F5F9', text: '#64748B', label: 'Generated' },
-  sent:      { bg: '#F3E8FF', text: '#7C3AED', label: 'Sent' },
+  sent:      { bg: '#E8F0FE', text: '#2563EB', label: 'Sent' },
   viewed:    { bg: '#FEF3C7', text: '#D97706', label: 'Viewed' },
   signed:    { bg: '#DCFCE7', text: '#16A34A', label: 'Signed' },
   declined:  { bg: '#FEE2E2', text: '#DC2626', label: 'Declined' },
@@ -30,7 +29,7 @@ function getSignerStatusLabel(signer: SignerStatus): { label: string; bg: string
   if (signer.declined) return { label: 'Declined', bg: '#FEE2E2', text: '#DC2626' };
   if (signer.signed)   return { label: 'Signed', bg: '#DCFCE7', text: '#16A34A' };
   if (signer.viewed)   return { label: 'Viewed', bg: '#FEF3C7', text: '#D97706' };
-  if (signer.sent)     return { label: 'Sent', bg: '#F3E8FF', text: '#7C3AED' };
+  if (signer.sent)     return { label: 'Sent', bg: '#E8F0FE', text: '#2563EB' };
   return { label: 'Pending', bg: '#F1F5F9', text: '#64748B' };
 }
 
@@ -110,7 +109,7 @@ export function ReferralAgreementsSection({ leadId, leadSource }: Props) {
     return (
       <View style={{ marginTop: 12 }}>
         <Text style={[localStyles.sectionHeader, { color: colors.textSecondary }]}>REFERRAL AGREEMENTS</Text>
-        <ActivityIndicator size="small" color="#7C3AED" style={{ marginTop: 8 }} />
+        <ActivityIndicator size="small" color="#2563EB" style={{ marginTop: 8 }} />
       </View>
     );
   }
@@ -182,7 +181,7 @@ export function ReferralAgreementsSection({ leadId, leadSource }: Props) {
           onPress={refresh}
           activeOpacity={0.7}
         >
-          <Ionicons name="refresh-outline" size={14} color="#7C3AED" />
+          <Ionicons name="refresh-outline" size={14} color="#2563EB" />
           <Text style={localStyles.refreshAllText}>Refresh Agreements</Text>
         </TouchableOpacity>
       )}
@@ -280,9 +279,9 @@ function AgreementCard({
               activeOpacity={0.7}
             >
               {loadingSigners ? (
-                <ActivityIndicator size="small" color="#7C3AED" />
+                <ActivityIndicator size="small" color="#2563EB" />
               ) : (
-                <Ionicons name="refresh-outline" size={14} color="#7C3AED" />
+                <Ionicons name="refresh-outline" size={14} color="#2563EB" />
               )}
             </TouchableOpacity>
           </View>
@@ -321,9 +320,9 @@ function AgreementCard({
             activeOpacity={0.7}
           >
             {openingGeneratedPdf ? (
-              <ActivityIndicator size="small" color="#7C3AED" />
+              <ActivityIndicator size="small" color="#2563EB" />
             ) : (
-              <Ionicons name="document-text-outline" size={16} color="#7C3AED" />
+              <Ionicons name="document-text-outline" size={16} color="#2563EB" />
             )}
             <Text style={localStyles.pdfButtonText}>
               {openingGeneratedPdf ? 'Opening PDF...' : 'View Generated PDF'}
@@ -391,7 +390,7 @@ function DetailRow({ label, value, colors }: DetailRowProps) {
   );
 }
 
-const localStyles = themedStyles({
+const localStyles = StyleSheet.create({
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -404,7 +403,7 @@ const localStyles = themedStyles({
     letterSpacing: 0.3,
   },
   countBadge: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     borderRadius: 10,
     paddingHorizontal: 7,
     paddingVertical: 1,
@@ -504,9 +503,9 @@ const localStyles = themedStyles({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#F3F7FE',
     borderWidth: 1,
-    borderColor: '#DDD6FE',
+    borderColor: '#BFD3FB',
     borderRadius: 10,
     paddingVertical: 10,
     paddingHorizontal: 14,
@@ -515,7 +514,7 @@ const localStyles = themedStyles({
   pdfButtonText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#7C3AED',
+    color: '#2563EB',
   },
   errorBanner: {
     flexDirection: 'row',
@@ -545,7 +544,7 @@ const localStyles = themedStyles({
   },
   refreshAllText: {
     fontSize: 12,
-    color: '#7C3AED',
+    color: '#2563EB',
     fontWeight: '600',
   },
 });

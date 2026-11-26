@@ -28,9 +28,8 @@ import type {
   LeadRealtorRoleType,
   LeadRoleRealtor,
 } from '../lib/types/leadRealtorRoles';
-import { themedStyles } from '../brand/themedStyles';
 
-const PLUM = '#4C1D95';
+const INK = '#0B1220';
 
 type RoleConfig = {
   role: Extract<LeadRealtorRoleType, 'buyer_agent' | 'listing_agent'>;
@@ -303,7 +302,7 @@ export function LeadRealtorRolesSection({
               <Ionicons
                 name={config.role === 'buyer_agent' ? 'home-outline' : 'business-outline'}
                 size={15}
-                color={PLUM}
+                color={'#2563EB'}
               />
               <Text style={[localStyles.roleTitle, { color: colors.textPrimary }]}>{config.label}</Text>
             </View>
@@ -328,13 +327,13 @@ export function LeadRealtorRolesSection({
                 <View style={localStyles.contactActionRow}>
                   {realtor.phone ? (
                     <TouchableOpacity style={localStyles.contactAction} onPress={() => openPhone(realtor.phone || '')}>
-                      <Ionicons name="call-outline" size={13} color={PLUM} />
+                      <Ionicons name="call-outline" size={13} color={'#2563EB'} />
                       <Text style={localStyles.contactActionText}>Call</Text>
                     </TouchableOpacity>
                   ) : null}
                   {realtor.email ? (
                     <TouchableOpacity style={localStyles.contactAction} onPress={() => openEmail(realtor.email || '')}>
-                      <Ionicons name="mail-outline" size={13} color={PLUM} />
+                      <Ionicons name="mail-outline" size={13} color={'#2563EB'} />
                       <Text style={localStyles.contactActionText}>Email</Text>
                     </TouchableOpacity>
                   ) : null}
@@ -344,7 +343,7 @@ export function LeadRealtorRolesSection({
           ) : (
             <View style={[localStyles.emptyBox, { backgroundColor: isDark ? '#111827' : '#F8FAFC' }]}>
               {loading ? (
-                <ActivityIndicator size="small" color={PLUM} />
+                <ActivityIndicator size="small" color={'#2563EB'} />
               ) : (
                 <Text style={[localStyles.emptyText, { color: colors.textSecondary }]}>
                   {config.emptyLabel}
@@ -394,14 +393,14 @@ export function LeadRealtorRolesSection({
     <View style={localStyles.container}>
       <View style={localStyles.sectionHeader}>
         <View style={localStyles.sectionTitleRow}>
-          <Ionicons name="people-outline" size={17} color={PLUM} />
+          <Ionicons name="people-outline" size={17} color={'#2563EB'} />
           <Text style={[localStyles.sectionTitle, { color: colors.textPrimary }]}>Realtor Roles</Text>
         </View>
         <TouchableOpacity onPress={loadRoles} disabled={loading}>
           {loading ? (
-            <ActivityIndicator size="small" color={PLUM} />
+            <ActivityIndicator size="small" color={'#2563EB'} />
           ) : (
-            <Ionicons name="refresh-outline" size={17} color={PLUM} />
+            <Ionicons name="refresh-outline" size={17} color={'#2563EB'} />
           )}
         </TouchableOpacity>
       </View>
@@ -458,7 +457,7 @@ export function LeadRealtorRolesSection({
 
               {searching ? (
                 <View style={localStyles.modalState}>
-                  <ActivityIndicator size="small" color={PLUM} />
+                  <ActivityIndicator size="small" color={'#2563EB'} />
                   <Text style={[localStyles.modalStateText, { color: colors.textSecondary }]}>Searching...</Text>
                 </View>
               ) : (
@@ -502,7 +501,7 @@ export function LeadRealtorRolesSection({
   );
 }
 
-const localStyles = themedStyles({
+const localStyles = StyleSheet.create({
   container: {
     marginTop: 16,
     paddingTop: 16,
@@ -573,12 +572,12 @@ const localStyles = themedStyles({
   },
   ccPill: {
     borderRadius: 999,
-    backgroundColor: '#EDE9FE',
+    backgroundColor: '#E8F0FE',
     paddingHorizontal: 7,
     paddingVertical: 3,
   },
   ccPillText: {
-    color: PLUM,
+    color: '#2563EB',
     fontSize: 10,
     fontWeight: '800',
   },
@@ -603,14 +602,14 @@ const localStyles = themedStyles({
   contactAction: {
     minHeight: 28,
     borderRadius: 999,
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#F3F7FE',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
     paddingHorizontal: 10,
   },
   contactActionText: {
-    color: PLUM,
+    color: '#2563EB',
     fontSize: 11,
     fontWeight: '800',
   },
@@ -632,7 +631,7 @@ const localStyles = themedStyles({
     flex: 1,
     minHeight: 36,
     borderRadius: 10,
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

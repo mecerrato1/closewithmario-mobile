@@ -4,7 +4,6 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Linking } from 'r
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../../styles/theme';
 import { AssignedRealtor, getRealtorFullName, getRealtorInitials } from '../../lib/types/realtors';
-import { themedStyles } from '../../brand/themedStyles';
 
 interface NeedsLoveSectionProps {
   realtors: AssignedRealtor[];
@@ -81,7 +80,7 @@ export default function NeedsLoveSection({ realtors, onRealtorPress }: NeedsLove
   );
 }
 
-const styles = themedStyles({
+const styles = StyleSheet.create({
   container: {
     marginBottom: 8,
   },
@@ -114,7 +113,7 @@ const styles = themedStyles({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
@@ -138,7 +137,7 @@ const styles = themedStyles({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 14,

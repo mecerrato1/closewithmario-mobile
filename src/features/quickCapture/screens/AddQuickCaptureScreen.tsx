@@ -24,9 +24,8 @@ import { useQuickCaptureAttachments } from '../hooks/useQuickCaptureAttachments'
 import QuickCaptureAttachmentStrip from '../components/QuickCaptureAttachmentStrip';
 import SelectRealtorModal from '../components/SelectRealtorModal';
 import type { CreateQuickCapturePayload } from '../types';
-import { themedStyles } from '../../../brand/themedStyles';
 
-const PLUM = '#4C1D95';
+const INK = '#0B1220';
 
 interface AddQuickCaptureScreenProps {
   userId: string;
@@ -280,7 +279,7 @@ export default function AddQuickCaptureScreen({
       <Modal visible={scanning} transparent animationType="fade">
         <View style={styles.scanOverlay}>
           <View style={styles.scanCard}>
-            <ActivityIndicator size="large" color={PLUM} />
+            <ActivityIndicator size="large" color={'#2563EB'} />
             <Text style={styles.scanCardTitle}>Scanning Image</Text>
             <Text style={styles.scanCardMessage}>{scanMessage}</Text>
           </View>
@@ -299,9 +298,9 @@ export default function AddQuickCaptureScreen({
           style={styles.scanBtn}
         >
           {scanning ? (
-            <ActivityIndicator size="small" color={PLUM} />
+            <ActivityIndicator size="small" color={'#2563EB'} />
           ) : (
-            <Ionicons name="camera-outline" size={18} color={PLUM} />
+            <Ionicons name="camera-outline" size={18} color={'#2563EB'} />
           )}
           <Text style={styles.scanBtnText}>
             {scanning ? 'Scanning...' : 'Scan to Fill'}
@@ -412,7 +411,7 @@ export default function AddQuickCaptureScreen({
               <Ionicons
                 name={realtorId ? 'person-circle' : 'person-add-outline'}
                 size={20}
-                color={realtorId ? PLUM : '#9CA3AF'}
+                color={realtorId ? '#2563EB' : '#9CA3AF'}
               />
               <Text
                 style={[
@@ -492,7 +491,7 @@ export default function AddQuickCaptureScreen({
   );
 }
 
-const styles = themedStyles({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
@@ -504,7 +503,7 @@ const styles = themedStyles({
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: 16,
     paddingHorizontal: 16,
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },
@@ -526,7 +525,7 @@ const styles = themedStyles({
   scanBtnText: {
     fontSize: 13,
     fontWeight: '700',
-    color: PLUM,
+    color: '#2563EB',
   },
   scanOverlay: {
     flex: 1,
@@ -635,8 +634,8 @@ const styles = themedStyles({
     alignItems: 'center',
   },
   segmentedBtnActive: {
-    backgroundColor: PLUM,
-    borderColor: PLUM,
+    backgroundColor: INK,
+    borderColor: INK,
   },
   segmentedText: {
     fontSize: 13,
@@ -678,7 +677,7 @@ const styles = themedStyles({
   },
   saveBtn: {
     flex: 1,
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: 'center',
@@ -687,7 +686,7 @@ const styles = themedStyles({
     gap: 8,
   },
   saveBtnDisabled: {
-    backgroundColor: '#A78BFA',
+    backgroundColor: '#93C5FD',
     opacity: 0.7,
   },
   saveText: {

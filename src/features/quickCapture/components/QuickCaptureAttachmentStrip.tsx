@@ -16,7 +16,6 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { QuickCaptureAttachment, LocalAttachment } from '../types';
-import { themedStyles } from '../../../brand/themedStyles';
 
 const THUMB_SIZE = 88;
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -65,7 +64,7 @@ export default function QuickCaptureAttachmentStrip({
         </Text>
         {editable && (
           <TouchableOpacity style={styles.addBtn} onPress={onAddPress}>
-            <Ionicons name="camera-outline" size={18} color="#7C3AED" />
+            <Ionicons name="camera-outline" size={18} color="#2563EB" />
             <Text style={styles.addBtnText}>Add Photo</Text>
           </TouchableOpacity>
         )}
@@ -158,7 +157,7 @@ export default function QuickCaptureAttachmentStrip({
   );
 }
 
-const styles = themedStyles({
+const styles = StyleSheet.create({
   container: {
     marginTop: 4,
   },
@@ -180,12 +179,12 @@ const styles = themedStyles({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#F3F7FE',
   },
   addBtnText: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#7C3AED',
+    color: '#2563EB',
   },
   emptyText: {
     fontSize: 13,

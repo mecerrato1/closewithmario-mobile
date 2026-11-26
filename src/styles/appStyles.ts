@@ -1,8 +1,7 @@
 import { StyleSheet, Platform } from 'react-native';
 import Constants from 'expo-constants';
-import { themedStyles } from '../brand/themedStyles';
 
-export const styles = themedStyles({
+export const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F5F7FA',
@@ -11,7 +10,7 @@ export const styles = themedStyles({
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: 20,
     paddingHorizontal: 20,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
     shadowColor: '#000',
@@ -84,7 +83,7 @@ export const styles = themedStyles({
   headerSubtitle: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#E9D5FF',
+    color: '#BFD3FB',
     marginTop: 2,
   },
   dashboardLeadListButton: {
@@ -107,7 +106,7 @@ export const styles = themedStyles({
   dashboardLeadListButtonText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#4C1D95',
+    color: '#0B1220',
   },
   signOutButton: {
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -155,7 +154,7 @@ export const styles = themedStyles({
     color: '#FFFFFF',
   },
   statNumberActive: {
-    color: '#7C3AED',
+    color: '#2563EB',
   },
   statLabel: {
     fontSize: 12,
@@ -164,7 +163,7 @@ export const styles = themedStyles({
     marginTop: 2, // Reduced margin since we have line height on number now
   },
   statLabelActive: {
-    color: '#7C3AED',
+    color: '#2563EB',
   },
   headerRow: {
     flexDirection: 'row',
@@ -237,8 +236,8 @@ export const styles = themedStyles({
     elevation: 2,
   },
   listTabActive: {
-    backgroundColor: '#4C1D95',
-    borderColor: '#4C1D95',
+    backgroundColor: '#0B1220',
+    borderColor: '#0B1220',
     shadowOpacity: 0.12,
   },
   listTabCount: {
@@ -256,7 +255,7 @@ export const styles = themedStyles({
     color: '#64748B',
   },
   listTabLabelActive: {
-    color: '#E9D5FF',
+    color: '#BFD3FB',
   },
   listSearchContainer: {
     flexDirection: 'row',
@@ -307,16 +306,16 @@ export const styles = themedStyles({
     paddingVertical: 9,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
+    borderColor: '#BFD3FB',
   },
   quickFilterChipActive: {
-    backgroundColor: '#6D28D9',
-    borderColor: '#6D28D9',
+    backgroundColor: '#1D4ED8',
+    borderColor: '#1D4ED8',
   },
   quickFilterChipText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#5B21B6',
+    color: '#0B1220',
   },
   quickFilterChipTextActive: {
     color: '#FFFFFF',
@@ -340,7 +339,7 @@ export const styles = themedStyles({
     shadowRadius: 12,
     elevation: 3,
     borderLeftWidth: 3,
-    borderLeftColor: '#7C3AED',
+    borderLeftColor: '#2563EB',
     borderWidth: 1,
   },
   leadHeader: {
@@ -451,7 +450,7 @@ export const styles = themedStyles({
   },
   leadLOText: {
     fontSize: 12,
-    color: '#7C3AED',
+    color: '#2563EB',
     fontWeight: '600',
     flex: 1,
   },
@@ -542,7 +541,7 @@ export const styles = themedStyles({
     borderRadius: 16,
     padding: 20,
     alignItems: 'center',
-    shadowColor: '#7C3AED',
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -568,7 +567,7 @@ export const styles = themedStyles({
     padding: 20,
     marginHorizontal: 16,
     marginTop: 16,
-    shadowColor: '#7C3AED',
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -589,7 +588,7 @@ export const styles = themedStyles({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
@@ -659,13 +658,13 @@ export const styles = themedStyles({
     padding: 4,
   },
   dashboardViewAllButton: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     borderRadius: 12,
     paddingVertical: 16,
     marginHorizontal: 16,
     marginTop: 24,
     alignItems: 'center',
-    shadowColor: '#7C3AED',
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -684,7 +683,7 @@ export const styles = themedStyles({
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: 16,
     paddingHorizontal: 20,
-    backgroundColor: '#4C1D95',
+    backgroundColor: '#0B1220',
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
     shadowColor: '#000',
@@ -693,7 +692,7 @@ export const styles = themedStyles({
     shadowRadius: 20,
     elevation: 12,
     borderBottomWidth: 1,
-    borderColor: 'rgba(196, 181, 253, 0.42)',
+    borderColor: 'rgba(191, 211, 251, 0.42)',
   },
   backButton: {
     width: 40,
@@ -724,7 +723,7 @@ export const styles = themedStyles({
   detailHeaderSubtitle: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#DDD6FE',
+    color: '#BFD3FB',
     marginTop: 2,
   },
   navButtons: {
@@ -1070,7 +1069,7 @@ export const styles = themedStyles({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#F3E8FF',
+    backgroundColor: '#E8F0FE',
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     marginBottom: 6,
@@ -1081,7 +1080,7 @@ export const styles = themedStyles({
   actionBarLabel: {
     fontSize: 11,
     fontWeight: '600' as const,
-    color: '#4C1D95',
+    color: '#0B1220',
     letterSpacing: 0.2,
   },
   actionBarLabelDisabled: {
@@ -1138,7 +1137,7 @@ export const styles = themedStyles({
     padding: 16,
     borderRadius: 18,
     backgroundColor: 'rgba(255, 255, 255, 0.9)',
-    shadowColor: '#7C3AED',
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
     shadowRadius: 18,
@@ -1286,9 +1285,9 @@ export const styles = themedStyles({
     flex: 1,
     paddingVertical: 12,
     borderRadius: 12,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     alignItems: 'center',
-    shadowColor: '#7C3AED',
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
@@ -1316,7 +1315,7 @@ export const styles = themedStyles({
     padding: 6,
     marginHorizontal: 16,
     marginBottom: 16,
-    shadowColor: '#7C3AED',
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -1330,8 +1329,8 @@ export const styles = themedStyles({
     backgroundColor: 'transparent',
   },
   tabActive: {
-    backgroundColor: '#7C3AED',
-    shadowColor: '#7C3AED',
+    backgroundColor: '#2563EB',
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
@@ -1449,7 +1448,7 @@ export const styles = themedStyles({
     color: '#1E293B',
   },
   statusPickerItemTextActive: {
-    color: '#7C3AED',
+    color: '#2563EB',
     fontWeight: '700',
   },
   statusPickerItemCount: {
@@ -1458,11 +1457,11 @@ export const styles = themedStyles({
     color: '#64748B',
   },
   statusPickerItemCountActive: {
-    color: '#A78BFA',
+    color: '#93C5FD',
   },
   statusPickerCheck: {
     fontSize: 18,
-    color: '#7C3AED',
+    color: '#2563EB',
     fontWeight: '700',
   },
   statusLORow: {
@@ -1770,7 +1769,7 @@ export const styles = themedStyles({
     fontStyle: 'italic',
   },
   viewAdButton: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 8,
@@ -1901,7 +1900,7 @@ export const styles = themedStyles({
     marginRight: 12,
   },
   toggleSwitchActive: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
   },
   toggleThumb: {
     width: 24,
@@ -1951,7 +1950,7 @@ export const styles = themedStyles({
     color: '#64748B',
   },
   teamTabTextActive: {
-    color: '#7C3AED',
+    color: '#2563EB',
   },
   teamActionsRow: {
     flexDirection: 'row',
@@ -1976,7 +1975,7 @@ export const styles = themedStyles({
     paddingVertical: 10,
   },
   addButton: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 12,
@@ -2107,8 +2106,8 @@ export const styles = themedStyles({
     alignItems: 'center',
   },
   teamCheckboxChecked: {
-    backgroundColor: '#7C3AED',
-    borderColor: '#7C3AED',
+    backgroundColor: '#2563EB',
+    borderColor: '#2563EB',
   },
   teamCheckboxCheck: {
     color: '#FFFFFF',
@@ -2150,7 +2149,7 @@ export const styles = themedStyles({
     fontWeight: '600',
   },
   teamSaveButton: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     paddingVertical: 10,
     paddingHorizontal: 20,
     borderRadius: 8,
@@ -2169,7 +2168,7 @@ export const styles = themedStyles({
     gap: 8,
   },
   teamManagementButton: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -2181,7 +2180,7 @@ export const styles = themedStyles({
   },
   // New Dashboard Styles
   newDashboardHeader: {
-    backgroundColor: '#4C1D95',
+    backgroundColor: '#0B1220',
     paddingTop: Platform.OS === 'ios' ? 54 : 42,
     paddingHorizontal: 18,
     paddingBottom: 16,
@@ -2296,12 +2295,12 @@ export const styles = themedStyles({
     fontWeight: '600',
   },
   newHeaderStatCardLarge: {
-    backgroundColor: 'rgba(91, 33, 182, 0.25)',
+    backgroundColor: 'rgba(11, 18, 32, 0.25)',
     borderRadius: 16,
     padding: 16,
     alignItems: 'center',
     borderWidth: 1.5,
-    borderColor: 'rgba(167, 139, 250, 0.4)',
+    borderColor: 'rgba(147, 197, 253, 0.4)',
   },
   newHeaderStatNumberLarge: {
     fontSize: 28,
@@ -2319,13 +2318,13 @@ export const styles = themedStyles({
     backgroundColor: '#F8FAFC',
   },
   newViewAllButton: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     marginHorizontal: 20,
     marginTop: 20,
     paddingVertical: 16,
     borderRadius: 16,
     alignItems: 'center',
-    shadowColor: '#7C3AED',
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -2379,7 +2378,7 @@ export const styles = themedStyles({
     paddingLeft: 8,
   },
   dashboardSectionLinkText: {
-    color: '#6366F1',
+    color: '#2563EB',
     fontWeight: '700',
     fontSize: 13,
   },
@@ -2623,7 +2622,7 @@ export const styles = themedStyles({
     backgroundColor: '#DCFCE7',
   },
   dashboardActionIconPurple: {
-    backgroundColor: '#F3E8FF',
+    backgroundColor: '#E8F0FE',
   },
   dashboardActionTitle: {
     fontSize: 14,
@@ -2712,13 +2711,13 @@ export const styles = themedStyles({
   },
   // Leads Header Styles
   leadsHeaderContainer: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: 20,
     paddingHorizontal: 20,
   },
   leadsSearchContainer: {
-    backgroundColor: 'rgba(91, 33, 182, 0.45)',
+    backgroundColor: 'rgba(11, 18, 32, 0.45)',
     marginTop: 8,
     marginBottom: 8,
     borderRadius: 24,
@@ -2836,7 +2835,7 @@ export const styles = themedStyles({
     color: '#64748B',
   },
   languageToggleTextActive: {
-    color: '#7C3AED',
+    color: '#2563EB',
   },
   templateList: {
     maxHeight: 500,
@@ -2852,7 +2851,7 @@ export const styles = themedStyles({
   templateName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#7C3AED',
+    color: '#2563EB',
     marginBottom: 8,
   },
   templatePreview: {
@@ -2888,7 +2887,7 @@ export const styles = themedStyles({
     marginBottom: 16,
   },
   backToTemplatesButtonText: {
-    color: '#7C3AED',
+    color: '#2563EB',
     fontSize: 15,
     fontWeight: '500',
   },
@@ -3018,11 +3017,11 @@ export const styles = themedStyles({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: '#7C3AED', // purple
+    backgroundColor: '#2563EB', // brand blue
     marginRight: 10,
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#7C3AED',
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
@@ -3045,10 +3044,10 @@ export const styles = themedStyles({
   voiceNotePreviewContainer: {
     marginTop: 12,
     padding: 12,
-    backgroundColor: '#F3E8FF',
+    backgroundColor: '#E8F0FE',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#DDD6FE',
+    borderColor: '#BFD3FB',
   },
   voiceNotePreviewRow: {
     flexDirection: 'row',
@@ -3063,7 +3062,7 @@ export const styles = themedStyles({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
-    shadowColor: '#7C3AED',
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
@@ -3073,7 +3072,7 @@ export const styles = themedStyles({
     flex: 1,
     fontSize: 14,
     fontWeight: '600',
-    color: '#6B21A8',
+    color: '#1D4ED8',
   },
   voiceNotePreviewActions: {
     flexDirection: 'row',
@@ -3103,7 +3102,7 @@ export const styles = themedStyles({
     justifyContent: 'center',
     paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     gap: 6,
   },
   voiceNoteSaveText: {
@@ -3125,7 +3124,7 @@ export const styles = themedStyles({
   voiceNoteButtonText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#4F46E5',
+    color: '#1D4ED8',
   },
   // Call Recording Button - More prominent style
   callRecordingButton: {
@@ -3136,15 +3135,15 @@ export const styles = themedStyles({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 12,
-    backgroundColor: '#7C3AED',
-    shadowColor: '#7C3AED',
+    backgroundColor: '#2563EB',
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 4,
   },
   callRecordingButtonActive: {
-    backgroundColor: '#6D28D9',
+    backgroundColor: '#1D4ED8',
   },
   callRecordingButtonText: {
     fontSize: 14,
@@ -3159,10 +3158,10 @@ export const styles = themedStyles({
     width: 54,
     height: 54,
     borderRadius: 27,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#7C3AED',
+    shadowColor: '#2563EB',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4,
     shadowRadius: 8,
@@ -3243,7 +3242,7 @@ export const styles = themedStyles({
     color: '#111827',
   },
   addLeadInputFocused: {
-    borderColor: '#7C3AED',
+    borderColor: '#2563EB',
     backgroundColor: '#FAFAFF',
   },
   addLeadTextArea: {
@@ -3264,20 +3263,20 @@ export const styles = themedStyles({
     fontSize: 15,
   },
   addLeadInfoBox: {
-    backgroundColor: '#F3E8FF',
+    backgroundColor: '#E8F0FE',
     borderWidth: 1,
-    borderColor: '#DDD6FE',
+    borderColor: '#BFD3FB',
     borderRadius: 10,
     padding: 12,
     marginTop: 8,
   },
   addLeadInfoText: {
     fontSize: 12,
-    color: '#6B21A8',
+    color: '#1D4ED8',
   },
   addLeadInfoSubtext: {
     fontSize: 11,
-    color: '#7C3AED',
+    color: '#2563EB',
     marginTop: 4,
   },
   addLeadError: {
@@ -3314,7 +3313,7 @@ export const styles = themedStyles({
   },
   addLeadSaveButton: {
     flex: 1,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: 'center',
@@ -3323,7 +3322,7 @@ export const styles = themedStyles({
     gap: 8,
   },
   addLeadSaveButtonDisabled: {
-    backgroundColor: '#A78BFA',
+    backgroundColor: '#93C5FD',
     opacity: 0.7,
   },
   addLeadSaveText: {
@@ -3403,7 +3402,7 @@ export const styles = themedStyles({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: 'rgba(124, 58, 237, 0.1)',
+    backgroundColor: 'rgba(37, 99, 235, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,

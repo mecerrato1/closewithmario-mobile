@@ -37,7 +37,6 @@ import {
   parseSmsVoiceSummary,
   type SmsMediaAttachment,
 } from '../lib/smsMedia';
-import { themedStyles } from '../brand/themedStyles';
 import { SEND_TIMEOUT_MESSAGE, useSendGuard } from '../features/messages/sendGuard';
 
 type SmsMessage = SmsHistoryMessage;
@@ -628,7 +627,7 @@ export function SmsMessaging({
           <View style={smsStyles.voiceInsightHeaderRow}>
             <ActivityIndicator
               size="small"
-              color={isOutbound ? '#FFFFFF' : '#7C3AED'}
+              color={isOutbound ? '#FFFFFF' : '#2563EB'}
             />
             <Text style={[smsStyles.voiceInsightTitle, { color: titleColor }]}>
               Transcribing this voice message...
@@ -688,7 +687,7 @@ export function SmsMessaging({
           <Ionicons
             name="sparkles-outline"
             size={16}
-            color={isOutbound ? '#FFFFFF' : '#7C3AED'}
+            color={isOutbound ? '#FFFFFF' : '#2563EB'}
           />
           <Text style={[smsStyles.voiceInsightTitle, { color: titleColor }]}>
             Voice note
@@ -808,7 +807,7 @@ export function SmsMessaging({
   if (loading) {
     return (
       <View style={smsStyles.loadingContainer}>
-        <ActivityIndicator size="large" color="#7C3AED" />
+        <ActivityIndicator size="large" color="#2563EB" />
         <Text style={smsStyles.loadingText}>Loading messages...</Text>
       </View>
     );
@@ -824,7 +823,7 @@ export function SmsMessaging({
       {showHeader ? (
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={smsStyles.header}>
-            <Ionicons name="chatbubbles" size={20} color="#7C3AED" />
+            <Ionicons name="chatbubbles" size={20} color="#2563EB" />
             <View style={smsStyles.headerInfo}>
               <Text style={smsStyles.headerName}>{leadName}</Text>
               <Text style={smsStyles.headerPhone}>
@@ -895,7 +894,7 @@ export function SmsMessaging({
               disabled={loadingOlder}
             >
               {loadingOlder ? (
-                <ActivityIndicator size="small" color="#7C3AED" />
+                <ActivityIndicator size="small" color="#2563EB" />
               ) : (
                 <Text style={smsStyles.loadOlderText}>Load older messages</Text>
               )}
@@ -984,7 +983,7 @@ export function SmsMessaging({
   );
 }
 
-const smsStyles = themedStyles({
+const smsStyles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC',
@@ -1073,10 +1072,10 @@ const smsStyles = themedStyles({
     paddingHorizontal: 14,
     marginBottom: 14,
     borderRadius: 18,
-    backgroundColor: '#EDE9FE',
+    backgroundColor: '#E8F0FE',
   },
   loadOlderText: {
-    color: '#7C3AED',
+    color: '#2563EB',
     fontSize: 13,
     fontWeight: '700',
   },
@@ -1096,7 +1095,7 @@ const smsStyles = themedStyles({
     borderRadius: 18,
   },
   outboundBubble: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     borderBottomRightRadius: 4,
   },
   inboundBubble: {
@@ -1162,7 +1161,7 @@ const smsStyles = themedStyles({
     backgroundColor: 'rgba(15, 23, 42, 0.55)',
   },
   outboundImageAttachmentOverlay: {
-    backgroundColor: 'rgba(76, 29, 149, 0.55)',
+    backgroundColor: 'rgba(11, 18, 32, 0.55)',
   },
   imageAttachmentOverlayText: {
     fontSize: 12,
@@ -1274,7 +1273,7 @@ const smsStyles = themedStyles({
     paddingVertical: 5,
   },
   inboundVoiceChip: {
-    backgroundColor: '#EDE9FE',
+    backgroundColor: '#E8F0FE',
   },
   outboundVoiceChip: {
     backgroundColor: 'rgba(255, 255, 255, 0.18)',
@@ -1284,7 +1283,7 @@ const smsStyles = themedStyles({
     fontWeight: '700',
   },
   inboundVoiceChipText: {
-    color: '#6D28D9',
+    color: '#1D4ED8',
   },
   outboundVoiceChipText: {
     color: '#FFFFFF',
@@ -1359,7 +1358,7 @@ const smsStyles = themedStyles({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     justifyContent: 'center',
     alignItems: 'center',
   },

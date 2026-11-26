@@ -10,12 +10,6 @@ import CalculatorTabScreen from './tabs/CalculatorTabScreen';
 import MessagesTabScreen from './tabs/MessagesTabScreen';
 import { getUserRole, type UserRole } from '../lib/roles';
 import { ACCOUNT_LOOKUP_ERROR_MESSAGE } from '../features/session/lookup';
-import { BrandProvider } from '../brand/BrandContext';
-import { getBrand, type BrandConfig } from '../brand/brands';
-import { setActiveBrand } from '../brand/themedStyles';
-import { fetchAccountBrand } from '../brand/fetchAccountBrand';
-import { authenticatedFetch } from '../lib/authenticatedFetch';
-import { API_BASE_URL } from '../lib/apiBaseUrl';
 
 interface AuthenticatedRootProps {
   session: Session;
@@ -49,19 +43,15 @@ export default function AuthenticatedRoot({
   const [pendingLeadNav, setPendingLeadNav] = useState<PendingLeadNavigation>(null);
   const [pendingCaptureId, setPendingCaptureId] = useState<PendingCaptureNavigation>(null);
   const [hasClickedLeadsTab, setHasClickedLeadsTab] = useState(false);
-  // Both stay null until the server has confirmed them for this account. A
-  // failed lookup is never turned into a default role or brand; private
-  // content waits for a confirmed answer.
+  // Stays null until the server has confirmed it for this account. A failed
+  // lookup is never turned into a default role; private content waits.
   const [userRole, setUserRole] = useState<UserRole | null>(null);
-  const [brand, setBrand] = useState<BrandConfig | null>(null);
   const [roleFailed, setRoleFailed] = useState(false);
   const [roleAttempt, setRoleAttempt] = useState(0);
 
   useEffect(() => {
     // Reset first so nothing from a previous account can render for this one.
-    setActiveBrand(null);
     setUserRole(null);
-    setBrand(null);
     setRoleFailed(false);
 
     const userId = session?.user?.id;
@@ -72,25 +62,15 @@ export default function AuthenticatedRoot({
     }
 
     const controller = new AbortController();
-    Promise.all([
-      getUserRole(userId, email),
-      fetchAccountBrand({ request: authenticatedFetch, baseUrl: API_BASE_URL }, controller.signal),
-    ])
-      .then(([role, brandId]) => {
-        if (controller.signal.aborted) return;
-        // Active brand is set before the content that reads it is rendered.
-        setActiveBrand(brandId);
-        setUserRole(role);
-        setBrand(getBrand(brandId));
+    getUserRole(userId, email)
+      .then((role) => {
+        if (!controller.signal.aborted) setUserRole(role);
       })
       .catch(() => {
         if (!controller.signal.aborted) setRoleFailed(true);
       });
 
-    return () => {
-      controller.abort();
-      setActiveBrand(null);
-    };
+    return () => controller.abort();
   }, [session?.user?.id, session?.user?.email, roleAttempt]);
 
   useEffect(() => {
@@ -99,7 +79,7 @@ export default function AuthenticatedRoot({
     }
   }, [notificationLead]);
 
-  if (userRole === null || brand === null) {
+  if (userRole === null) {
     return (
       <View style={styles.gate}>
         {roleFailed ? (
@@ -219,12 +199,10 @@ export default function AuthenticatedRoot({
   };
 
   return (
-    <BrandProvider brand={brand}>
-      <View style={styles.container}>
-        <View style={styles.content}>{renderContent()}</View>
-        <BottomTabs activeTab={activeTab} onTabChange={handleTabChange} userRole={userRole} />
-      </View>
-    </BrandProvider>
+    <View style={styles.container}>
+      <View style={styles.content}>{renderContent()}</View>
+      <BottomTabs activeTab={activeTab} onTabChange={handleTabChange} userRole={userRole} />
+    </View>
   );
 }
 

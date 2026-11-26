@@ -8,7 +8,6 @@ import QuickCapturesListScreen from './screens/QuickCapturesListScreen';
 import AddQuickCaptureScreen from './screens/AddQuickCaptureScreen';
 import QuickCaptureDetailScreen from './screens/QuickCaptureDetailScreen';
 import type { QuickCapture } from './types';
-import { themedStyles } from '../../brand/themedStyles';
 
 type ScreenState =
   | { screen: 'list' }
@@ -102,7 +101,7 @@ export default function QuickCaptureTab({
   );
 }
 
-const styles = themedStyles({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
   },

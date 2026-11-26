@@ -20,7 +20,6 @@ import { supabase } from '../lib/supabase';
 import { fetchMetaAdsLibrary, type MetaAdLibraryItem } from '../lib/supabase/metaAdsLibrary';
 import type { UserRole } from '../lib/roles';
 import { useThemeColors } from '../styles/theme';
-import { themedStyles } from '../brand/themedStyles';
 
 type PlatformFilter = 'all' | 'facebook' | 'instagram' | 'other';
 
@@ -30,7 +29,7 @@ type Props = {
   userRole: UserRole;
 };
 
-const PLUM = '#4C1D95';
+const INK = '#0B1220';
 const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || 'https://www.closewithmario.com').replace(/\/$/, '');
 
 type MetaAdPreviewThumbnailResponse = {
@@ -328,7 +327,7 @@ export default function AdsLibraryScreen({ session, onBack, userRole }: Props) {
             {imageSource ? (
               <Image source={imageSource} style={localStyles.thumbnailImage} resizeMode="cover" />
             ) : thumbnailLoading ? (
-              <ActivityIndicator size="small" color={PLUM} />
+              <ActivityIndicator size="small" color={'#2563EB'} />
             ) : (
               <Ionicons name="image-outline" size={28} color={isDark ? '#94A3B8' : '#64748B'} />
             )}
@@ -485,8 +484,8 @@ export default function AdsLibraryScreen({ session, onBack, userRole }: Props) {
                     style={[
                       localStyles.filterChip,
                       {
-                        backgroundColor: active ? PLUM : colors.cardBackground,
-                        borderColor: active ? PLUM : colors.border,
+                        backgroundColor: active ? INK : colors.cardBackground,
+                        borderColor: active ? INK : colors.border,
                       },
                     ]}
                     onPress={() => setPlatformFilter(filter.key)}
@@ -502,7 +501,7 @@ export default function AdsLibraryScreen({ session, onBack, userRole }: Props) {
 
           {loading ? (
             <View style={localStyles.centerState}>
-              <ActivityIndicator size="large" color={PLUM} />
+              <ActivityIndicator size="large" color={'#2563EB'} />
               <Text style={[localStyles.centerText, { color: colors.textSecondary }]}>Loading ads...</Text>
             </View>
           ) : errorMessage ? (
@@ -526,7 +525,7 @@ export default function AdsLibraryScreen({ session, onBack, userRole }: Props) {
                 filteredAds.length === 0 && localStyles.emptyListContent,
               ]}
               refreshControl={
-                <RefreshControl refreshing={refreshing} onRefresh={() => loadAds(true)} tintColor={PLUM} />
+                <RefreshControl refreshing={refreshing} onRefresh={() => loadAds(true)} tintColor={INK} />
               }
               ListEmptyComponent={
                 <View style={localStyles.centerState}>
@@ -558,12 +557,12 @@ export default function AdsLibraryScreen({ session, onBack, userRole }: Props) {
   );
 }
 
-const localStyles = themedStyles({
+const localStyles = StyleSheet.create({
   container: {
     flex: 1,
   },
   header: {
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     paddingTop: 54,
     paddingHorizontal: 18,
     paddingBottom: 18,
@@ -609,7 +608,7 @@ const localStyles = themedStyles({
     lineHeight: 30,
   },
   statLabel: {
-    color: '#DDD6FE',
+    color: '#BFD3FB',
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -765,13 +764,13 @@ const localStyles = themedStyles({
     gap: 8,
   },
   platformBadge: {
-    backgroundColor: '#EDE9FE',
+    backgroundColor: '#E8F0FE',
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 12,
   },
   platformBadgeText: {
-    color: PLUM,
+    color: '#2563EB',
     fontSize: 11,
     fontWeight: '800',
   },
@@ -794,7 +793,7 @@ const localStyles = themedStyles({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     borderRadius: 10,
     paddingHorizontal: 13,
     paddingVertical: 9,
@@ -825,7 +824,7 @@ const localStyles = themedStyles({
   },
   retryButton: {
     marginTop: 16,
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     borderRadius: 10,
     paddingHorizontal: 18,
     paddingVertical: 10,

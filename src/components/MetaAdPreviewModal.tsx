@@ -17,7 +17,6 @@ import { Audio, InterruptionModeIOS, ResizeMode, Video, type AVPlaybackStatus } 
 import { WebView } from 'react-native-webview';
 import { supabase } from '../lib/supabase';
 import { useThemeColors } from '../styles/theme';
-import { themedStyles } from '../brand/themedStyles';
 
 const API_BASE_URL = (process.env.EXPO_PUBLIC_API_BASE_URL || 'https://www.closewithmario.com').replace(/\/$/, '');
 
@@ -481,7 +480,7 @@ export function MetaAdPreviewModal({
                     style={[
                       modalStyles.tab,
                       viewMode === tab.key
-                        ? { backgroundColor: PLUM }
+                        ? { backgroundColor: INK }
                         : { backgroundColor: isDark ? '#1E293B' : '#F3F4F6' },
                     ]}
                     onPress={() => setViewMode(tab.key)}
@@ -518,7 +517,7 @@ export function MetaAdPreviewModal({
 
               {loading ? (
                 <View style={modalStyles.loadingWrap}>
-                  <ActivityIndicator size="large" color={PLUM} />
+                  <ActivityIndicator size="large" color={'#2563EB'} />
                   <Text style={[modalStyles.loadingText, { color: colors.textSecondary }]}>
                     Loading Meta ad preview...
                   </Text>
@@ -911,9 +910,9 @@ export function MetaAdPreviewModal({
   );
 }
 
-const PLUM = '#4C1D95';
+const INK = '#0B1220';
 
-const modalStyles = themedStyles({
+const modalStyles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(2, 6, 23, 0.88)',
@@ -1060,7 +1059,7 @@ const modalStyles = themedStyles({
   },
   videoPlayIcon: {
     fontSize: 32,
-    color: PLUM,
+    color: '#2563EB',
     marginLeft: 4,
     fontWeight: '700',
   },

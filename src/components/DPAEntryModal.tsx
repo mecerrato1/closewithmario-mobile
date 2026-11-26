@@ -23,7 +23,6 @@ import {
   generateDPAId,
 } from '../utils/dpaTypes';
 import { calculateDPAAmount, calculateDPAPayment } from '../utils/dpaCalculations';
-import { themedStyles } from '../brand/themedStyles';
 
 interface DPAEntryModalProps {
   visible: boolean;
@@ -186,7 +185,7 @@ export default function DPAEntryModal({
     onClose();
   };
 
-  const styles = themedStyles({
+  const styles = StyleSheet.create({
     modalOverlay: {
       flex: 1,
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -263,8 +262,8 @@ export default function DPAEntryModal({
       backgroundColor: isDark ? '#1F2937' : '#F8FAFC',
     },
     radioButtonActive: {
-      backgroundColor: '#7C3AED',
-      borderColor: '#7C3AED',
+      backgroundColor: '#2563EB',
+      borderColor: '#2563EB',
     },
     radioButtonText: {
       fontSize: 14,
@@ -279,12 +278,12 @@ export default function DPAEntryModal({
       borderRadius: 10,
       padding: 14,
       borderWidth: 1,
-      borderColor: '#7C3AED',
+      borderColor: '#2563EB',
     },
     calculatedValueText: {
       fontSize: 18,
       fontWeight: '700',
-      color: '#7C3AED',
+      color: '#2563EB',
       textAlign: 'right',
     },
     row: {
@@ -295,7 +294,7 @@ export default function DPAEntryModal({
       flex: 1,
     },
     saveButton: {
-      backgroundColor: '#7C3AED',
+      backgroundColor: '#2563EB',
       borderRadius: 12,
       paddingVertical: 16,
       alignItems: 'center',

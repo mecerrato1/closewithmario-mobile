@@ -430,8 +430,8 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
                         </View>
                       )}
                       {r.ai_draft_access && (
-                        <View style={{ backgroundColor: '#F3E8FF', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
-                          <Text style={{ fontSize: 11, color: '#7C3AED' }}>AI Drafts</Text>
+                        <View style={{ backgroundColor: '#E8F0FE', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 }}>
+                          <Text style={{ fontSize: 11, color: '#2563EB' }}>AI Drafts</Text>
                         </View>
                       )}
                       {r.preferred_language && r.preferred_language !== 'en' && (
@@ -615,7 +615,7 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
                                         paddingVertical: 10,
                                         borderBottomWidth: 0.5,
                                         borderBottomColor: '#F1F5F9',
-                                        backgroundColor: isSelected ? '#F5F3FF' : '#FFFFFF',
+                                        backgroundColor: isSelected ? '#F3F7FE' : '#FFFFFF',
                                       }}
                                     >
                                       <View style={{
@@ -623,8 +623,8 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
                                         height: 20,
                                         borderRadius: 4,
                                         borderWidth: 1.5,
-                                        borderColor: isSelected ? '#6D28D9' : '#CBD5E1',
-                                        backgroundColor: isSelected ? '#6D28D9' : '#FFFFFF',
+                                        borderColor: isSelected ? '#1D4ED8' : '#CBD5E1',
+                                        backgroundColor: isSelected ? '#1D4ED8' : '#FFFFFF',
                                         alignItems: 'center',
                                         justifyContent: 'center',
                                         marginRight: 10,
@@ -665,14 +665,14 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
                               paddingVertical: 8,
                               borderRadius: 8,
                               borderWidth: 1.5,
-                              borderColor: formData.preferred_language === lang.value ? '#6D28D9' : '#E2E8F0',
-                              backgroundColor: formData.preferred_language === lang.value ? '#F5F3FF' : '#FFFFFF',
+                              borderColor: formData.preferred_language === lang.value ? '#1D4ED8' : '#E2E8F0',
+                              backgroundColor: formData.preferred_language === lang.value ? '#F3F7FE' : '#FFFFFF',
                             }}
                           >
                             <Text style={{
                               fontSize: 13,
                               fontWeight: formData.preferred_language === lang.value ? '600' : '400',
-                              color: formData.preferred_language === lang.value ? '#6D28D9' : '#475569',
+                              color: formData.preferred_language === lang.value ? '#1D4ED8' : '#475569',
                             }}>
                               {lang.label}
                             </Text>
@@ -689,14 +689,14 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
                             paddingVertical: 8,
                             borderRadius: 8,
                             borderWidth: 1.5,
-                            borderColor: !formData.secondary_language ? '#6D28D9' : '#E2E8F0',
-                            backgroundColor: !formData.secondary_language ? '#F5F3FF' : '#FFFFFF',
+                            borderColor: !formData.secondary_language ? '#1D4ED8' : '#E2E8F0',
+                            backgroundColor: !formData.secondary_language ? '#F3F7FE' : '#FFFFFF',
                           }}
                         >
                           <Text style={{
                             fontSize: 13,
                             fontWeight: !formData.secondary_language ? '600' : '400',
-                            color: !formData.secondary_language ? '#6D28D9' : '#475569',
+                            color: !formData.secondary_language ? '#1D4ED8' : '#475569',
                           }}>None</Text>
                         </TouchableOpacity>
                         {LANGUAGE_OPTIONS.filter(l => l.value !== formData.preferred_language).map((lang) => (
@@ -708,14 +708,14 @@ export default function TeamManagementScreen({ onBack, session }: TeamManagement
                               paddingVertical: 8,
                               borderRadius: 8,
                               borderWidth: 1.5,
-                              borderColor: formData.secondary_language === lang.value ? '#6D28D9' : '#E2E8F0',
-                              backgroundColor: formData.secondary_language === lang.value ? '#F5F3FF' : '#FFFFFF',
+                              borderColor: formData.secondary_language === lang.value ? '#1D4ED8' : '#E2E8F0',
+                              backgroundColor: formData.secondary_language === lang.value ? '#F3F7FE' : '#FFFFFF',
                             }}
                           >
                             <Text style={{
                               fontSize: 13,
                               fontWeight: formData.secondary_language === lang.value ? '600' : '400',
-                              color: formData.secondary_language === lang.value ? '#6D28D9' : '#475569',
+                              color: formData.secondary_language === lang.value ? '#1D4ED8' : '#475569',
                             }}>
                               {lang.label}
                             </Text>

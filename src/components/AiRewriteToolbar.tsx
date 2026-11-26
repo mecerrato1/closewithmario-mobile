@@ -10,7 +10,6 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { callRewriteApi } from '../lib/aiRewriteService';
-import { themedStyles } from '../brand/themedStyles';
 
 export type AiTone = 'professional' | 'friendly' | 'concise' | 'detailed' | 'urgent';
 
@@ -120,7 +119,7 @@ export const AiRewriteToolbar = forwardRef<AiRewriteToolbarRef, AiRewriteToolbar
     <View>
       {rewrittenByAi && (
         <View style={s.badge}>
-          <Ionicons name="sparkles" size={12} color="#7C3AED" />
+          <Ionicons name="sparkles" size={12} color="#2563EB" />
           <Text style={s.badgeText}>Rewritten by AI</Text>
         </View>
       )}
@@ -181,7 +180,7 @@ export const AiRewriteToolbar = forwardRef<AiRewriteToolbarRef, AiRewriteToolbar
             <TextInput
               style={s.refineInput}
               placeholder='e.g. "make it more urgent"'
-              placeholderTextColor="#A78BFA"
+              placeholderTextColor="#93C5FD"
               value={refineInput}
               onChangeText={setRefineInput}
               onSubmitEditing={handleRefine}
@@ -211,7 +210,7 @@ export const AiRewriteToolbar = forwardRef<AiRewriteToolbarRef, AiRewriteToolbar
   );
 });
 
-const s = themedStyles({
+const s = StyleSheet.create({
   container: {
     marginTop: 12,
     marginBottom: 16,
@@ -225,7 +224,7 @@ const s = themedStyles({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#F3E8FF',
+    backgroundColor: '#E8F0FE',
     paddingHorizontal: 12,
     paddingVertical: 9,
     borderRadius: 20,
@@ -233,11 +232,11 @@ const s = themedStyles({
   toneDropdownText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#7C3AED',
+    color: '#2563EB',
   },
   toneDropdownArrow: {
     fontSize: 8,
-    color: '#7C3AED',
+    color: '#2563EB',
   },
   tonePickerList: {
     marginTop: 8,
@@ -253,19 +252,19 @@ const s = themedStyles({
     paddingVertical: 10,
   },
   tonePickerItemActive: {
-    backgroundColor: '#EDE9FE',
+    backgroundColor: '#E8F0FE',
   },
   tonePickerItemText: {
     fontSize: 14,
     color: '#4B5563',
   },
   tonePickerItemTextActive: {
-    color: '#7C3AED',
+    color: '#2563EB',
     fontWeight: '600',
   },
   tonePickerCheck: {
     fontSize: 14,
-    color: '#7C3AED',
+    color: '#2563EB',
     fontWeight: '700',
   },
   rewriteButton: {
@@ -274,7 +273,7 @@ const s = themedStyles({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     paddingVertical: 9,
     borderRadius: 20,
   },
@@ -298,7 +297,7 @@ const s = themedStyles({
   },
   badgeText: {
     fontSize: 12,
-    color: '#7C3AED',
+    color: '#2563EB',
     fontWeight: '500',
   },
   refineContainer: {
@@ -318,13 +317,13 @@ const s = themedStyles({
     fontSize: 13,
     color: '#4B5563',
     borderWidth: 1,
-    borderColor: '#E9D5FF',
+    borderColor: '#BFD3FB',
   },
   refineButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#8B5CF6',
+    backgroundColor: '#3B82F6',
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: 20,

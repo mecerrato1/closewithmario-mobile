@@ -15,7 +15,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useQuickCaptures } from '../hooks/useQuickCaptures';
 import type { QuickCapture, QuickCaptureStatus } from '../types';
-import { themedStyles } from '../../../brand/themedStyles';
 
 interface QuickCapturesListScreenProps {
   onCapturePress: (capture: QuickCapture) => void;
@@ -23,7 +22,7 @@ interface QuickCapturesListScreenProps {
   onBack: () => void;
 }
 
-const PLUM = '#4C1D95';
+const INK = '#0B1220';
 
 const STATUS_FILTERS: { key: QuickCaptureStatus | 'all'; label: string }[] = [
   { key: 'open', label: 'Open' },
@@ -51,7 +50,7 @@ function getStatusColor(status: QuickCaptureStatus): string {
     case 'open':
       return '#059669';
     case 'converted':
-      return PLUM;
+      return INK;
     case 'archived':
       return '#6B7280';
     default:
@@ -112,7 +111,7 @@ export default function QuickCapturesListScreen({
             ) : null}
             {realtorLabel && (
               <View style={styles.realtorChip}>
-                <Ionicons name="person-outline" size={12} color={PLUM} />
+                <Ionicons name="person-outline" size={12} color={'#2563EB'} />
                 <Text style={styles.realtorChipText} numberOfLines={1}>
                   {realtorLabel}
                 </Text>
@@ -252,7 +251,7 @@ export default function QuickCapturesListScreen({
       {/* List */}
       {loading && !refreshing ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator size="large" color={PLUM} />
+          <ActivityIndicator size="large" color={'#2563EB'} />
           <Text style={styles.loadingText}>Loading captures...</Text>
         </View>
       ) : (
@@ -268,8 +267,8 @@ export default function QuickCapturesListScreen({
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={PLUM}
-              colors={[PLUM]}
+              tintColor="#2563EB"
+              colors={['#2563EB']}
             />
           }
           showsVerticalScrollIndicator={false}
@@ -279,7 +278,7 @@ export default function QuickCapturesListScreen({
   );
 }
 
-const styles = themedStyles({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F9FAFB',
@@ -288,7 +287,7 @@ const styles = themedStyles({
     paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: 16,
     paddingHorizontal: 16,
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },
@@ -359,7 +358,7 @@ const styles = themedStyles({
     backgroundColor: '#F3F4F6',
   },
   filterChipActive: {
-    backgroundColor: PLUM,
+    backgroundColor: INK,
   },
   filterChipText: {
     fontSize: 13,
@@ -405,7 +404,7 @@ const styles = themedStyles({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -435,7 +434,7 @@ const styles = themedStyles({
   },
   realtorChipText: {
     fontSize: 12,
-    color: PLUM,
+    color: '#2563EB',
     fontWeight: '500',
   },
   cardRight: {
@@ -491,7 +490,7 @@ const styles = themedStyles({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 24,

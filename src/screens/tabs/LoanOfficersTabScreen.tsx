@@ -16,7 +16,6 @@ import { Session } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import { useThemeColors } from '../../styles/theme';
 import { saveContact } from '../../utils/vcard';
-import { themedStyles } from '../../brand/themedStyles';
 
 interface AssignedLO {
   id: string;
@@ -177,7 +176,7 @@ export default function LoanOfficersTabScreen({ session, onClose }: LoanOfficers
   if (loading) {
     return (
       <View style={[styles.container, styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator size="large" color="#7C3AED" />
+        <ActivityIndicator size="large" color="#2563EB" />
         <Text style={[styles.loadingText, { color: colors.textSecondary }]}>Loading loan officers...</Text>
       </View>
     );
@@ -205,7 +204,7 @@ export default function LoanOfficersTabScreen({ session, onClose }: LoanOfficers
           renderItem={renderLO}
           contentContainerStyle={styles.listContent}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#7C3AED" />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#2563EB" />
           }
         />
       )}
@@ -213,7 +212,7 @@ export default function LoanOfficersTabScreen({ session, onClose }: LoanOfficers
   );
 }
 
-const styles = themedStyles({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -255,7 +254,7 @@ const styles = themedStyles({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -306,7 +305,7 @@ const styles = themedStyles({
     borderRadius: 8,
   },
   actionButtonText: {
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
   },
   actionButtonEmail: {
     backgroundColor: '#3B82F6',

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Image, Text, View, StyleSheet } from 'react-native';
+import { Text, View, StyleSheet } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
 import type { BrandConfig } from './brands';
 
@@ -18,17 +18,6 @@ type Props = { brand: BrandConfig; size?: 'large' | 'small'; tone?: 'onLight' | 
 
 export default function BrandLogo({ brand, size = 'large', tone = 'onLight' }: Props) {
   const large = size === 'large';
-  if (brand.id === 'close-with-mario') {
-    return (
-      <Image
-        accessibilityLabel={brand.displayName}
-        source={require('../../assets/CWMLogo.png')}
-        style={large ? styles.cwmLarge : styles.cwmSmall}
-        resizeMode="contain"
-      />
-    );
-  }
-
   const textColor = tone === 'onDark' ? '#FFFFFF' : brand.colors.textPrimary;
   const center = tone === 'onDark' ? '#FFFFFF' : brand.colors.primary;
   return (
@@ -59,6 +48,4 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   rowLarge: { flexDirection: 'column', gap: 12 },
   wordmark: { fontWeight: '700', letterSpacing: 0.3 },
-  cwmLarge: { width: 108, height: 108 },
-  cwmSmall: { width: 120, height: 40 },
 });

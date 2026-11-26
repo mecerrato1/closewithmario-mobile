@@ -22,9 +22,8 @@ import {
   type ApprovalRecipeLeadSource,
   type ApprovalRecipeRow,
 } from '../lib/types/approvalRecipe';
-import { themedStyles } from '../brand/themedStyles';
 
-const PLUM = '#4C1D95';
+const INK = '#0B1220';
 
 type ApprovalRecipeSectionProps = {
   leadId: string;
@@ -421,7 +420,7 @@ export function ApprovalRecipeSection({ leadId, leadSource }: ApprovalRecipeSect
       {isExpanded ? (
         <View style={localStyles.body}>
           {loading ? (
-            <ActivityIndicator size="small" color={PLUM} />
+            <ActivityIndicator size="small" color={'#2563EB'} />
           ) : editing ? (
             <>
               <View style={localStyles.formGrid}>
@@ -625,13 +624,13 @@ export function ApprovalRecipeSection({ leadId, leadSource }: ApprovalRecipeSect
                   activeOpacity={0.75}
                 >
                   <View style={localStyles.findingsTextWrap}>
-                    <Ionicons name="document-text-outline" size={16} color={PLUM} />
+                    <Ionicons name="document-text-outline" size={16} color={'#2563EB'} />
                     <Text style={localStyles.findingsText} numberOfLines={1}>
                       Open AUS Findings
                     </Text>
                   </View>
                   {openingFile ? (
-                    <ActivityIndicator size="small" color={PLUM} />
+                    <ActivityIndicator size="small" color={'#2563EB'} />
                   ) : (
                     <Text style={[localStyles.findingsMeta, { color: colors.textSecondary }]} numberOfLines={1}>
                       {getPdfName(recipe)}
@@ -671,7 +670,7 @@ export function ApprovalRecipeSection({ leadId, leadSource }: ApprovalRecipeSect
   );
 }
 
-const localStyles = themedStyles({
+const localStyles = StyleSheet.create({
   container: {
     borderWidth: 1,
     borderRadius: 12,
@@ -825,7 +824,7 @@ const localStyles = themedStyles({
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#F3F7FE',
   },
   findingsTextWrap: {
     flexDirection: 'row',
@@ -835,7 +834,7 @@ const localStyles = themedStyles({
     minWidth: 0,
   },
   findingsText: {
-    color: PLUM,
+    color: '#2563EB',
     fontSize: 13,
     fontWeight: '800',
   },
@@ -892,7 +891,7 @@ const localStyles = themedStyles({
     justifyContent: 'center',
     gap: 6,
     borderRadius: 9,
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     paddingHorizontal: 14,
     paddingVertical: 9,
   },

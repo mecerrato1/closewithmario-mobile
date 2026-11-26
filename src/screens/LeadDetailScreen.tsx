@@ -68,10 +68,9 @@ import {
 } from '../features/leads/crmLeadApi';
 import { useLeadActivityBodies } from '../features/leads/useLeadActivityBodies';
 import { searchActiveRealtors } from '../lib/supabase/leadRealtorRoles';
-import { themedStyles } from '../brand/themedStyles';
 import { PARTNER_UPDATE_TIMEOUT_MESSAGE, useSendGuard } from '../features/messages/sendGuard';
 
-const PLUM = '#4C1D95';
+const INK = '#0B1220';
 const CRM_API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_BASE_URL || 'https://www.closewithmario.com'
 ).replace(/\/$/, '');
@@ -3425,9 +3424,9 @@ export function LeadDetailView({
               disabled={loadingScenarios}
             >
               {loadingScenarios ? (
-                <ActivityIndicator size="small" color={PLUM} />
+                <ActivityIndicator size="small" color={'#2563EB'} />
               ) : (
-                <Ionicons name="refresh" size={16} color={PLUM} />
+                <Ionicons name="refresh" size={16} color={'#2563EB'} />
               )}
             </TouchableOpacity>
           </View>,
@@ -3546,7 +3545,7 @@ export function LeadDetailView({
 
             {loadingScenarios && leadScenarios.length === 0 ? (
               <View style={scenarioShareStyles.emptyBox}>
-                <ActivityIndicator size="small" color={PLUM} />
+                <ActivityIndicator size="small" color={'#2563EB'} />
                 <Text style={[scenarioShareStyles.emptyText, { color: colors.textSecondary }]}>
                   Loading saved scenarios...
                 </Text>
@@ -3739,7 +3738,7 @@ export function LeadDetailView({
                       onPress={() => showScenarioRecipientActions(scenario, 'borrower')}
                       disabled={scenarioActionKey !== null}
                     >
-                      <Ionicons name="person-outline" size={14} color={PLUM} />
+                      <Ionicons name="person-outline" size={14} color={'#2563EB'} />
                       <Text style={scenarioShareStyles.borrowerButtonText}>
                         {borrowerLink ? 'Buyer Link' : 'Share Buyer'}
                       </Text>
@@ -3945,7 +3944,7 @@ export function LeadDetailView({
           disabled={!isMobileSectionCollapseEnabled}
         >
           <View style={collapsibleSectionStyles.headerTitleRow}>
-            <Ionicons name={iconName} size={17} color={PLUM} />
+            <Ionicons name={iconName} size={17} color={'#2563EB'} />
             <Text style={[collapsibleSectionStyles.headerTitle, { color: colors.textPrimary }]}>
               {title}
             </Text>
@@ -4180,14 +4179,14 @@ export function LeadDetailView({
           </Text>
           {cb.phone ? (
             <TouchableOpacity onPress={() => Linking.openURL(`tel:${cb.phone}`)} style={styles.coBorrowerRow}>
-              <Ionicons name="call-outline" size={14} color={PLUM} style={{ marginRight: 6 }} />
-              <Text style={[styles.coBorrowerLink, { color: PLUM }]}>{formatPhoneNumber(cb.phone)}</Text>
+              <Ionicons name="call-outline" size={14} color={'#2563EB'} style={{ marginRight: 6 }} />
+              <Text style={[styles.coBorrowerLink, { color: '#2563EB' }]}>{formatPhoneNumber(cb.phone)}</Text>
             </TouchableOpacity>
           ) : null}
           {cb.email ? (
             <TouchableOpacity onPress={() => Linking.openURL(`mailto:${cb.email}`)} style={styles.coBorrowerRow}>
-              <Ionicons name="mail-outline" size={14} color={PLUM} style={{ marginRight: 6 }} />
-              <Text style={[styles.coBorrowerLink, { color: PLUM }]}>{cb.email}</Text>
+              <Ionicons name="mail-outline" size={14} color={'#2563EB'} style={{ marginRight: 6 }} />
+              <Text style={[styles.coBorrowerLink, { color: '#2563EB' }]}>{cb.email}</Text>
             </TouchableOpacity>
           ) : null}
           {cb.employer_name ? (
@@ -5958,14 +5957,14 @@ export function LeadDetailView({
         </View>
         <View style={styles.centerContent}>
           {detailLoad.loading ? (
-            <ActivityIndicator size="large" color={PLUM} />
+            <ActivityIndicator size="large" color={'#2563EB'} />
           ) : (
             <>
               <Text style={{ color: colors.textPrimary, textAlign: 'center' }}>
                 {detailLoad.error || 'We could not load this lead.'}
               </Text>
               <TouchableOpacity
-                style={{ marginTop: 16, borderRadius: 10, backgroundColor: PLUM, paddingHorizontal: 18, paddingVertical: 10 }}
+                style={{ marginTop: 16, borderRadius: 10, backgroundColor: INK, paddingHorizontal: 18, paddingVertical: 10 }}
                 onPress={() => void detailLoad.retry()}
               >
                 <Text style={{ color: '#FFFFFF', fontWeight: '700' }}>Retry</Text>
@@ -6124,7 +6123,7 @@ export function LeadDetailView({
                     {idx > 0 && (
                       <View style={[
                         styles.pipelineLine,
-                        { backgroundColor: isCompleted ? (STATUS_COLOR_MAP[PIPELINE_STAGES[idx - 1].key]?.text || PLUM) : (isDark ? '#334155' : '#E2E8F0') },
+                        { backgroundColor: isCompleted ? (STATUS_COLOR_MAP[PIPELINE_STAGES[idx - 1].key]?.text || INK) : (isDark ? '#334155' : '#E2E8F0') },
                       ]} />
                     )}
                     <TouchableOpacity
@@ -6177,7 +6176,7 @@ export function LeadDetailView({
           activeOpacity={0.7}
         >
           <View style={[styles.actionBarIcon, !hasCallableContacts && styles.actionBarIconDisabled]}>
-            <Ionicons name="call-outline" size={20} color={hasCallableContacts ? PLUM : '#94A3B8'} />
+            <Ionicons name="call-outline" size={20} color={hasCallableContacts ? '#2563EB' : '#94A3B8'} />
           </View>
           <Text style={[styles.actionBarLabel, !hasCallableContacts && styles.actionBarLabelDisabled]}>Call</Text>
         </TouchableOpacity>
@@ -6188,7 +6187,7 @@ export function LeadDetailView({
           activeOpacity={0.7}
         >
           <View style={[styles.actionBarIcon, !phone && styles.actionBarIconDisabled]}>
-            <Ionicons name="chatbubble-outline" size={20} color={phone ? PLUM : '#94A3B8'} />
+            <Ionicons name="chatbubble-outline" size={20} color={phone ? '#2563EB' : '#94A3B8'} />
           </View>
           <Text style={[styles.actionBarLabel, !phone && styles.actionBarLabelDisabled]}>Text</Text>
         </TouchableOpacity>
@@ -6198,7 +6197,7 @@ export function LeadDetailView({
           activeOpacity={0.7}
         >
           <View style={styles.actionBarIcon}>
-            <Ionicons name="calendar-outline" size={20} color={PLUM} />
+            <Ionicons name="calendar-outline" size={20} color={'#2563EB'} />
           </View>
           <Text style={styles.actionBarLabel}>Schedule</Text>
         </TouchableOpacity>
@@ -6209,7 +6208,7 @@ export function LeadDetailView({
           activeOpacity={0.7}
         >
           <View style={[styles.actionBarIcon, !email && styles.actionBarIconDisabled]}>
-            <Ionicons name="mail-outline" size={20} color={email ? PLUM : '#94A3B8'} />
+            <Ionicons name="mail-outline" size={20} color={email ? '#2563EB' : '#94A3B8'} />
           </View>
           <Text style={[styles.actionBarLabel, !email && styles.actionBarLabelDisabled]}>Email</Text>
         </TouchableOpacity>
@@ -6220,7 +6219,7 @@ export function LeadDetailView({
           activeOpacity={0.7}
         >
           <View style={[styles.actionBarIcon, !hasSavableContacts && styles.actionBarIconDisabled]}>
-            <Ionicons name="person-add-outline" size={20} color={hasSavableContacts ? PLUM : '#94A3B8'} />
+            <Ionicons name="person-add-outline" size={20} color={hasSavableContacts ? '#2563EB' : '#94A3B8'} />
           </View>
           <Text style={[styles.actionBarLabel, !hasSavableContacts && styles.actionBarLabelDisabled]}>Save</Text>
         </TouchableOpacity>
@@ -6239,7 +6238,7 @@ export function LeadDetailView({
             <Ionicons
               name="information-circle-outline"
               size={18}
-              color={activeDetailTab === 'details' ? PLUM : '#64748B'}
+              color={activeDetailTab === 'details' ? '#2563EB' : '#64748B'}
             />
             <Text
               style={[
@@ -6266,7 +6265,7 @@ export function LeadDetailView({
               <Ionicons
                 name="chatbubbles-outline"
                 size={18}
-                color={activeDetailTab === 'messages' ? PLUM : '#64748B'}
+                color={activeDetailTab === 'messages' ? '#2563EB' : '#64748B'}
               />
               <Text
                 style={[
@@ -6307,7 +6306,7 @@ export function LeadDetailView({
               <Ionicons
                 name={metaDmTabIcon}
                 size={18}
-                color={activeDetailTab === 'dm' ? PLUM : '#64748B'}
+                color={activeDetailTab === 'dm' ? '#2563EB' : '#64748B'}
               />
               <Text
                 style={[
@@ -6445,17 +6444,17 @@ export function LeadDetailView({
                             setShowTemplateModal(true);
                           }}
                           activeOpacity={0.6}
-                          style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 18, backgroundColor: '#F3E8FF', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, marginTop: 2 }}
+                          style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 18, backgroundColor: '#E8F0FE', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 5, marginTop: 2 }}
                         >
-                          <Ionicons name="chatbubble-ellipses-outline" size={13} color="#6D28D9" style={{ marginRight: 5 }} />
-                          <Text style={{ fontSize: 12, color: '#6D28D9', fontWeight: '600', lineHeight: 17, flex: 1 }}>
+                          <Ionicons name="chatbubble-ellipses-outline" size={13} color="#1D4ED8" style={{ marginRight: 5 }} />
+                          <Text style={{ fontSize: 12, color: '#1D4ED8', fontWeight: '600', lineHeight: 17, flex: 1 }}>
                             Tap to send: {aiAttention.suggestedAction.replace(/^Send a text:\s*/i, '').replace(/^['"]|['"]$/g, '').substring(0, 60)}…
                           </Text>
                         </TouchableOpacity>
                       );
                     }
                     return (
-                      <Text style={{ fontSize: 12, color: '#6D28D9', fontWeight: '600', marginLeft: 18, lineHeight: 17 }}>
+                      <Text style={{ fontSize: 12, color: '#1D4ED8', fontWeight: '600', marginLeft: 18, lineHeight: 17 }}>
                         Suggested: {aiAttention.suggestedAction}
                       </Text>
                     );
@@ -6524,22 +6523,22 @@ export function LeadDetailView({
                   borderRadius: 12,
                   padding: 14,
                   borderWidth: 1,
-                  borderColor: '#E9D5FF',
+                  borderColor: '#BFD3FB',
                 }}
                 onPress={handleDocsReceived}
                 disabled={savingDocsReceived}
                 activeOpacity={0.7}
               >
-                <Ionicons name="checkmark-circle-outline" size={22} color={PLUM} style={{ marginRight: 10 }} />
+                <Ionicons name="checkmark-circle-outline" size={22} color={'#2563EB'} style={{ marginRight: 10 }} />
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 15, fontWeight: '600', color: PLUM }}>
+                  <Text style={{ fontSize: 15, fontWeight: '600', color: '#2563EB' }}>
                     {savingDocsReceived ? 'Saving…' : 'Mark Docs Received'}
                   </Text>
-                  <Text style={{ fontSize: 12, color: '#A78BFA', marginTop: 2 }}>
+                  <Text style={{ fontSize: 12, color: '#93C5FD', marginTop: 2 }}>
                     Logs activity & stops AI doc reminders
                   </Text>
                 </View>
-                {savingDocsReceived && <ActivityIndicator size="small" color={PLUM} />}
+                {savingDocsReceived && <ActivityIndicator size="small" color={'#2563EB'} />}
               </TouchableOpacity>
             </View>
           )}
@@ -6667,7 +6666,7 @@ export function LeadDetailView({
                 </View>
 
                 {loadingRealtors ? (
-                  <ActivityIndicator size="small" color={PLUM} style={{ padding: 20 }} />
+                  <ActivityIndicator size="small" color={'#2563EB'} style={{ padding: 20 }} />
                 ) : availableRealtors.length === 0 && realtorSearchQuery.trim().length < 2 ? (
                   <View style={{ padding: 20, alignItems: 'center' }}>
                     <Text style={{ color: '#888', textAlign: 'center' }}>
@@ -6832,22 +6831,22 @@ export function LeadDetailView({
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
-                    backgroundColor: '#F5F3FF',
+                    backgroundColor: '#F3F7FE',
                     paddingHorizontal: 14,
                     paddingVertical: 10,
                     borderRadius: 10,
                     borderWidth: 1,
-                    borderColor: '#DDD6FE',
+                    borderColor: '#BFD3FB',
                     marginBottom: 8,
                   }}
                   onPress={() => onNavigateToCapture(linkedCaptureId)}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="camera-outline" size={18} color={PLUM} style={{ marginRight: 8 }} />
-                  <Text style={{ fontSize: 13, fontWeight: '600', color: PLUM, flex: 1 }}>
+                  <Ionicons name="camera-outline" size={18} color={'#2563EB'} style={{ marginRight: 8 }} />
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#2563EB', flex: 1 }}>
                     View Quick Capture & Photos
                   </Text>
-                  <Ionicons name="chevron-forward" size={16} color={PLUM} />
+                  <Ionicons name="chevron-forward" size={16} color={'#2563EB'} />
                 </TouchableOpacity>
               )}
               {displayReferralSource && (
@@ -6974,22 +6973,22 @@ export function LeadDetailView({
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
-                    backgroundColor: '#F5F3FF',
+                    backgroundColor: '#F3F7FE',
                     paddingHorizontal: 14,
                     paddingVertical: 10,
                     borderRadius: 10,
                     borderWidth: 1,
-                    borderColor: '#DDD6FE',
+                    borderColor: '#BFD3FB',
                     marginBottom: 8,
                   }}
                   onPress={() => onNavigateToCapture(linkedCaptureId)}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="camera-outline" size={18} color={PLUM} style={{ marginRight: 8 }} />
-                  <Text style={{ fontSize: 13, fontWeight: '600', color: PLUM, flex: 1 }}>
+                  <Ionicons name="camera-outline" size={18} color={'#2563EB'} style={{ marginRight: 8 }} />
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: '#2563EB', flex: 1 }}>
                     View Quick Capture & Photos
                   </Text>
-                  <Ionicons name="chevron-forward" size={16} color={PLUM} />
+                  <Ionicons name="chevron-forward" size={16} color={'#2563EB'} />
                 </TouchableOpacity>
               )}
               {getMetaPlatformLabel((record as MetaLead).platform) && (
@@ -7115,7 +7114,7 @@ export function LeadDetailView({
                   if (entries.length === 0) return null;
                   return (
                     <View style={{ marginTop: 4 }}>
-                      <Text style={{ fontSize: 13, fontWeight: '600', color: PLUM, marginBottom: 8, letterSpacing: 0.3 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: '#2563EB', marginBottom: 8, letterSpacing: 0.3 }}>
                         FORM ANSWERS
                       </Text>
                       {entries.map(([key, value]) => (
@@ -7274,13 +7273,13 @@ export function LeadDetailView({
                   disabled={updatingTracking}
                 >
                   {updatingTracking ? (
-                    <ActivityIndicator size="small" color={isTracked ? '#FFFFFF' : PLUM} />
+                    <ActivityIndicator size="small" color={isTracked ? '#FFFFFF' : '#2563EB'} />
                   ) : (
                     <>
                       <Ionicons 
                         name={isTracked ? 'pin' : 'pin-outline'} 
                         size={16} 
-                        color={isTracked ? '#FFFFFF' : PLUM}
+                        color={isTracked ? '#FFFFFF' : '#2563EB'}
                       />
                       <Text style={[
                         trackingStyles.trackButtonText,
@@ -7343,7 +7342,7 @@ export function LeadDetailView({
                 <View style={partnerUpdateStyles.container}>
                   <View style={partnerUpdateStyles.headerRow}>
                     <View style={partnerUpdateStyles.labelRow}>
-                      <Ionicons name="people-outline" size={16} color={PLUM} />
+                      <Ionicons name="people-outline" size={16} color={'#2563EB'} />
                       <Text style={[partnerUpdateStyles.label, { color: colors.textPrimary }]}>
                         Partner: {partnerName}
                       </Text>
@@ -7523,7 +7522,7 @@ export function LeadDetailView({
                         <Ionicons 
                           name={isPlayingPreview ? 'pause' : 'play'} 
                           size={20} 
-                          color={PLUM}
+                          color={'#2563EB'}
                         />
                       </TouchableOpacity>
                       <Text style={styles.voiceNotePreviewText}>
@@ -7756,7 +7755,7 @@ export function LeadDetailView({
                               paddingHorizontal: 12,
                               paddingVertical: 8,
                               borderRadius: 8,
-                              backgroundColor: PLUM,
+                              backgroundColor: INK,
                             }}
                             onPress={() => void activityBodyState.load(activity.id)}
                             disabled={isLoadingBody}
@@ -7913,9 +7912,9 @@ export function LeadDetailView({
                   disabled={loadingMoreActivities}
                 >
                   {loadingMoreActivities ? (
-                    <ActivityIndicator size="small" color={PLUM} />
+                    <ActivityIndicator size="small" color={'#2563EB'} />
                   ) : (
-                    <Text style={{ color: PLUM, fontWeight: '700' }}>
+                    <Text style={{ color: '#2563EB', fontWeight: '700' }}>
                       Load older activity
                     </Text>
                   )}
@@ -7933,9 +7932,9 @@ export function LeadDetailView({
                 disabled={loadingMoreActivities}
               >
                 {loadingMoreActivities ? (
-                  <ActivityIndicator size="small" color={PLUM} />
+                  <ActivityIndicator size="small" color={'#2563EB'} />
                 ) : (
-                  <Text style={{ color: PLUM, fontWeight: '700' }}>
+                  <Text style={{ color: '#2563EB', fontWeight: '700' }}>
                     Load older activity
                   </Text>
                 )}
@@ -8554,7 +8553,7 @@ export function LeadDetailView({
             left: 16,
             right: 16,
             opacity: smsToastOpacity,
-            backgroundColor: smsToast.type === 'success' ? '#059669' : smsToast.type === 'error' ? '#DC2626' : PLUM,
+            backgroundColor: smsToast.type === 'success' ? '#059669' : smsToast.type === 'error' ? '#DC2626' : INK,
             borderRadius: 12,
             paddingVertical: 12,
             paddingHorizontal: 16,
@@ -8583,7 +8582,7 @@ export function LeadDetailView({
 }
 
 // Styles for AI Recommendation Modal
-const aiRecommendationStyles = themedStyles({
+const aiRecommendationStyles = StyleSheet.create({
   container: {
     backgroundColor: '#1E293B',
     borderRadius: 16,
@@ -8640,7 +8639,7 @@ const aiRecommendationStyles = themedStyles({
     fontWeight: '600',
   },
   closeButton: {
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',
@@ -8653,7 +8652,7 @@ const aiRecommendationStyles = themedStyles({
 });
 
 // Styles for Tracking Section
-const trackingStyles = themedStyles({
+const trackingStyles = StyleSheet.create({
   container: {
     marginTop: 16,
     paddingTop: 16,
@@ -8673,17 +8672,17 @@ const trackingStyles = themedStyles({
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: PLUM,
+    borderColor: INK,
     backgroundColor: 'transparent',
   },
   trackButtonActive: {
-    backgroundColor: PLUM,
-    borderColor: PLUM,
+    backgroundColor: INK,
+    borderColor: INK,
   },
   trackButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: PLUM,
+    color: '#2563EB',
   },
   trackButtonTextActive: {
     color: '#FFFFFF',
@@ -8712,7 +8711,7 @@ const trackingStyles = themedStyles({
     textAlignVertical: 'top',
   },
   saveNoteButton: {
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
@@ -8731,7 +8730,7 @@ const trackingStyles = themedStyles({
 });
 
 // Styles for Tracking Info Modal
-const trackingInfoStyles = themedStyles({
+const trackingInfoStyles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -8771,7 +8770,7 @@ const trackingInfoStyles = themedStyles({
     lineHeight: 20,
   },
   closeButton: {
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
@@ -8784,7 +8783,7 @@ const trackingInfoStyles = themedStyles({
   },
 });
 
-const scenarioShareStyles = themedStyles({
+const scenarioShareStyles = StyleSheet.create({
   container: {
     marginTop: 16,
     paddingTop: 16,
@@ -8820,7 +8819,7 @@ const scenarioShareStyles = themedStyles({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#F3F7FE',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -9036,12 +9035,12 @@ const scenarioShareStyles = themedStyles({
   },
   primaryPill: {
     borderRadius: 999,
-    backgroundColor: '#EDE9FE',
+    backgroundColor: '#E8F0FE',
     paddingHorizontal: 7,
     paddingVertical: 2,
   },
   primaryPillText: {
-    color: PLUM,
+    color: '#2563EB',
     fontSize: 10,
     fontWeight: '800',
   },
@@ -9164,17 +9163,17 @@ const scenarioShareStyles = themedStyles({
     paddingHorizontal: 10,
   },
   borrowerButton: {
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#F3F7FE',
     borderWidth: 1,
-    borderColor: '#DDD6FE',
+    borderColor: '#BFD3FB',
   },
   borrowerButtonText: {
-    color: PLUM,
+    color: '#2563EB',
     fontSize: 12,
     fontWeight: '800',
   },
   partnerButton: {
-    backgroundColor: PLUM,
+    backgroundColor: INK,
   },
   partnerButtonText: {
     color: '#FFFFFF',
@@ -9186,7 +9185,7 @@ const scenarioShareStyles = themedStyles({
   },
 });
 
-const incomeAnalysisStyles = themedStyles({
+const incomeAnalysisStyles = StyleSheet.create({
   container: {
     marginTop: 16,
     paddingTop: 16,
@@ -9308,7 +9307,7 @@ const incomeAnalysisStyles = themedStyles({
 });
 
 // Styles for Partner Update Section
-const partnerUpdateStyles = themedStyles({
+const partnerUpdateStyles = StyleSheet.create({
   container: {
     marginTop: 16,
     paddingTop: 16,
@@ -9334,7 +9333,7 @@ const partnerUpdateStyles = themedStyles({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
@@ -9389,7 +9388,7 @@ const partnerUpdateStyles = themedStyles({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: PLUM,
+    backgroundColor: INK,
     paddingVertical: 14,
     borderRadius: 10,
   },
@@ -9417,7 +9416,7 @@ const partnerUpdateStyles = themedStyles({
   },
 });
 
-const collapsibleSectionStyles = themedStyles({
+const collapsibleSectionStyles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -9455,7 +9454,7 @@ const collapsibleSectionStyles = themedStyles({
 });
 
 // Styles for the Detail/Messages tab bar
-const detailTabStyles = themedStyles({
+const detailTabStyles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
@@ -9473,7 +9472,7 @@ const detailTabStyles = themedStyles({
   },
   tabActive: {
     borderBottomWidth: 2,
-    borderBottomColor: PLUM,
+    borderBottomColor: INK,
   },
   tabText: {
     fontSize: 14,
@@ -9481,7 +9480,7 @@ const detailTabStyles = themedStyles({
     color: '#64748B',
   },
   tabTextActive: {
-    color: PLUM,
+    color: '#2563EB',
     fontWeight: '600',
   },
   tabBadge: {

@@ -27,7 +27,6 @@ import {
   uploadRealtorProfilePicture 
 } from '../../utils/profilePicture';
 import { getDeviceContacts, PickedContact } from '../../utils/vcard';
-import { themedStyles } from '../../brand/themedStyles';
 
 interface AddRealtorScreenProps {
   userId: string;
@@ -288,14 +287,14 @@ export default function AddRealtorScreen({ userId, onBack, onSuccess }: AddRealt
 
           {/* Import from Contacts Button */}
           <TouchableOpacity
-            style={[styles.importContactsButton, { backgroundColor: colors.cardBackground, borderColor: '#7C3AED' }]}
+            style={[styles.importContactsButton, { backgroundColor: colors.cardBackground, borderColor: '#2563EB' }]}
             onPress={handleImportFromContacts}
             disabled={loadingContacts}
           >
             {loadingContacts ? (
-              <ActivityIndicator size="small" color="#7C3AED" />
+              <ActivityIndicator size="small" color="#2563EB" />
             ) : (
-              <Ionicons name="person-add-outline" size={20} color="#7C3AED" />
+              <Ionicons name="person-add-outline" size={20} color="#2563EB" />
             )}
             <Text style={styles.importContactsText}>
               {loadingContacts ? 'Loading Contacts...' : 'Import from Contacts'}
@@ -350,7 +349,7 @@ export default function AddRealtorScreen({ userId, onBack, onSuccess }: AddRealt
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
-              <Text style={[styles.helperText, { color: '#7C3AED' }]}>
+              <Text style={[styles.helperText, { color: '#2563EB' }]}>
                 Email is required for realtors
               </Text>
             </View>
@@ -431,7 +430,7 @@ export default function AddRealtorScreen({ userId, onBack, onSuccess }: AddRealt
               <Switch
                 value={active}
                 onValueChange={setActive}
-                trackColor={{ false: colors.border, true: '#7C3AED' }}
+                trackColor={{ false: colors.border, true: '#2563EB' }}
                 thumbColor="#FFFFFF"
               />
             </View>
@@ -440,7 +439,7 @@ export default function AddRealtorScreen({ userId, onBack, onSuccess }: AddRealt
             <View style={styles.toggleRow}>
               <View style={styles.toggleInfo}>
                 <View style={styles.toggleIconContainer}>
-                  <Ionicons name="mail" size={20} color={campaignEligible ? '#7C3AED' : colors.textSecondary} />
+                  <Ionicons name="mail" size={20} color={campaignEligible ? '#2563EB' : colors.textSecondary} />
                 </View>
                 <View style={styles.toggleTextContainer}>
                   <Text style={[styles.toggleLabel, { color: colors.textPrimary }]}>Eligible for email campaigns</Text>
@@ -452,7 +451,7 @@ export default function AddRealtorScreen({ userId, onBack, onSuccess }: AddRealt
               <Switch
                 value={campaignEligible}
                 onValueChange={setCampaignEligible}
-                trackColor={{ false: colors.border, true: '#7C3AED' }}
+                trackColor={{ false: colors.border, true: '#2563EB' }}
                 thumbColor="#FFFFFF"
               />
             </View>
@@ -482,7 +481,7 @@ export default function AddRealtorScreen({ userId, onBack, onSuccess }: AddRealt
           {/* Languages Section */}
           <View style={[styles.section, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
             <View style={styles.languageHeader}>
-              <Ionicons name="globe-outline" size={20} color="#7C3AED" />
+              <Ionicons name="globe-outline" size={20} color="#2563EB" />
               <Text style={[styles.sectionTitle, { color: colors.textPrimary, marginBottom: 0, marginLeft: 8 }]}>
                 Languages
               </Text>
@@ -545,12 +544,12 @@ export default function AddRealtorScreen({ userId, onBack, onSuccess }: AddRealt
                   >
                     <Text style={[
                       styles.modalOptionText,
-                      { color: primaryLanguage === opt.value ? '#7C3AED' : colors.textPrimary },
+                      { color: primaryLanguage === opt.value ? '#2563EB' : colors.textPrimary },
                     ]}>
                       {opt.label}
                     </Text>
                     {primaryLanguage === opt.value && (
-                      <Ionicons name="checkmark" size={20} color="#7C3AED" />
+                      <Ionicons name="checkmark" size={20} color="#2563EB" />
                     )}
                   </TouchableOpacity>
                 ))}
@@ -582,12 +581,12 @@ export default function AddRealtorScreen({ userId, onBack, onSuccess }: AddRealt
                   >
                     <Text style={[
                       styles.modalOptionText,
-                      { color: secondaryLanguage === opt.value ? '#7C3AED' : colors.textPrimary },
+                      { color: secondaryLanguage === opt.value ? '#2563EB' : colors.textPrimary },
                     ]}>
                       {opt.label}
                     </Text>
                     {secondaryLanguage === opt.value && (
-                      <Ionicons name="checkmark" size={20} color="#7C3AED" />
+                      <Ionicons name="checkmark" size={20} color="#2563EB" />
                     )}
                   </TouchableOpacity>
                 ))}
@@ -738,7 +737,7 @@ export default function AddRealtorScreen({ userId, onBack, onSuccess }: AddRealt
   );
 }
 
-const styles = themedStyles({
+const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -960,7 +959,7 @@ const styles = themedStyles({
     borderBottomWidth: 1,
   },
   modalOptionSelected: {
-    backgroundColor: 'rgba(124, 58, 237, 0.1)',
+    backgroundColor: 'rgba(37, 99, 235, 0.1)',
   },
   modalOptionText: {
     fontSize: 16,
@@ -977,7 +976,7 @@ const styles = themedStyles({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     marginHorizontal: 16,
     marginTop: 16,
     paddingVertical: 14,
@@ -1002,7 +1001,7 @@ const styles = themedStyles({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1020,7 +1019,7 @@ const styles = themedStyles({
     position: 'absolute',
     bottom: 0,
     right: -4,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     width: 24,
     height: 24,
     borderRadius: 12,
@@ -1048,7 +1047,7 @@ const styles = themedStyles({
   importContactsText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#7C3AED',
+    color: '#2563EB',
   },
   // Contact Picker Modal
   contactPickerContainer: {
@@ -1099,7 +1098,7 @@ const styles = themedStyles({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#7C3AED',
+    backgroundColor: '#2563EB',
     justifyContent: 'center',
     alignItems: 'center',
   },

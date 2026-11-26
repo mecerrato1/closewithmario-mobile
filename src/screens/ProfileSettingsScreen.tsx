@@ -28,7 +28,6 @@ import {
   removeCustomProfilePicture,
   getAvatarUrl,
 } from '../utils/profilePicture';
-import { themedStyles } from '../brand/themedStyles';
 
 const LANGUAGE_MAP: Record<string, string> = {
   en: 'English',
@@ -491,7 +490,7 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
 
             <View style={localStyles.avatarActions}>
               <TouchableOpacity
-                style={[localStyles.primaryButton, { backgroundColor: '#7C3AED' }]}
+                style={[localStyles.primaryButton, { backgroundColor: '#2563EB' }]}
                 onPress={handleUploadProfilePicture}
                 disabled={uploadingPicture}
               >
@@ -529,7 +528,7 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
               <Switch
                 value={leadEligible}
                 onValueChange={handleToggleLeadEligible}
-                trackColor={{ false: '#D1D5DB', true: '#7C3AED' }}
+                trackColor={{ false: '#D1D5DB', true: '#2563EB' }}
                 thumbColor="#FFFFFF"
               />
             </View>
@@ -678,10 +677,10 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
                     {LANGUAGE_OPTIONS.filter(l => l !== 'None').map(lang => (
                       <TouchableOpacity
                         key={lang}
-                        style={[localStyles.langPickerItem, primaryLanguage === lang && { backgroundColor: '#F3F0FF' }]}
+                        style={[localStyles.langPickerItem, primaryLanguage === lang && { backgroundColor: '#F6F7F9' }]}
                         onPress={() => { setPrimaryLanguage(lang); setShowPrimaryLangPicker(false); setHasChanges(true); }}
                       >
-                        <Text style={{ color: primaryLanguage === lang ? '#7C3AED' : colors.textPrimary, fontWeight: primaryLanguage === lang ? '600' : '400' }}>{lang}</Text>
+                        <Text style={{ color: primaryLanguage === lang ? '#2563EB' : colors.textPrimary, fontWeight: primaryLanguage === lang ? '600' : '400' }}>{lang}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -701,10 +700,10 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
                     {LANGUAGE_OPTIONS.map(lang => (
                       <TouchableOpacity
                         key={lang}
-                        style={[localStyles.langPickerItem, secondaryLanguage === lang && { backgroundColor: '#F3F0FF' }]}
+                        style={[localStyles.langPickerItem, secondaryLanguage === lang && { backgroundColor: '#F6F7F9' }]}
                         onPress={() => { setSecondaryLanguage(lang); setShowSecondaryLangPicker(false); setHasChanges(true); }}
                       >
-                        <Text style={{ color: secondaryLanguage === lang ? '#7C3AED' : colors.textPrimary, fontWeight: secondaryLanguage === lang ? '600' : '400' }}>{lang}</Text>
+                        <Text style={{ color: secondaryLanguage === lang ? '#2563EB' : colors.textPrimary, fontWeight: secondaryLanguage === lang ? '600' : '400' }}>{lang}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -715,7 +714,7 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
             {/* Save Button */}
             {(hasChanges || savedFlash) && (
               <TouchableOpacity
-                style={[localStyles.saveButton, { backgroundColor: savedFlash ? '#16A34A' : '#7C3AED' }]}
+                style={[localStyles.saveButton, { backgroundColor: savedFlash ? '#16A34A' : '#2563EB' }]}
                 onPress={handleSaveRealtorProfile}
                 disabled={saving || savedFlash}
               >
@@ -762,7 +761,7 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
 
         {isRealtor && loadingProfile && (
           <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border, alignItems: 'center', padding: 24 }]}>
-            <ActivityIndicator size="small" color="#7C3AED" />
+            <ActivityIndicator size="small" color="#2563EB" />
             <Text style={{ color: colors.textSecondary, marginTop: 8 }}>Loading profile...</Text>
           </View>
         )}
@@ -781,7 +780,7 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
               <Switch
                 value={leadEligible}
                 onValueChange={handleToggleLeadEligible}
-                trackColor={{ false: '#D1D5DB', true: '#7C3AED' }}
+                trackColor={{ false: '#D1D5DB', true: '#2563EB' }}
                 thumbColor="#FFFFFF"
               />
             </View>
@@ -879,13 +878,13 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
             <View style={{ marginTop: 8, marginBottom: 4 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                  <Ionicons name="home-outline" size={18} color="#7C3AED" style={{ marginRight: 8 }} />
+                  <Ionicons name="home-outline" size={18} color="#2563EB" style={{ marginRight: 8 }} />
                   <Text style={[localStyles.fieldLabel, { color: colors.textPrimary, marginBottom: 0, fontWeight: '600' }]}>Licensed Realtor</Text>
                 </View>
                 <Switch
                   value={isLicensedRealtor}
                   onValueChange={(v) => { setIsLicensedRealtor(v); setHasChanges(true); }}
-                  trackColor={{ false: '#D1D5DB', true: '#7C3AED' }}
+                  trackColor={{ false: '#D1D5DB', true: '#2563EB' }}
                 />
               </View>
               {isLicensedRealtor && (
@@ -944,10 +943,10 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
                     {LANGUAGE_OPTIONS.filter(l => l !== 'None').map(lang => (
                       <TouchableOpacity
                         key={lang}
-                        style={[localStyles.langPickerItem, primaryLanguage === lang && { backgroundColor: '#F3F0FF' }]}
+                        style={[localStyles.langPickerItem, primaryLanguage === lang && { backgroundColor: '#F6F7F9' }]}
                         onPress={() => { setPrimaryLanguage(lang); setShowPrimaryLangPicker(false); setHasChanges(true); }}
                       >
-                        <Text style={{ color: primaryLanguage === lang ? '#7C3AED' : colors.textPrimary, fontWeight: primaryLanguage === lang ? '600' : '400' }}>{lang}</Text>
+                        <Text style={{ color: primaryLanguage === lang ? '#2563EB' : colors.textPrimary, fontWeight: primaryLanguage === lang ? '600' : '400' }}>{lang}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -967,10 +966,10 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
                     {LANGUAGE_OPTIONS.map(lang => (
                       <TouchableOpacity
                         key={lang}
-                        style={[localStyles.langPickerItem, secondaryLanguage === lang && { backgroundColor: '#F3F0FF' }]}
+                        style={[localStyles.langPickerItem, secondaryLanguage === lang && { backgroundColor: '#F6F7F9' }]}
                         onPress={() => { setSecondaryLanguage(lang); setShowSecondaryLangPicker(false); setHasChanges(true); }}
                       >
-                        <Text style={{ color: secondaryLanguage === lang ? '#7C3AED' : colors.textPrimary, fontWeight: secondaryLanguage === lang ? '600' : '400' }}>{lang}</Text>
+                        <Text style={{ color: secondaryLanguage === lang ? '#2563EB' : colors.textPrimary, fontWeight: secondaryLanguage === lang ? '600' : '400' }}>{lang}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -981,7 +980,7 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
             {/* Save Button */}
             {(hasChanges || savedFlash) && (
               <TouchableOpacity
-                style={[localStyles.saveButton, { backgroundColor: savedFlash ? '#16A34A' : '#7C3AED' }]}
+                style={[localStyles.saveButton, { backgroundColor: savedFlash ? '#16A34A' : '#2563EB' }]}
                 onPress={handleSaveLOProfile}
                 disabled={saving || savedFlash}
               >
@@ -1028,7 +1027,7 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
 
         {isLoanOfficer && loadingProfile && (
           <View style={[localStyles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border, alignItems: 'center', padding: 24 }]}>
-            <ActivityIndicator size="small" color="#7C3AED" />
+            <ActivityIndicator size="small" color="#2563EB" />
             <Text style={{ color: colors.textSecondary, marginTop: 8 }}>Loading profile...</Text>
           </View>
         )}
@@ -1159,7 +1158,7 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
   );
 }
 
-const localStyles = themedStyles({
+const localStyles = StyleSheet.create({
   container: {
     flex: 1,
   },
@@ -1350,7 +1349,7 @@ const localStyles = themedStyles({
     marginBottom: 8,
   },
   changePasswordText: {
-    color: '#7C3AED',
+    color: '#2563EB',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1363,7 +1362,7 @@ const localStyles = themedStyles({
   countyTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F3F0FF',
+    backgroundColor: '#F6F7F9',
     borderRadius: 16,
     paddingVertical: 6,
     paddingLeft: 12,
@@ -1371,12 +1370,12 @@ const localStyles = themedStyles({
     gap: 4,
   },
   countyTagText: {
-    color: '#7C3AED',
+    color: '#2563EB',
     fontSize: 14,
     fontWeight: '600',
   },
   countyTagRemove: {
-    color: '#7C3AED',
+    color: '#2563EB',
     fontSize: 18,
     fontWeight: '700',
     marginLeft: 2,
