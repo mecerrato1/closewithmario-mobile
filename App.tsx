@@ -1,6 +1,8 @@
 import { StatusBar } from 'expo-status-bar';
 import { senderNames } from './src/features/leads/senderName';
 import { LatestLeadRow } from './src/features/dashboard/LatestLeadRow';
+import { LeadAvailabilityCard } from './src/features/leadAvailability/LeadAvailabilityCard';
+import { useLeadAvailability } from './src/features/leadAvailability/useLeadAvailability';
 import { LeadListRow } from './src/features/leads/LeadListRow';
 import { dayLabel, nextStep, timeLabel } from './src/features/leads/leadRowPresentation';
 import { CallQueueRow } from './src/features/today/CallQueueRow';
@@ -397,6 +399,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     showDashboard && !showTodayCalls && !selectedLead && !showTeamManagement && !showAdsLibrary &&
     !showProfileSettings && !showQuickCaptures;
   const dashboardScrollY = useMemo(() => new Animated.Value(0), [dashboardOnScreen]);
+  const leadAvailability = useLeadAvailability(
+    session?.user?.id,
+    dashboardOnScreen && roleReady && (userRole === 'loan_officer' || userRole === 'super_admin')
+  );
   const DASHBOARD_HEADER_EXPANDED = Platform.OS === 'ios' ? 192 : 180;
   const DASHBOARD_HEADER_COLLAPSED = Platform.OS === 'ios' ? 110 : 98;
   const HEADER_SCROLL_DISTANCE = DASHBOARD_HEADER_EXPANDED - DASHBOARD_HEADER_COLLAPSED;
@@ -1931,6 +1937,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               onRefresh={() => {
                 void onRefresh();
                 void todayCalls.refresh();
+                void leadAvailability.refresh();
               }}
               progressViewOffset={DASHBOARD_HEADER_EXPANDED} // Ensure spinner shows below header
             />
@@ -1941,6 +1948,14 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           )}
           scrollEventThrottle={1} // Maximize smoothness
         >
+          {leadAvailability.availability ? (
+            <LeadAvailabilityCard
+              availability={leadAvailability.availability}
+              saving={leadAvailability.saving}
+              error={leadAvailability.error}
+              onChange={(enabled) => void leadAvailability.setEnabled(enabled)}
+            />
+          ) : null}
           <View style={styles.dashSectionHeader}>
             <Text style={[styles.dashSectionTitle, { color: colors.textPrimary }]}>
               {showCallbackHistory ? 'Callback history' : 'Today'}
