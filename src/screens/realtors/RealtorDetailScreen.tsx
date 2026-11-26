@@ -1857,7 +1857,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   sendCustomMessageButton: {
-    backgroundColor: '#10B981',
+    backgroundColor: '#2563EB',
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: 'center',

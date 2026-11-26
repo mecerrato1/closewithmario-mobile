@@ -7957,7 +7957,8 @@ export function LeadDetailView({
                   style={styles.customMessageButton}
                   onPress={() => setShowCustomMessage(true)}
                 >
-                  <Text style={styles.customMessageButtonText}>✏️ Write Custom Message</Text>
+                  <Ionicons name="create-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.customMessageButtonText}>Write Custom Message</Text>
                 </TouchableOpacity>
 
                 {/* Language Toggle */}
