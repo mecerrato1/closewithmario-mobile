@@ -1792,7 +1792,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 <View style={styles.profileMenuIconContainer}>
                   <Ionicons name="person-circle-outline" size={20} color={colors.textPrimary} />
                 </View>
-                <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Profile Settings</Text>
+                <Text style={[styles.profileMenuText, { color: colors.textPrimary }]}>Settings</Text>
               </TouchableOpacity>
               
               <View style={[styles.profileMenuDivider, { backgroundColor: colors.border }]} />
