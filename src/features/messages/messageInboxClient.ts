@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authenticatedFetch } from '../../lib/authenticatedFetch';
 import { isSuperAdminModeActive } from '../session/superAdminMode';
+import { getWorkspace, workspaceRequestParams } from '../session/workspace';
 import {
   collectBoundedScenarioPages,
   loadOptionalScenariosWithDeadline,
@@ -20,8 +21,19 @@ const MAX_SCENARIO_INBOX_PAGES = 4;
 const SCENARIO_INBOX_DEADLINE_MS = 1_000;
 const SCENARIO_UPDATE_READ_STORAGE_PREFIX = 'messages.scenarioUpdateReadIds.v1';
 
+/** The server shows what the Super Admin and My leads / Assisting switches show. */
+function addViewParams(params: URLSearchParams) {
+  if (isSuperAdminModeActive()) {
+    params.set('superAdminMode', 'true');
+    return;
+  }
+  Object.entries(workspaceRequestParams(getWorkspace())).forEach(([key, value]) => params.set(key, value));
+}
+
 export type MessageInboxQuery = {
   userId: string;
+  /** Only distinguishes one workspace's list from another's. */
+  workspace?: string;
   search: string;
   unreadOnly: boolean;
 };
@@ -302,7 +314,7 @@ async function fetchPendingScenarioUpdates({
         limit: String(SCENARIO_INBOX_PAGE_SIZE),
       });
       if (cursor) params.set('cursor', cursor);
-      if (isSuperAdminModeActive()) params.set('superAdminMode', 'true');
+      addViewParams(params);
       const response = await request(
         `${CRM_API_BASE_URL}/api/leads/qualification-submissions?${params.toString()}`,
         {
@@ -434,7 +446,7 @@ export async function fetchMessageInboxPage(
   const search = query.search.trim();
   if (search.length >= 2) params.set('search', search);
   if (options.cursor) params.set('cursor', options.cursor);
-  if (isSuperAdminModeActive()) params.set('superAdminMode', 'true');
+  addViewParams(params);
 
   const pagePromise = request(
     `${CRM_API_BASE_URL}/api/messages/conversations?${params.toString()}`,

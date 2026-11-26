@@ -52,6 +52,9 @@ import {
 } from './src/lib/roles';
 import { canToggleSuperAdmin, setSuperAdminMode } from './src/features/session/superAdminMode';
 import { useSuperAdminMode } from './src/features/session/useSuperAdminMode';
+import { useWorkspace } from './src/features/session/useWorkspace';
+import { isAssisting, pickedLoanOfficerId } from './src/features/session/workspace';
+import { WorkspaceBar } from './src/features/session/WorkspaceBar';
 import { TEXT_TEMPLATES, fillTemplate, getTemplateText, getTemplateName, type TemplateVariables } from './src/lib/textTemplates';
 import type { Lead, MetaLead, SelectedLeadRef, LoanOfficer, Realtor, Activity, AttentionBadge } from './src/lib/types/leads';
 import { STATUSES, STATUS_DISPLAY_MAP, STATUS_COLOR_MAP, getLeadAlert, formatStatus, getLeadLastTouchedValue, getTimeAgo, sortLeadsByLastTouchedDesc } from './src/lib/leadsHelpers';
@@ -251,16 +254,24 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     return () => clearTimeout(timeout);
   }, [searchQuery]);
 
+  // My leads / Assisting, for people who assist loan officers. Super Admin shows everyone.
+  const workspace = useWorkspace();
+  const hasWorkspace = workspace.assisted.length > 0 && (userRole === 'loan_officer' || userRole === 'assistant');
+  const assisting = hasWorkspace && isAssisting(workspace);
+  const assistedLoId = hasWorkspace ? pickedLoanOfficerId(workspace) : null;
+  const effectiveScope: UserCrmLeadScope = hasWorkspace ? (assisting ? 'assistant' : 'loan_officer') : crmLeadScope;
+  const [newLeadOwnerId, setNewLeadOwnerId] = useState<string | null>(null);
+
   const leadListQuery = useMemo<CrmLeadListQuery>(() => {
     return {
-      scope: crmLeadScope,
+      scope: effectiveScope,
       limit: 50,
       search: debouncedSearch.length >= 2 ? debouncedSearch : '',
       status: selectedStatusFilter || 'all',
       platform:
         activeTab === 'leads' ? 'organic' : activeTab === 'meta' ? 'meta' : 'all',
       ownerLoId:
-        selectedLOFilter || null,
+        assistedLoId || selectedLOFilter || null,
       sourceKey:
         userRole === 'super_admin' && selectedSourceFilter !== 'all'
           ? selectedSourceFilter
@@ -282,7 +293,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     selectedStatusFilter,
     trackedFilter,
     unreadFilter,
-    crmLeadScope,
+    effectiveScope,
+    assistedLoId,
   ]);
 
   const leadDirectory = usePaginatedLeads(
@@ -383,8 +395,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [showTodayCalls, setShowTodayCalls] = useState(false);
   const [todayBucket, setTodayBucket] = useState<CallQueueFilter>('all');
   const usesCallQueue = roleReady && userRole !== 'buyer' && userRole !== 'realtor';
-  const callQueueScope = userRole === 'super_admin' ? 'all' : 'mine';
-  const callQueueLoanOfficer = userRole === 'super_admin' ? selectedLOFilter : null;
+  const callQueueScope = userRole === 'super_admin'
+    ? 'all'
+    : assisting ? 'assisting' : hasWorkspace && workspace.hasOwn ? 'own' : 'mine';
+  const callQueueLoanOfficer = userRole === 'super_admin' ? selectedLOFilter : assistedLoId;
   const todayCalls = useCallQueue({
     enabled: usesCallQueue,
     scope: callQueueScope,
@@ -405,7 +419,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const dashboardScrollY = useMemo(() => new Animated.Value(0), [dashboardOnScreen]);
   const leadAvailability = useLeadAvailability(
     session?.user?.id,
-    dashboardOnScreen && roleReady && (userRole === 'loan_officer' || userRole === 'super_admin')
+    dashboardOnScreen && roleReady && !assisting && (userRole === 'loan_officer' || userRole === 'super_admin')
   );
   const DASHBOARD_HEADER_EXPANDED = Platform.OS === 'ios' ? 192 : 180;
   const DASHBOARD_HEADER_COLLAPSED = Platform.OS === 'ios' ? 110 : 98;
@@ -923,6 +937,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
   const openAddLeadModal = ({ fromDashboard = false }: { fromDashboard?: boolean } = {}) => {
     setAddLeadError(null);
+    // Preselect the officer on screen, or the only one you can add leads for.
+    const creatable = workspace.assisted.filter((lo) => lo.canCreateLeads);
+    setNewLeadOwnerId(
+      creatable.find((lo) => lo.id === assistedLoId)?.id ?? (creatable.length === 1 ? creatable[0].id : null)
+    );
     setReturnToDashboardAfterAddLead(fromDashboard);
     if (fromDashboard) {
       setShowDashboard(false);
@@ -990,6 +1009,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       return;
     }
 
+    // While assisting, the lead belongs to the chosen loan officer, never to yourself.
+    if (assisting && !newLeadOwnerId) {
+      setAddLeadError('Choose the loan officer this lead is for');
+      return;
+    }
+
     setSavingNewLead(true);
     setAddLeadError(null);
 
@@ -999,7 +1024,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       
       console.log('🔍 Saving lead - userRole:', userRole, 'teamMemberId:', teamMemberId, 'email:', session?.user?.email);
       
-      if ((userRole === 'loan_officer' || superAdminMode) && teamMemberId) {
+      if (assisting) {
+        loId = newLeadOwnerId;
+      } else if ((userRole === 'loan_officer' || superAdminMode) && teamMemberId) {
         loId = teamMemberId;
         console.log('✅ Using teamMemberId as loId:', loId);
       } else if (session?.user?.email) {
@@ -1032,6 +1059,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         source: 'My Lead',
         source_detail: newLead.referral_source.trim() || null,
         lo_id: loId,
+        ...(assisting ? { original_assistant_id: workspace.assistantId } : {}),
         message: newLead.message.trim() || null,
         status: 'new',
       };
@@ -1351,6 +1379,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     const notes: string[] = [];
     if (userRole === 'super_admin' && item.lo_id) {
       notes.push(loanOfficers.find((lo) => lo.id === item.lo_id)?.name || 'Unknown LO');
+    }
+    if (assisting && item.lo_id) {
+      const owner = workspace.assisted.find((lo) => lo.id === item.lo_id);
+      if (owner) notes.push(owner.name);
     }
     const scenario = getScenarioViewingLabel(item);
     if (scenario) notes.push(scenario);
@@ -1992,6 +2024,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           )}
           scrollEventThrottle={1} // Maximize smoothness
         >
+          <WorkspaceBar />
           {leadAvailability.availability ? (
             <LeadAvailabilityCard
               availability={leadAvailability.availability}
@@ -2460,6 +2493,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               </View>
             )}
           </TouchableOpacity>
+        </View>
+
+        <View style={{ marginHorizontal: -16 }}>
+          <WorkspaceBar />
         </View>
 
         {showListControls && searchOpen && (
@@ -3116,7 +3153,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       )}
 
       {/* FAB - Quick Actions (for LOs and Super Admins) */}
-      {(userRole === 'loan_officer' || userRole === 'super_admin') && !showDashboard && (
+      {(userRole === 'loan_officer' || userRole === 'super_admin' || userRole === 'assistant') && !showDashboard && (
         <TouchableOpacity accessibilityRole="button"
           style={styles.fab}
           onPress={() => setShowFabActionSheet(true)}
@@ -3205,6 +3242,38 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
 
             {/* Form */}
             <ScrollView style={styles.addLeadForm} showsVerticalScrollIndicator={false}>
+              {assisting ? (
+                <View style={{ marginBottom: 14 }}>
+                  <Text style={styles.addLeadLabel}>
+                    Loan officer <Text style={styles.addLeadRequired}>*</Text>
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                    {workspace.assisted.filter((lo) => lo.canCreateLeads).map((lo) => {
+                      const chosen = newLeadOwnerId === lo.id;
+                      return (
+                        <TouchableOpacity
+                          key={lo.id}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: chosen }}
+                          onPress={() => setNewLeadOwnerId(lo.id)}
+                          style={{
+                            paddingHorizontal: 12,
+                            paddingVertical: 10,
+                            borderRadius: 10,
+                            borderWidth: 1,
+                            borderColor: chosen ? brand.colors.accent : '#E5E7EB',
+                            backgroundColor: chosen ? brand.colors.tint : '#FFFFFF',
+                          }}
+                        >
+                          <Text style={{ fontSize: 13, fontWeight: '600', color: chosen ? brand.colors.accentStrong : '#374151' }}>
+                            {lo.name}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              ) : null}
               {addLeadError && (
                 <View style={styles.addLeadError}>
                   <Text style={styles.addLeadErrorText}>{addLeadError}</Text>

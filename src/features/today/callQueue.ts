@@ -4,7 +4,7 @@
 
 export type CallQueueBucket = 'overdue' | 'due_today' | 'new_lead' | 'reply_needed' | 'follow_up';
 export type CallQueueFilter = 'all' | CallQueueBucket;
-export type CallQueueScope = 'mine' | 'all';
+export type CallQueueScope = 'mine' | 'all' | 'own' | 'assisting';
 
 export type CallQueueItem = {
   leadId: string;

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
+import { useWorkspace } from '../session/useWorkspace';
+import { workspaceRequestParams } from '../session/workspace';
 import {
   fetchMessageInboxPage,
   type MessageInboxQuery,
@@ -19,8 +21,10 @@ export function useMessageInbox(
     enabled?: boolean;
   } = {}
 ) {
+  const workspace = useWorkspace();
   const query: MessageInboxQuery = {
     userId: session.user.id,
+    workspace: JSON.stringify(workspaceRequestParams(workspace)),
     search: options.search?.trim() || '',
     unreadOnly: options.unreadOnly === true,
   };

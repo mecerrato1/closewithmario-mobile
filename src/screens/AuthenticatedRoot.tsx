@@ -11,6 +11,9 @@ import MessagesTabScreen from './tabs/MessagesTabScreen';
 import { getUserRole, type UserRole } from '../lib/roles';
 import { ACCOUNT_LOOKUP_ERROR_MESSAGE } from '../features/session/lookup';
 import { useSuperAdminMode } from '../features/session/useSuperAdminMode';
+import { loadAssistantAccess } from '../features/session/assistantAccess';
+import { configureWorkspace, resetWorkspace } from '../features/session/workspace';
+import { readWorkspaceMode } from '../features/session/workspaceMemory';
 
 interface AuthenticatedRootProps {
   session: Session;
@@ -67,8 +70,19 @@ export default function AuthenticatedRoot({
 
     const controller = new AbortController();
     getUserRole(userId, email)
-      .then((role) => {
-        if (!controller.signal.aborted) setUserRole(role);
+      .then(async (role) => {
+        // Know who this person assists before any lead list is requested.
+        const access = role === 'loan_officer' || role === 'assistant'
+          ? await loadAssistantAccess(userId, email)
+          : null;
+        const mode = access ? await readWorkspaceMode(userId) : 'own';
+        if (controller.signal.aborted) return;
+        if (access) {
+          configureWorkspace({ userId, ...access, hasOwn: role === 'loan_officer', mode });
+        } else {
+          resetWorkspace();
+        }
+        setUserRole(role);
       })
       .catch(() => {
         if (!controller.signal.aborted) setRoleFailed(true);

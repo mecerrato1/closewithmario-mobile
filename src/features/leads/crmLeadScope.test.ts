@@ -12,7 +12,7 @@ test('realtors keep realtor CRM scope', () => {
   assert.equal(resolveCrmLeadScopeForRole('realtor'), 'realtor');
 });
 
-test('loan officers switch into assistant CRM scope only when delegated access exists', () => {
-  assert.equal(resolveCrmLeadScopeForRole('loan_officer', false), 'loan_officer');
-  assert.equal(resolveCrmLeadScopeForRole('loan_officer', true), 'assistant');
+test('loan officers start in their own pipeline; assistants in the assisted one', () => {
+  assert.equal(resolveCrmLeadScopeForRole('loan_officer'), 'loan_officer');
+  assert.equal(resolveCrmLeadScopeForRole('assistant'), 'assistant');
 });

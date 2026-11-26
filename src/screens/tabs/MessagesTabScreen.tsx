@@ -24,6 +24,7 @@ import {
   saveReadScenarioUpdateIds,
 } from '../../features/messages/messageInboxClient';
 import { useMessageInbox } from '../../features/messages/useMessageInbox';
+import { WorkspaceBar } from '../../features/session/WorkspaceBar';
 import type {
   ConversationSummary,
   PendingScenarioUpdate,
@@ -645,6 +646,8 @@ export default function MessagesTabScreen({
             Recent SMS, MMS, and DM conversations
           </Text>
         </View>
+
+        <WorkspaceBar />
 
         <View
           style={[

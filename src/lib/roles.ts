@@ -7,11 +7,14 @@ import {
 } from './crmLeadScope';
 import { unwrapLookup } from '../features/session/lookup';
 import { isSuperAdminModeOn, resetSuperAdminMode } from '../features/session/superAdminMode';
+import { loadAssistantAccess } from '../features/session/assistantAccess';
+import { resetWorkspace } from '../features/session/workspace';
 
 export type UserRole =
   | 'super_admin'
   | 'admin'
   | 'loan_officer'
+  | 'assistant'
   | 'realtor'
   | 'buyer';
 
@@ -53,14 +56,11 @@ export function clearRoleCaches() {
   teamMemberCache.clear();
   crmLeadScopeCache.clear();
   resetSuperAdminMode();
+  resetWorkspace();
 }
 
 function roleCacheKey(userId: string, email: string) {
   return `${userId}:${email.trim().toLowerCase()}`;
-}
-
-function assistantCacheKey(userId: string) {
-  return `${userId}:assistant`;
 }
 
 // Super Admins have full access to everything
@@ -148,6 +148,11 @@ export async function getUserRole(
     return remember('loan_officer');
   }
 
+  // An assistant without a loan officer record of their own
+  if (await loadAssistantAccess(userId, emailLower)) {
+    return remember('assistant');
+  }
+
   // Check if user is a realtor (by user_id)
   const realtorData = unwrapLookup(
     await supabase
@@ -190,83 +195,6 @@ export async function getUserRole(
   return remember('buyer');
 }
 
-async function hasAssistantAssignments(assistantId: string): Promise<boolean> {
-  const { count, error } = await supabase
-    .from('loan_officer_assistant_assignments')
-    .select('id', { count: 'exact', head: true })
-    .eq('assistant_id', assistantId)
-    .eq('active', true);
-
-  if (error) {
-    console.warn('Unable to load assistant assignments:', error.message);
-    return false;
-  }
-
-  return (count || 0) > 0;
-}
-
-async function getAssistantProfileId(
-  userId: string,
-  emailLower: string
-): Promise<string | null> {
-  const cacheKey = assistantCacheKey(userId);
-  const cachedAssistantId = readSessionCache(teamMemberCache, cacheKey);
-  if (cachedAssistantId) return cachedAssistantId;
-
-  const { data: assistantData, error: assistantError } = await supabase
-    .from('crm_assistants')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('active', true)
-    .maybeSingle();
-
-  if (assistantError) {
-    console.warn('Unable to load assistant profile:', assistantError.message);
-  } else if (assistantData?.id) {
-    writeSessionCache(teamMemberCache, cacheKey, assistantData.id);
-    return assistantData.id;
-  }
-
-  const { data: unlinkedAssistant, error: unlinkedAssistantError } =
-    await supabase
-      .from('crm_assistants')
-      .select('id')
-      .eq('email', emailLower)
-      .is('user_id', null)
-      .eq('active', true)
-      .maybeSingle();
-
-  if (unlinkedAssistantError) {
-    console.warn(
-      'Unable to load unlinked assistant profile:',
-      unlinkedAssistantError.message
-    );
-    return null;
-  }
-
-  if (!unlinkedAssistant?.id) {
-    return null;
-  }
-
-  if (!(await hasAssistantAssignments(unlinkedAssistant.id))) {
-    return null;
-  }
-
-  const { error: linkError } = await supabase
-    .from('crm_assistants')
-    .update({ user_id: userId })
-    .eq('id', unlinkedAssistant.id);
-
-  if (linkError) {
-    console.error('❌ Failed to auto-link assistant record:', linkError.message);
-    return null;
-  }
-
-  console.log('✅ Auto-linked account to assistant record');
-  writeSessionCache(teamMemberCache, cacheKey, unlinkedAssistant.id);
-  return unlinkedAssistant.id;
-}
-
 export async function getUserCrmLeadScope(
   userId: string,
   email: string,
@@ -279,22 +207,9 @@ export async function getUserCrmLeadScope(
   const cachedScope = readSessionCache(crmLeadScopeCache, cacheKey);
   if (cachedScope) return cachedScope;
 
-  const resolvedRole = role ?? (await getUserRole(userId, emailLower));
-  const remember = (scope: UserCrmLeadScope) => {
-    writeSessionCache(crmLeadScopeCache, cacheKey, scope);
-    return scope;
-  };
-
-  if (resolvedRole !== 'loan_officer') {
-    return remember(resolveCrmLeadScopeForRole(resolvedRole));
-  }
-
-  const assistantId = await getAssistantProfileId(userId, emailLower);
-  if (assistantId && (await hasAssistantAssignments(assistantId))) {
-    return remember(resolveCrmLeadScopeForRole(resolvedRole, true));
-  }
-
-  return remember(resolveCrmLeadScopeForRole(resolvedRole));
+  const scope = resolveCrmLeadScopeForRole(role ?? (await getUserRole(userId, emailLower)));
+  writeSessionCache(crmLeadScopeCache, cacheKey, scope);
+  return scope;
 }
 
 /**
