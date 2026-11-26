@@ -374,7 +374,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   });
 
   // Collapsing header animation for dashboard view
-  const dashboardScrollY = useRef(new Animated.Value(0)).current;
+  // The dashboard list starts at the top every time it comes back on screen, so its
+  // header needs a fresh value too. Reusing the old one left the header collapsed with a
+  // gap above the content.
+  const dashboardOnScreen =
+    showDashboard && !selectedLead && !showTeamManagement && !showAdsLibrary &&
+    !showProfileSettings && !showQuickCaptures;
+  const dashboardScrollY = useMemo(() => new Animated.Value(0), [dashboardOnScreen]);
   const DASHBOARD_HEADER_EXPANDED = 368;
   const DASHBOARD_HEADER_COLLAPSED = 176;
   const HEADER_SCROLL_DISTANCE = DASHBOARD_HEADER_EXPANDED - DASHBOARD_HEADER_COLLAPSED;
