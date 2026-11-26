@@ -1948,6 +1948,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 5);
 
+    // Before the first response the counts are unknown, not zero.
+    const countsPlaceholder = leadDirectory.facets
+      ? null
+      : leadDirectory.error ? '—' : '…';
+
     // Get user's first name for greeting
     const userFirstName = session?.user?.user_metadata?.full_name?.split(' ')[0] || 
                           session?.user?.user_metadata?.name?.split(' ')[0] || 
@@ -2286,7 +2291,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                       <View style={styles.dashboardHeroIconWrap}>
                         <Ionicons name={card.icon} size={18} color="#FFFFFF" />
                       </View>
-                      <Text style={styles.dashboardHeroCardValue}>{card.value}</Text>
+                      <Text style={styles.dashboardHeroCardValue}>{countsPlaceholder ?? card.value}</Text>
                     </View>
                     <Text style={styles.dashboardHeroCardLabel}>{card.label}</Text>
                   </TouchableOpacity>
@@ -2296,7 +2301,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                       <View style={styles.dashboardHeroIconWrap}>
                         <Ionicons name={card.icon} size={18} color="#FFFFFF" />
                       </View>
-                      <Text style={styles.dashboardHeroCardValue}>{card.value}</Text>
+                      <Text style={styles.dashboardHeroCardValue}>{countsPlaceholder ?? card.value}</Text>
                     </View>
                     <Text style={styles.dashboardHeroCardLabel}>{card.label}</Text>
                   </View>
@@ -2607,7 +2612,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                       card.key === 'unqualified' && styles.perfNumberUnqualified,
                     ]}
                   >
-                    {card.value}
+                    {countsPlaceholder ?? card.value}
                   </Text>
                   <Text
                     style={[

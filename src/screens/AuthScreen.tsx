@@ -405,8 +405,8 @@ export default function AuthScreen({ onAuth }: AuthScreenProps) {
       ? `Use ${biometricType} for ${biometricEmail}.`
       : `Use ${biometricType} to sign in faster on this device.`
     : biometricAvailable
-      ? `Sign in with your password once on this device to enable ${biometricType}. If it stays disabled, this build may not have secure storage available yet.`
-      : `${biometricType} is not available in the current simulator or build.`;
+      ? `Sign in with your password once to turn on ${biometricType}.`
+      : `${biometricType} isn't available on this device.`;
 
   return (
     <View style={[s.container, { backgroundColor: isDark ? colors.background : brand.colors.canvas }]}>
