@@ -16,6 +16,11 @@ export function isSuperAdminModeOn(email?: string | null): boolean {
   return enabledFor !== null && enabledFor === normalize(email);
 }
 
+/** Whether the signed-in account has the switch on, for requests that tell the server. */
+export function isSuperAdminModeActive(): boolean {
+  return enabledFor !== null;
+}
+
 export function setSuperAdminMode(email: string | null | undefined, on: boolean) {
   const next = on && canToggleSuperAdmin(email) ? normalize(email) : null;
   if (next === enabledFor) return;

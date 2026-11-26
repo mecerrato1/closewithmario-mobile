@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authenticatedFetch } from '../../lib/authenticatedFetch';
+import { isSuperAdminModeActive } from '../session/superAdminMode';
 import {
   collectBoundedScenarioPages,
   loadOptionalScenariosWithDeadline,
@@ -301,6 +302,7 @@ async function fetchPendingScenarioUpdates({
         limit: String(SCENARIO_INBOX_PAGE_SIZE),
       });
       if (cursor) params.set('cursor', cursor);
+      if (isSuperAdminModeActive()) params.set('superAdminMode', 'true');
       const response = await request(
         `${CRM_API_BASE_URL}/api/leads/qualification-submissions?${params.toString()}`,
         {
@@ -432,6 +434,7 @@ export async function fetchMessageInboxPage(
   const search = query.search.trim();
   if (search.length >= 2) params.set('search', search);
   if (options.cursor) params.set('cursor', options.cursor);
+  if (isSuperAdminModeActive()) params.set('superAdminMode', 'true');
 
   const pagePromise = request(
     `${CRM_API_BASE_URL}/api/messages/conversations?${params.toString()}`,
