@@ -272,6 +272,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         activeTab === 'leads' ? 'organic' : activeTab === 'meta' ? 'meta' : 'all',
       ownerLoId:
         assistedLoId || selectedLOFilter || null,
+      assistedLoId,
       sourceKey:
         userRole === 'super_admin' && selectedSourceFilter !== 'all'
           ? selectedSourceFilter
@@ -2027,7 +2028,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           scrollEventThrottle={1} // Maximize smoothness
         >
           <WorkspaceBar />
-          {leadAvailability.availability ? (
+          {leadAvailability.availability && !assisting ? (
             <LeadAvailabilityCard
               availability={leadAvailability.availability}
               saving={leadAvailability.saving}

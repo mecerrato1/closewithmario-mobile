@@ -83,6 +83,8 @@ export type CrmLeadListQuery = {
   platform?: CrmLeadPlatform;
   importSource?: 'all' | 'loandock';
   ownerLoId?: string | 'unassigned' | null;
+  /** The one loan officer an assistant picked, so the counts narrow too. */
+  assistedLoId?: string | null;
   sourceKey?: string;
   sourceDetail?: string;
   excludeUnqualified?: boolean;
@@ -276,6 +278,10 @@ export async function fetchCrmLeadListPage(
   if (search.length >= 2) params.set('search', search);
   if (query.ad && query.ad !== 'all') params.set('ad', query.ad);
   if (query.ownerLoId) params.set('ownerLoId', query.ownerLoId);
+  if (query.assistedLoId) {
+    params.set('workspace', 'assisting');
+    params.set('loId', query.assistedLoId);
+  }
   if (query.sourceKey && query.sourceKey !== 'all') {
     params.set('sourceKey', query.sourceKey);
   }
