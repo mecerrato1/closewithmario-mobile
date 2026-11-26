@@ -2324,8 +2324,6 @@ export const styles = StyleSheet.create({
   dashSlim: { position: 'absolute', top: 0, height: 44, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', gap: 6 },
   gioHeaderButton: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#16264A', borderWidth: 2, borderColor: '#3B82F6', alignItems: 'center', justifyContent: 'center' },
   gioHeaderImage: { width: 44, height: 44 },
-  gioFab: { position: 'absolute', right: 16, bottom: 14, width: 66, height: 66, borderRadius: 33, backgroundColor: '#FFFFFF', borderWidth: 3, borderColor: '#2563EB', alignItems: 'center', justifyContent: 'center', shadowColor: '#0F172A', shadowOpacity: 0.18, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 6 },
-  gioFabImage: { width: 52, height: 60 },
   dashSlimTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '700', marginRight: 2, flexShrink: 1 },
   dashSlimChip: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1 },
   dashSlimChipText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
@@ -2349,7 +2347,7 @@ export const styles = StyleSheet.create({
   dashStatValue: { color: '#0F172A', fontSize: 18, fontWeight: '700' },
   dashStatLabel: { color: '#64748B', fontSize: 11, marginTop: 2 },
   newDashboardContent: {
-    paddingBottom: 96,
+    paddingBottom: 36,
     backgroundColor: '#F8FAFC',
   },
   newViewAllButton: {

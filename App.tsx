@@ -2563,11 +2563,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               ))}
           </View>
         </Animated.ScrollView>
-        {gio.available ? (
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Ask Gio" style={styles.gioFab} onPress={() => setShowGio(true)} activeOpacity={0.85}>
-            <Image source={GIO.wave} style={styles.gioFabImage} resizeMode="contain" />
-          </TouchableOpacity>
-        ) : null}
         <GioScreen
           visible={showGio}
           firstName={userFirstName === 'there' ? null : userFirstName}
