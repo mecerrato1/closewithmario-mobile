@@ -407,7 +407,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     showDashboard && !showTodayCalls && !selectedLead && !showTeamManagement && !showAdsLibrary &&
     !showProfileSettings && !showQuickCaptures;
   const dashboardScrollY = useMemo(() => new Animated.Value(0), [dashboardOnScreen]);
-  const DASHBOARD_HEADER_EXPANDED = Platform.OS === 'ios' ? 176 : 164;
+  const DASHBOARD_HEADER_EXPANDED = Platform.OS === 'ios' ? 192 : 180;
   const DASHBOARD_HEADER_COLLAPSED = Platform.OS === 'ios' ? 110 : 98;
   const HEADER_SCROLL_DISTANCE = DASHBOARD_HEADER_EXPANDED - DASHBOARD_HEADER_COLLAPSED;
 
@@ -2127,8 +2127,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         ]}>
           <StatusBar style="light" />
           <Animated.View style={[styles.dashTopRow, { transform: [{ translateY: dashboardUserInfoTranslateY }] }]}>
-            <View style={{ flex: 1, height: 44, justifyContent: 'center' }}>
+            <View style={{ flex: 1, height: 60, justifyContent: 'center' }}>
               <Animated.View style={{ opacity: dashboardContentOpacity }}>
+                <Text style={styles.dashLabel}>DASHBOARD</Text>
                 <Text style={styles.dashGreeting} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
                   Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {userFirstName}
                 </Text>

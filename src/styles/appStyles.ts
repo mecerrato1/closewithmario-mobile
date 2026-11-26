@@ -2318,9 +2318,10 @@ export const styles = StyleSheet.create({
   },
   // Compact dashboard
   dashTopRow: { flexDirection: 'row', alignItems: 'center', gap: 12, zIndex: 2 },
+  dashLabel: { color: '#93C5FD', fontSize: 11, fontWeight: '700', letterSpacing: 1.2, marginBottom: 2 },
   dashGreeting: { color: '#FFFFFF', fontSize: 21, fontWeight: '700' },
   dashDate: { color: '#BFD3FB', fontSize: 12, marginTop: 2 },
-  dashSlim: { position: 'absolute', left: 0, right: 0, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dashSlim: { position: 'absolute', top: 0, height: 44, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', gap: 6 },
   dashSlimTitle: { color: '#FFFFFF', fontSize: 17, fontWeight: '700', marginRight: 2, flexShrink: 1 },
   dashSlimChip: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3, borderWidth: 1 },
   dashSlimChipText: { color: '#FFFFFF', fontSize: 11, fontWeight: '600' },
