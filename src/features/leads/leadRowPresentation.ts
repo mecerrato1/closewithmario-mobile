@@ -7,8 +7,8 @@ export type NextStep = {
   kind: NextStepKind;
   tone: NextStepTone;
   reason: string | null;
-  /** Leads waiting on you are drawn as cards with Call and Text buttons. */
-  card: boolean;
+  /** Leads waiting on you get a colored dot and their reason. */
+  needsYou: boolean;
 };
 
 export function nextStep(lead: {
@@ -23,7 +23,7 @@ export function nextStep(lead: {
       kind: 'reply',
       tone: 'red',
       reason: lead.unreadCount > 1 ? `${lead.unreadCount} unread messages` : 'Unread message',
-      card: true,
+      needsYou: true,
     };
   }
 
@@ -41,20 +41,20 @@ export function nextStep(lead: {
       kind,
       tone: lead.attention.priority <= 2 ? 'red' : 'amber',
       reason: badge || 'Needs attention',
-      card: true,
+      needsYou: true,
     };
   }
 
-  // A reminder from simple age rules is a hint, not a card: too many leads match.
+  // A reminder from simple age rules is a hint, not a flag: too many leads match.
   if (!lead.attention?.badge && lead.ruleLabel) {
-    return { kind: 'call', tone: 'amber', reason: lead.ruleLabel, card: false };
+    return { kind: 'call', tone: 'amber', reason: lead.ruleLabel, needsYou: false };
   }
 
   if ((lead.status || 'new') === 'new') {
-    return { kind: 'first_call', tone: 'blue', reason: null, card: false };
+    return { kind: 'first_call', tone: 'blue', reason: null, needsYou: false };
   }
 
-  return { kind: 'none', tone: 'quiet', reason: null, card: false };
+  return { kind: 'none', tone: 'quiet', reason: null, needsYou: false };
 }
 
 const startOfDay = (date: Date) =>

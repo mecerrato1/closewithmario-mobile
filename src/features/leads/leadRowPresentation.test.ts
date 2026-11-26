@@ -12,12 +12,12 @@ describe('nextStep', () => {
       unreadCount: 2,
       attention: { needsAttention: true, priority: 4, badge: 'Follow up: docs' },
     });
-    assert.deepEqual(step, { kind: 'reply', tone: 'red', reason: '2 unread messages', card: true });
+    assert.deepEqual(step, { kind: 'reply', tone: 'red', reason: '2 unread messages', needsYou: true });
   });
 
-  it('draws a card for a lead that needs attention, using the badge', () => {
+  it('flags a lead that needs attention, using the badge', () => {
     const docs = nextStep({ ...base, attention: { needsAttention: true, priority: 3, badge: 'Follow up: docs' } });
-    assert.deepEqual(docs, { kind: 'docs', tone: 'amber', reason: 'Follow up: docs', card: true });
+    assert.deepEqual(docs, { kind: 'docs', tone: 'amber', reason: 'Follow up: docs', needsYou: true });
     const reply = nextStep({ ...base, attention: { needsAttention: true, priority: 1, badge: 'Reply: Pre-approval' } });
     assert.equal(reply.kind, 'reply');
     assert.equal(reply.tone, 'red');
@@ -28,9 +28,9 @@ describe('nextStep', () => {
     assert.equal(step.reason, 'Reply: Docs needed');
   });
 
-  it('keeps a rule reminder as a compact row', () => {
+  it('keeps a rule reminder unflagged', () => {
     const step = nextStep({ ...base, ruleLabel: 'No Activity 2+ days' });
-    assert.equal(step.card, false);
+    assert.equal(step.needsYou, false);
     assert.equal(step.reason, 'No Activity 2+ days');
   });
 

@@ -246,7 +246,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   leadsFilterChipText: { color: '#1D4ED8', fontSize: 13, fontWeight: '600', flexShrink: 1 },
-  leadDayLabel: { color: '#64748B', fontSize: 12, fontWeight: '600', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6 },
+  leadDayLabel: { color: '#64748B', fontSize: 12, fontWeight: '600', paddingLeft: 32, paddingTop: 12, paddingBottom: 6, backgroundColor: '#F6F7F9' },
   // Bottom space lets the last row scroll clear of the add button.
   leadListContent: { paddingBottom: 90 },
   listUtilityPanel: {
