@@ -12,6 +12,14 @@ import {
 
 const LEAD_ID = 'd21da98c-7cf2-4204-9cc3-8ce2e007a123';
 
+test('lead page parser accepts every UUID version the database issues', () => {
+  // Imported leads carry version 8 IDs; one of them must not blank the whole list.
+  const id = 'd21da98c-7cf2-8204-9cc3-8ce2e007a123';
+  const page = parseCrmLeadListPage({ items: [{ id, source: 'organic' }], nextCursor: null });
+  assert.equal(page.items[0].id, id);
+  assert.throws(() => parseCrmLeadListPage({ items: [{ id: 'not-an-id', source: 'organic' }] }));
+});
+
 test('lead page parser preserves server source and unassigned facets', () => {
   const page = parseCrmLeadListPage({
     items: [{ id: LEAD_ID, source: 'organic' }],

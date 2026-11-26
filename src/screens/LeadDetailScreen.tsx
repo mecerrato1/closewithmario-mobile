@@ -87,7 +87,7 @@ const SCENARIO_VIEWING_NOW_WINDOW_MS = 3 * 60 * 1000;
 const HTML_TAG_PATTERN = /<[a-z][\s\S]*>/i;
 const HTML_TABLE_PATTERN = /<table[\s>]/i;
 const OFFICE_WORD_HTML_PATTERN = /\bmso-|class=(["'])?Mso|xmlns:o=|<o:p\b|<!\[if/iu;
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ACTIVITY_PAGE_SIZE = 20;
 
 const EMAIL_HTML_IGNORED_TAGS = ['head', 'script', 'iframe', 'object', 'embed', 'form'];
