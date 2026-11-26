@@ -1,5 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import { senderNames } from './src/features/leads/senderName';
+import { LatestLeadRow } from './src/features/dashboard/LatestLeadRow';
+import { leadSourceLine } from './src/features/dashboard/leadSummary';
 import { isTextSuggestion, readableStatuses, suggestedMessage } from './src/features/leads/followUpText';
 import { fetchSenderContact } from './src/lib/senderContact';
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
@@ -122,6 +124,8 @@ type LeadsScreenProps = {
   onNotificationHandled?: () => void;
   defaultToMyLeads?: boolean;
   skipDashboard?: boolean;
+  /** Increases each time the Leads tab is pressed. */
+  leadsTabPresses?: number;
   onNavigateToCapture?: (captureId: string) => void;
 };
 
@@ -159,7 +163,7 @@ function resolveNotificationOpenTab(
   return undefined;
 }
 
-function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandled, defaultToMyLeads, skipDashboard, onNavigateToCapture }: LeadsScreenProps) {
+function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandled, defaultToMyLeads, skipDashboard, leadsTabPresses = 0, onNavigateToCapture }: LeadsScreenProps) {
   const { colors, isDark } = useThemeColors();
   const brand = PUBLIC_BRAND;
   const [initializing, setInitializing] = useState(true);
@@ -172,6 +176,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [activeTab, setActiveTab] = useState<'leads' | 'meta' | 'all'>('all');
   const [showDashboard, setShowDashboard] = useState(true);
+  const [pendingLeadAction, setPendingLeadAction] = useState<'call' | 'text' | null>(null);
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
   const [attentionFilter, setAttentionFilter] = useState(false);
   const [unreadFilter, setUnreadFilter] = useState(false);
@@ -192,7 +197,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   const [showLOPicker, setShowLOPicker] = useState(false);
   const [selectedSourceFilter, setSelectedSourceFilter] = useState<string>('all'); // 'all' = all sources
   const [showSourcePicker, setShowSourcePicker] = useState(false);
-  const [leadEligible, setLeadEligible] = useState<boolean>(true);
   const [todayCallbacks, setTodayCallbacks] = useState<any[]>([]);
   const [showCallbackHistory, setShowCallbackHistory] = useState(false);
   const [callbackHistory, setCallbackHistory] = useState<any[]>([]);
@@ -381,8 +385,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     showDashboard && !selectedLead && !showTeamManagement && !showAdsLibrary &&
     !showProfileSettings && !showQuickCaptures;
   const dashboardScrollY = useMemo(() => new Animated.Value(0), [dashboardOnScreen]);
-  const DASHBOARD_HEADER_EXPANDED = 368;
-  const DASHBOARD_HEADER_COLLAPSED = 176;
+  const DASHBOARD_HEADER_EXPANDED = Platform.OS === 'ios' ? 176 : 164;
+  const DASHBOARD_HEADER_COLLAPSED = Platform.OS === 'ios' ? 110 : 98;
   const HEADER_SCROLL_DISTANCE = DASHBOARD_HEADER_EXPANDED - DASHBOARD_HEADER_COLLAPSED;
 
   const dashboardHeaderTranslateY = dashboardScrollY.interpolate({
@@ -397,21 +401,15 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     extrapolate: 'clamp',
   });
 
+  const dashboardSlimOpacity = dashboardScrollY.interpolate({
+    inputRange: [28, HEADER_SCROLL_DISTANCE],
+    outputRange: [0, 1],
+    extrapolate: 'clamp',
+  });
+
   const dashboardContentOpacity = dashboardScrollY.interpolate({
-    inputRange: [0, 56],
+    inputRange: [0, 36],
     outputRange: [1, 0],
-    extrapolate: 'clamp',
-  });
-
-  const dashboardStatsScale = dashboardScrollY.interpolate({
-    inputRange: [0, HEADER_SCROLL_DISTANCE],
-    outputRange: [1, 0.98],
-    extrapolate: 'clamp',
-  });
-
-  const dashboardStatsTranslateY = dashboardScrollY.interpolate({
-    inputRange: [0, HEADER_SCROLL_DISTANCE],
-    outputRange: [0, -8],
     extrapolate: 'clamp',
   });
 
@@ -516,22 +514,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         setCrmLeadScope(scope);
         setRoleReady(true);
 
-        // Fetch team member ID and lead_eligible status for loan officers
         if (role === 'loan_officer') {
           const memberId = await getUserTeamMemberId(session.user.id, 'loan_officer');
           setTeamMemberId(memberId);
-          
-          if (memberId) {
-            const { data: loData } = await supabase
-              .from('loan_officers')
-              .select('lead_eligible')
-              .eq('id', memberId)
-              .single();
-            
-            if (loData) {
-              setLeadEligible(loData.lead_eligible ?? true);
-            }
-          }
         }
 
         // Fetch realtor profile picture for realtor users
@@ -589,71 +574,12 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     init();
   }, [initializationAttempt, session?.user?.id]);
 
-  // Subscribe to loan_officers table changes to update lead_eligible status in real-time
-  useEffect(() => {
-    if (!session?.user?.id || !teamMemberId || userRole !== 'loan_officer') {
-      return;
-    }
-
-    console.log('📡 Setting up real-time subscription for loan officer:', teamMemberId);
-
-    // Set up real-time subscription
-    const subscription = supabase
-      .channel('loan_officer_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'loan_officers',
-          filter: `id=eq.${teamMemberId}`,
-        },
-        (payload) => {
-          console.log('🔔 Loan officer updated:', payload);
-          if (payload.new && 'lead_eligible' in payload.new) {
-            const newStatus = payload.new.lead_eligible;
-            console.log('✅ Updating lead_eligible status to:', newStatus);
-            setLeadEligible(newStatus);
-          }
-        }
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ Subscribed to loan officer changes');
-        }
-        // Silently handle errors - polling fallback will keep things working
-      });
-
-    // Also poll every 30 seconds as a fallback (in case Realtime isn't enabled)
-    const pollInterval = setInterval(async () => {
-      try {
-        const { data } = await supabase
-          .from('loan_officers')
-          .select('lead_eligible')
-          .eq('id', teamMemberId)
-          .single();
-        
-        if (data && data.lead_eligible !== leadEligible) {
-          console.log('🔄 Polling detected change in lead_eligible:', data.lead_eligible);
-          setLeadEligible(data.lead_eligible);
-        }
-      } catch (error) {
-        console.error('Error polling lead_eligible status:', error);
-      }
-    }, 30000); // Poll every 30 seconds
-
-    return () => {
-      console.log('🔌 Unsubscribing from loan officer changes');
-      subscription.unsubscribe();
-      clearInterval(pollInterval);
-    };
-  }, [session?.user?.id, teamMemberId, userRole, leadEligible]);
-
   // State for opening directly to a specific lead tab from notifications
   const [notificationTargetTab, setNotificationTargetTab] = useState<'messages' | 'dm' | null>(null);
   const [notificationTargetLead, setNotificationTargetLead] = useState<SelectedLeadRef | null>(null);
 
-  const openLeadFromSelection = (leadRef: SelectedLeadRef, options?: { hideDashboard?: boolean }) => {
+  const openLeadFromSelection = (leadRef: SelectedLeadRef, options?: { hideDashboard?: boolean; action?: 'call' | 'text' }) => {
+    setPendingLeadAction(options?.action ?? null);
     if (options?.hideDashboard) {
       setShowDashboard(false);
     }
@@ -732,6 +658,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     }
   }, [skipDashboard]);
 
+  const seenLeadsTabPresses = useRef(leadsTabPresses);
+  useEffect(() => {
+    if (leadsTabPresses === seenLeadsTabPresses.current) return;
+    seenLeadsTabPresses.current = leadsTabPresses;
+    setShowDashboard(false);
+  }, [leadsTabPresses]);
+
   // Auto-switch tab based on available leads (only on initial load)
   // If defaultToMyLeads is true, prefer 'leads' tab (My Leads / Website leads)
   useEffect(() => {
@@ -783,20 +716,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       const scopeChanged = currentScope !== crmLeadScope;
       if (scopeChanged) {
         setCrmLeadScope(currentScope);
-      }
-
-      // Refresh lead_eligible status for loan officers
-      if (currentRole === 'loan_officer' && teamMemberId) {
-        const { data: loData } = await supabase
-          .from('loan_officers')
-          .select('lead_eligible')
-          .eq('id', teamMemberId)
-          .single();
-        
-        if (loData) {
-          console.log('🔄 Pull-to-refresh: Updated lead_eligible to:', loData.lead_eligible);
-          setLeadEligible(loData.lead_eligible ?? true);
-        }
       }
 
       // Refresh today's callbacks as well
@@ -1735,33 +1654,6 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     );
   };
 
-  // Function to toggle lead_eligible status
-  const toggleLeadEligible = async () => {
-    if (!teamMemberId) {
-      alert('Unable to update: Team member ID not found');
-      return;
-    }
-
-    try {
-      const newStatus = !leadEligible;
-      const { error } = await supabase
-        .from('loan_officers')
-        .update({ lead_eligible: newStatus })
-        .eq('id', teamMemberId);
-
-      if (error) throw error;
-      
-      setLeadEligible(newStatus);
-      alert(newStatus 
-        ? 'You are now eligible to receive auto-assigned leads' 
-        : 'You will no longer receive auto-assigned leads'
-      );
-    } catch (error: any) {
-      console.error('Error toggling lead eligibility:', error);
-      alert('Error updating status: ' + error.message);
-    }
-  };
-
   // Show Team Management screen for super admins
   if (showTeamManagement) {
     return (
@@ -1852,6 +1744,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
         searchQuery={searchQuery}
         selectedLOFilter={selectedLOFilter}
         activeTab={activeTab}
+        initialAction={pendingLeadAction}
+        onInitialActionHandled={() => setPendingLeadAction(null)}
         initialDetailTab={notificationTargetTab}
         onInitialDetailTabHandled={() => {
           setNotificationTargetTab(null);
@@ -2176,10 +2070,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           </TouchableOpacity>
         </Modal>
 
-        {/* Gradient Header - Fixed height, moves up with scroll */}
+        {/* Compact header: the greeting row collapses into a slim bar on scroll */}
         <Animated.View style={[
-          styles.newDashboardHeader, 
-          { 
+          styles.newDashboardHeader,
+          {
             backgroundColor: brand.colors.primary,
             height: DASHBOARD_HEADER_EXPANDED,
             position: 'absolute',
@@ -2192,17 +2086,27 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           }
         ]}>
           <StatusBar style="light" />
-          {/* User Info Row - Counter-translates to appear fixed */}
-          <Animated.View style={{ transform: [{ translateY: dashboardUserInfoTranslateY }] }}>
-            <View style={styles.newHeaderTop}>
-              <View style={styles.newUserInfo}>
-                <View style={styles.newUserDetails}>
-                  <Text style={styles.newUserTitle}>Dashboard</Text>
-                  <Text style={styles.newUserEmail} numberOfLines={1}>
-                    {session?.user?.email || ''}
-                  </Text>
-                </View>
-              </View>
+          <Animated.View style={[styles.dashTopRow, { transform: [{ translateY: dashboardUserInfoTranslateY }] }]}>
+            <View style={{ flex: 1, height: 44, justifyContent: 'center' }}>
+              <Animated.View style={{ opacity: dashboardContentOpacity }}>
+                <Text style={styles.dashGreeting} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
+                  Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {userFirstName}
+                </Text>
+                <Text style={styles.dashDate}>
+                  {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                </Text>
+              </Animated.View>
+              <Animated.View pointerEvents="none" style={[styles.dashSlim, { opacity: dashboardSlimOpacity }]}>
+                <Text style={styles.dashSlimTitle}>Dashboard</Text>
+                {heroFocusCards.map((card) => (
+                  <View key={card.key} style={[styles.dashSlimChip, card.tone]}>
+                    <Text style={styles.dashSlimChipText}>
+                      {countsPlaceholder ?? card.value} {card.key === 'attention' ? 'due' : card.label.replace(' Leads', '').toLowerCase()}
+                    </Text>
+                  </View>
+                ))}
+              </Animated.View>
+            </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 {/* Notification Bell */}
                 <TouchableOpacity accessibilityRole="button"
@@ -2259,63 +2163,22 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   )}
                 </TouchableOpacity>
               </View>
-            </View>
-
-            <TouchableOpacity accessibilityRole="button"
-              onPress={openLeadListWorkspace}
-              activeOpacity={0.9}
-              style={styles.dashboardLeadListButton}
-            >
-              <Ionicons name="list-outline" size={16} color={brand.colors.primary} />
-              <Text style={styles.dashboardLeadListButtonText}>Lead List</Text>
-            </TouchableOpacity>
           </Animated.View>
 
-          {/* Greeting and Quote - Fades out */}
-          <Animated.View style={{ 
-            opacity: dashboardContentOpacity,
-          }}>
-            {heroBadgeText && (
-              <View style={styles.dashboardHeroBadge}>
-                <Ionicons name="sparkles-outline" size={14} color="#FDE68A" />
-                <Text style={styles.dashboardHeroBadgeText}>{heroBadgeText}</Text>
-              </View>
-            )}
-            <Text style={styles.newGreeting}>Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, {userFirstName}</Text>
-            <Text style={styles.newSubGreeting}>Start with follow-ups, unread chats, and callbacks.</Text>
-
-            <View style={styles.dashboardHeroGrid}>
-              {heroFocusCards.map((card) => (
-                card.onPress ? (
-                  <TouchableOpacity accessibilityRole="button"
-                    key={card.key}
-                    style={[styles.dashboardHeroCard, card.tone]}
-                    onPress={card.onPress}
-                    activeOpacity={0.85}
-                  >
-                    <View style={styles.dashboardHeroCardTop}>
-                      <View style={styles.dashboardHeroIconWrap}>
-                        <Ionicons name={card.icon} size={18} color="#FFFFFF" />
-                      </View>
-                      <Text style={styles.dashboardHeroCardValue}>{countsPlaceholder ?? card.value}</Text>
-                    </View>
-                    <Text style={styles.dashboardHeroCardLabel}>{card.label}</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View key={card.key} style={[styles.dashboardHeroCard, card.tone]}>
-                    <View style={styles.dashboardHeroCardTop}>
-                      <View style={styles.dashboardHeroIconWrap}>
-                        <Ionicons name={card.icon} size={18} color="#FFFFFF" />
-                      </View>
-                      <Text style={styles.dashboardHeroCardValue}>{countsPlaceholder ?? card.value}</Text>
-                    </View>
-                    <Text style={styles.dashboardHeroCardLabel}>{card.label}</Text>
-                  </View>
-                )
-              ))}
-            </View>
+          <Animated.View style={[styles.dashChipRow, { opacity: dashboardContentOpacity }]}>
+            {heroFocusCards.map((card) => (
+              <TouchableOpacity accessibilityRole="button"
+                key={card.key}
+                style={[styles.dashChip, card.tone]}
+                onPress={card.onPress}
+                disabled={!card.onPress}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.dashChipValue}>{countsPlaceholder ?? card.value}</Text>
+                <Text style={styles.dashChipLabel} numberOfLines={1}>{card.label}</Text>
+              </TouchableOpacity>
+            ))}
           </Animated.View>
-
         </Animated.View>
 
         <Animated.ScrollView 
@@ -2337,18 +2200,53 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           )}
           scrollEventThrottle={1} // Maximize smoothness
         >
-          {/* Callback History View */}
-          {showCallbackHistory && (
-            <View style={[styles.recentLeadsSection, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.dashboardSectionHeaderContent}>
-                  <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Callback History</Text>
-                  <Text style={styles.dashboardSectionCaption}>Review completed outreach and callback execution.</Text>
-                </View>
-                <TouchableOpacity accessibilityRole="button" style={styles.dashboardSectionLink} onPress={() => setShowCallbackHistory(false)}>
-                  <Text style={styles.dashboardSectionLinkText}>Back to Today</Text>
-                </TouchableOpacity>
-              </View>
+          <View style={styles.dashSectionHeader}>
+            <Text style={[styles.dashSectionTitle, { color: colors.textPrimary }]}>
+              {showCallbackHistory ? 'Callback history' : 'Today'}
+            </Text>
+            <TouchableOpacity accessibilityRole="button"
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              onPress={() => {
+                if (showCallbackHistory) {
+                  setShowCallbackHistory(false);
+                  return;
+                }
+                    Alert.alert(
+                      'Callback History',
+                      'How far back would you like to see?',
+                      [
+                        {
+                          text: '30 days',
+                          onPress: () => {
+                            setShowCallbackHistory(true);
+                            loadCallbackHistory(30);
+                          },
+                        },
+                        {
+                          text: '45 days',
+                          onPress: () => {
+                            setShowCallbackHistory(true);
+                            loadCallbackHistory(45);
+                          },
+                        },
+                        {
+                          text: 'All time',
+                          onPress: () => {
+                            setShowCallbackHistory(true);
+                            loadCallbackHistory('all');
+                          },
+                        },
+                        { text: 'Cancel', style: 'cancel' },
+                      ]
+                    );
+              }}
+            >
+              <Text style={styles.dashSectionLink}>{showCallbackHistory ? 'Back to today' : 'History'}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {showCallbackHistory ? (
+            <View style={styles.dashList}>
               {callbackHistory.length === 0 ? (
                 <Text style={styles.dashboardEmptyText}>No completed callbacks yet.</Text>
               ) : (
@@ -2405,63 +2303,13 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 })
               )}
             </View>
-          )}
-
-          {/* Today's Callbacks Section (always show header, even if empty) */}
-          {!showCallbackHistory && (
-            <View style={[styles.recentLeadsSection, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-              <View style={styles.sectionHeader}>
-                <View style={styles.dashboardSectionHeaderContent}>
-                  <View style={styles.dashboardSectionTitleRow}>
-                  <View style={styles.dashboardSectionIconWrap}>
-                    <Ionicons name="calendar-outline" size={18} color="#1D4ED8" />
-                  </View>
-                  <View>
-                    <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Today</Text>
-                    <Text style={styles.dashboardSectionCaption}>Callbacks and conversations that need attention today.</Text>
-                  </View>
-                  </View>
-                </View>
-                <TouchableOpacity accessibilityRole="button"
-                  style={styles.dashboardSectionLink}
-                  onPress={() => {
-                    Alert.alert(
-                      'Callback History',
-                      'How far back would you like to see?',
-                      [
-                        {
-                          text: '30 days',
-                          onPress: () => {
-                            setShowCallbackHistory(true);
-                            loadCallbackHistory(30);
-                          },
-                        },
-                        {
-                          text: '45 days',
-                          onPress: () => {
-                            setShowCallbackHistory(true);
-                            loadCallbackHistory(45);
-                          },
-                        },
-                        {
-                          text: 'All time',
-                          onPress: () => {
-                            setShowCallbackHistory(true);
-                            loadCallbackHistory('all');
-                          },
-                        },
-                        { text: 'Cancel', style: 'cancel' },
-                      ]
-                    );
-                  }}
-                >
-                  <Text style={styles.dashboardSectionLinkText}>View history</Text>
-                </TouchableOpacity>
-              </View>
-              {todayCallbacks.length === 0 && (
-                <Text style={styles.dashboardEmptyText}>No callbacks are scheduled today. This is a good time to work new and overdue leads.</Text>
-              )}
-
+          ) : todayCallbacks.length === 0 ? (
+            <View style={[styles.dashCard, styles.dashEmptyRow]}>
+              <Ionicons name="calendar-outline" size={18} color="#1D4ED8" />
+              <Text style={styles.dashEmptyText}>No callbacks scheduled today</Text>
+            </View>
+          ) : (
+            <View style={styles.dashList}>
               {todayCallbacks.length > 0 && todayCallbacks.map((cb) => {
                 const when = cb.scheduled_for ? new Date(cb.scheduled_for) : null;
                 const timeStr = when
@@ -2542,191 +2390,81 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             </View>
           )}
 
-          <View style={styles.dashboardActionSection}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.dashboardSectionHeaderContent}>
-                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Quick Actions</Text>
-                <Text style={styles.dashboardSectionCaption}>Shortcuts for the most common CRM tasks.</Text>
-              </View>
-            </View>
-            <View style={styles.dashboardActionGrid}>
-              <TouchableOpacity accessibilityRole="button"
-                style={styles.dashboardActionCard}
-                onPress={() => {
-                  openAddLeadModal({ fromDashboard: true });
-                }}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.dashboardActionIcon, styles.dashboardActionIconGreen]}>
-                  <Ionicons name="person-add-outline" size={16} color="#047857" />
-                </View>
-                <View style={styles.dashboardActionBody}>
-                  <Text style={styles.dashboardActionTitle}>Add Lead</Text>
-                  <Text style={styles.dashboardActionSubtitle}>Create a new record</Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity accessibilityRole="button"
-                style={styles.dashboardActionCard}
-                onPress={() => {
-                  setQuickCaptureStartOnAdd(true);
-                  setShowQuickCaptures(true);
-                }}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.dashboardActionIcon, styles.dashboardActionIconPurple]}>
-                  <Ionicons name="camera-outline" size={16} color={brand.colors.accent} />
-                </View>
-                <View style={styles.dashboardActionBody}>
-                  <Text style={styles.dashboardActionTitle}>Quick Capture</Text>
-                  <Text style={styles.dashboardActionSubtitle}>Photo-first intake</Text>
-                </View>
-              </TouchableOpacity>
-            </View>
+          <View style={styles.dashSectionHeader}>
+            <Text style={[styles.dashSectionTitle, { color: colors.textPrimary }]}>Latest leads</Text>
+            <TouchableOpacity accessibilityRole="button"
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              onPress={openLeadListWorkspace}
+            >
+              <Text style={styles.dashSectionLink}>See all</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.dashCard}>
+            {recentLeads.length === 0 ? (
+              <Text style={[styles.dashEmptyText, { padding: 14 }]}>
+                {countsPlaceholder ? 'Loading leads…' : 'No recent leads'}
+              </Text>
+            ) : (
+              recentLeads.map((lead, index) => {
+                const isMeta = lead._tableType === 'meta';
+                const meta = lead as unknown as MetaLead;
+                return (
+                  <LatestLeadRow
+                    key={`${lead._tableType}-${lead.id}`}
+                    first={index === 0}
+                    name={[lead.first_name, lead.last_name].filter(Boolean).join(' ') || '(No name)'}
+                    status={lead.status || 'new'}
+                    detail={`${leadSourceLine({ isMeta, platform: meta.platform, campaignName: meta.campaign_name })} · ${getTimeAgo(new Date(lead.created_at))}`}
+                    hasPhone={Boolean(lead.phone)}
+                    onOpen={() => openLeadFromSelection({ source: lead._tableType, id: lead.id }, { hideDashboard: true })}
+                    onCall={() => openLeadFromSelection({ source: lead._tableType, id: lead.id }, { hideDashboard: true, action: 'call' })}
+                    onText={() => openLeadFromSelection({ source: lead._tableType, id: lead.id }, { hideDashboard: true, action: 'text' })}
+                  />
+                );
+              })
+            )}
           </View>
 
-          {/* Performance Section */}
-          <View style={[styles.performanceSection, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-            <View style={styles.sectionHeader}>
-              <View>
-                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Pipeline Snapshot</Text>
-                <Text style={styles.dashboardSectionCaption}>Tap any metric to open the filtered lead view.</Text>
-              </View>
-            </View>
-            <View style={styles.performanceGrid}>
-              {snapshotCards.map((card) => (
+          <View style={styles.dashActionRow}>
+            <TouchableOpacity accessibilityRole="button"
+              style={[styles.dashCard, styles.dashAction]}
+              onPress={() => openAddLeadModal({ fromDashboard: true })}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="person-add-outline" size={18} color="#047857" />
+              <Text style={styles.dashActionText}>Add lead</Text>
+            </TouchableOpacity>
+            <TouchableOpacity accessibilityRole="button"
+              style={[styles.dashCard, styles.dashAction]}
+              onPress={() => {
+                setQuickCaptureStartOnAdd(true);
+                setShowQuickCaptures(true);
+              }}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="camera-outline" size={18} color={brand.colors.accent} />
+              <Text style={styles.dashActionText}>Quick capture</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.dashSectionHeader}>
+            <Text style={[styles.dashSectionTitle, { color: colors.textPrimary }]}>Pipeline</Text>
+          </View>
+          <View style={[styles.dashCard, { flexDirection: 'row' }]}>
+            {snapshotCards
+              .filter((card) => !heroFocusCards.some((hero) => hero.key === card.key))
+              .map((card) => (
                 <TouchableOpacity accessibilityRole="button"
                   key={card.key}
-                  style={[
-                    styles.performanceCard,
-                    { backgroundColor: colors.cardBackground, borderColor: colors.border },
-                    card.key === 'unqualified' && styles.performanceCardUnqualified,
-                  ]}
+                  style={styles.dashStat}
                   onPress={card.onPress}
                 >
-                  <View style={[styles.dashboardSnapshotIconWrap, card.tone]}>
-                    <Ionicons
-                      name={card.icon}
-                      size={18}
-                      color={card.key === 'unqualified' ? '#6B7280' : '#111827'}
-                    />
-                  </View>
-                  <Text
-                    style={[
-                      styles.perfNumber,
-                      { color: colors.textPrimary },
-                      card.key === 'unqualified' && styles.perfNumberUnqualified,
-                    ]}
-                  >
-                    {countsPlaceholder ?? card.value}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.perfLabel,
-                      { color: colors.textSecondary },
-                      card.key === 'unqualified' && styles.perfLabelUnqualified,
-                    ]}
-                  >
-                    {card.label}
+                  <Text style={styles.dashStatValue}>{countsPlaceholder ?? card.value}</Text>
+                  <Text style={styles.dashStatLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                    {card.label.replace(' Leads', '')}
                   </Text>
                 </TouchableOpacity>
               ))}
-            </View>
-          </View>
-
-          {/* Lead Assignment Settings (Loan Officers Only) */}
-          {userRole === 'loan_officer' && (
-            <View style={styles.quickStatsCard}>
-              <Text style={styles.quickStatsTitle}>Lead Assignment</Text>
-              <Text style={styles.dashboardSectionCaption}>Control whether new auto-assigned leads enter your queue.</Text>
-              <View style={styles.leadEligibleContainer}>
-                <View style={styles.leadEligibleInfo}>
-                  <Text style={styles.statsLabel}>Receive Auto-Assigned Leads</Text>
-                  <Text style={styles.statsValue}>{leadEligible ? 'Enabled' : 'Disabled'}</Text>
-                </View>
-                <TouchableOpacity accessibilityRole="button"
-                  style={styles.leadEligibleToggle}
-                  onPress={toggleLeadEligible}
-                >
-                  <View style={[
-                    styles.toggleSwitch,
-                    leadEligible && styles.toggleSwitchActive
-                  ]}>
-                    <View style={[
-                      styles.toggleThumb,
-                      leadEligible && styles.toggleThumbActive
-                    ]} />
-                  </View>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-
-          {/* Recent Leads Section */}
-          <View style={[styles.recentLeadsSection, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
-            <View style={styles.sectionHeader}>
-              <View>
-                <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Latest Leads</Text>
-                <Text style={styles.dashboardSectionCaption}>Most recent inbound activity across your current pipeline.</Text>
-              </View>
-            </View>
-            {recentLeads.length > 0 ? (
-              recentLeads.map((lead) => {
-                const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || '(No name)';
-                const timeAgo = getTimeAgo(new Date(lead.created_at));
-                const isNew = lead.status === 'new';
-                const isQualified = lead.status === 'qualified';
-                const isMeta = lead._tableType === 'meta';
-                const sourceDisplay = isMeta 
-                  ? `Facebook${(lead as MetaLead & { _tableType: string }).campaign_name ? ' • ' + (lead as MetaLead & { _tableType: string }).campaign_name : ''}`
-                  : 'Website Contact';
-                
-                return (
-                  <TouchableOpacity accessibilityRole="button"
-                    key={`${lead._tableType}-${lead.id}`}
-                    style={[
-                      styles.newLeadCard,
-                      { backgroundColor: colors.cardBackground, borderColor: colors.border },
-                      isNew && styles.newLeadCardNew,
-                      isQualified && styles.newLeadCardQualified
-                    ]}
-                    onPress={() => {
-                      openLeadFromSelection(
-                        { source: lead._tableType, id: lead.id },
-                        { hideDashboard: true }
-                      );
-                    }}
-                  >
-                    <View style={styles.newLeadHeader}>
-                      <View style={styles.newLeadLeft}>
-                        <Text style={[styles.newLeadName, { color: colors.textPrimary }]}>{fullName}</Text>
-                        <Text style={[styles.newLeadSource, { color: colors.textSecondary }]} numberOfLines={1}>{sourceDisplay}</Text>
-                        <Text style={[styles.newLeadTime, { color: colors.textSecondary }]}>{timeAgo}</Text>
-                      </View>
-                      <View style={styles.newLeadBadges}>
-                        {isNew && (
-                          <View style={styles.statusBadgeNew}>
-                            <Text style={styles.statusBadgeNewText}>New</Text>
-                          </View>
-                        )}
-                        {isQualified && (
-                          <View style={styles.statusBadgeQualified}>
-                            <Text style={styles.statusBadgeQualifiedText}>Qualified</Text>
-                          </View>
-                        )}
-                      </View>
-                    </View>
-                    <View style={styles.newLeadDetails}>
-                      <Text style={styles.newLeadDetail} numberOfLines={1}>
-                        {lead.email || lead.phone || 'No contact'}
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })
-            ) : (
-              <Text style={styles.dashboardEmptyText}>No recent leads</Text>
-            )}
           </View>
         </Animated.ScrollView>
       </View>

@@ -253,13 +253,14 @@ export default function ProfileSettingsScreen({ session, onBack, onSignOut, real
     const tableId = isRealtor ? realtorId : loId;
     const table = isRealtor ? 'realtors' : 'loan_officers';
     if (!tableId) return;
-    try {
-      await supabase
-        .from(table)
-        .update({ lead_eligible: value })
-        .eq('id', tableId);
-    } catch (err) {
-      console.error('Error updating lead_eligible:', err);
+    const { error } = await supabase
+      .from(table)
+      .update({ lead_eligible: value })
+      .eq('id', tableId);
+    if (error) {
+      console.error('Error updating lead_eligible:', error);
+      setLeadEligible(!value);
+      Alert.alert('Not saved', 'Lead participation could not be updated. Please try again.');
     }
   };
 

@@ -2535,6 +2535,9 @@ export type LeadDetailViewProps = {
   searchQuery: string;
   selectedLOFilter: string | null;
   activeTab: 'leads' | 'meta' | 'all';
+  /** Start a call or text as soon as the lead has loaded (from the dashboard). */
+  initialAction?: 'call' | 'text' | null;
+  onInitialActionHandled?: () => void;
   initialDetailTab?: 'messages' | 'dm' | null;
   onInitialDetailTabHandled?: () => void;
   onMarkMessagesRead?: (leadId: string) => void;
@@ -2545,6 +2548,8 @@ export type LeadDetailViewProps = {
 
 export function LeadDetailView({
   selected,
+  initialAction,
+  onInitialActionHandled,
   leads,
   metaLeads,
   onBack,
@@ -4404,6 +4409,21 @@ export function LeadDetailView({
     setTemplateMode('text');
     setShowTemplateModal(true);
   };
+
+  // Same handlers as the Call and Text buttons, so contact choice and logging match.
+  // Waits for the full lead, which supplies the other contacts.
+  const initialActionStartedRef = useRef(false);
+  useEffect(() => {
+    if (!initialAction) {
+      initialActionStartedRef.current = false;
+      return;
+    }
+    if (initialActionStartedRef.current || !record || detailLoad.loading) return;
+    initialActionStartedRef.current = true;
+    onInitialActionHandled?.();
+    if (initialAction === 'call') void handleCall();
+    else handleText();
+  });
 
   const handleTemplateSelect = async (templateId: string) => {
     if (preparingTemplateRef.current) return;

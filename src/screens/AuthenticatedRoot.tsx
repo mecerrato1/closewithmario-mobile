@@ -22,6 +22,7 @@ interface AuthenticatedRootProps {
     notificationLead?: { id: string; source: 'lead' | 'meta'; openTab?: 'messages' | 'dm' } | null;
     onNotificationHandled?: () => void;
     defaultToMyLeads?: boolean;
+    leadsTabPresses?: number;
     skipDashboard?: boolean;
     onNavigateToCapture?: (captureId: string) => void;
   }>;
@@ -43,6 +44,7 @@ export default function AuthenticatedRoot({
   const [pendingLeadNav, setPendingLeadNav] = useState<PendingLeadNavigation>(null);
   const [pendingCaptureId, setPendingCaptureId] = useState<PendingCaptureNavigation>(null);
   const [hasClickedLeadsTab, setHasClickedLeadsTab] = useState(false);
+  const [leadsTabPresses, setLeadsTabPresses] = useState(0);
   // Stays null until the server has confirmed it for this account. A failed
   // lookup is never turned into a default role; private content waits.
   const [userRole, setUserRole] = useState<UserRole | null>(null);
@@ -107,6 +109,7 @@ export default function AuthenticatedRoot({
   const handleTabChange = (tab: TabKey) => {
     if (tab === 'leads') {
       setHasClickedLeadsTab(true);
+      setLeadsTabPresses((count) => count + 1);
     }
     setActiveTab(tab);
   };
@@ -154,6 +157,7 @@ export default function AuthenticatedRoot({
             onNotificationHandled={effectiveHandler}
             defaultToMyLeads={false}
             skipDashboard={hasClickedLeadsTab}
+            leadsTabPresses={leadsTabPresses}
             onNavigateToCapture={handleNavigateToCapture}
           />
         );
