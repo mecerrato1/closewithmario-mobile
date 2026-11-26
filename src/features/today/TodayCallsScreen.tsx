@@ -8,6 +8,7 @@ import { CALL_QUEUE_FILTERS, callSection, type CallQueueFilter, type CallQueueIt
 import { CallQueueRow } from './CallQueueRow';
 import { useCallQueue } from './useCallQueue';
 import { CaughtUp } from '../gio/CaughtUp';
+import { screenTop } from '../../lib/screenTop';
 
 type Props = {
   scope: CallQueueScope;
@@ -103,7 +104,7 @@ export function TodayCallsScreen({ scope, loanOfficerId, bucket, onBucketChange,
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: PUBLIC_BRAND.colors.canvas },
-  header: { backgroundColor: PUBLIC_BRAND.colors.primary, paddingTop: 58, paddingBottom: 14, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  header: { backgroundColor: PUBLIC_BRAND.colors.primary, paddingTop: screenTop(58, 40), paddingBottom: 14, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
   back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   title: { color: '#FFFFFF', fontSize: 20, fontWeight: '700', flex: 1 },
   chips: { paddingHorizontal: 14, paddingVertical: 10, gap: 8 },

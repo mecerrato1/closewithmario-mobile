@@ -9,6 +9,7 @@ import { PUBLIC_BRAND } from '../../brand/brands';
 import { MIN_TOUCH_TARGET } from '../../brand/layout';
 
 import type { UserRole } from '../../lib/roles';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export type TabKey = 'leads' | 'captures' | 'realtors' | 'loan_officers' | 'messages' | 'calculator';
 
@@ -41,11 +42,17 @@ export default function BottomTabs({ activeTab, onTabChange, userRole }: BottomT
   const tabs = userRole === 'realtor' ? REALTOR_TABS : DEFAULT_TABS;
   const { colors } = useThemeColors();
   const brand = PUBLIC_BRAND;
+  // Android draws behind its navigation bar, which is tall with three buttons.
+  const insets = useSafeAreaInsets();
 
   return (
     <View
       accessibilityRole="tablist"
-      style={[styles.container, { backgroundColor: colors.cardBackground, borderTopColor: colors.border }]}
+      style={[
+        styles.container,
+        { backgroundColor: colors.cardBackground, borderTopColor: colors.border },
+        Platform.OS === 'android' && { paddingBottom: Math.max(8, insets.bottom) },
+      ]}
     >
       {tabs.map((tab) => {
         const isActive = activeTab === tab.key;

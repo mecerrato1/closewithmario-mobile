@@ -5038,27 +5038,6 @@ export function LeadDetailView({
     };
   }, [currentSound]);
 
-  // Pre-request microphone permissions on mount
-  useEffect(() => {
-    const prepareMicPermissions = async () => {
-      try {
-        const current = await Audio.getPermissionsAsync();
-
-        if (!current.granted) {
-          const requested = await Audio.requestPermissionsAsync();
-
-          if (!requested.granted) {
-            alert('Please enable microphone access in Settings to record voice notes.');
-          }
-        }
-      } catch (err) {
-        console.error('Error preparing microphone permissions', err);
-      }
-    };
-
-    prepareMicPermissions();
-  }, []);
-
   const startVoiceRecording = async () => {
     console.log('🔴 Button pressed! isRecording:', isRecording, 'appState:', AppState.currentState);
 
@@ -5067,9 +5046,13 @@ export function LeadDetailView({
     }
 
     try {
-      const { granted } = await Audio.getPermissionsAsync();
+      // Asked only now, when the person starts a voice note.
+      let { granted } = await Audio.getPermissionsAsync();
       if (!granted) {
-        alert('Microphone access is required to record voice notes.');
+        ({ granted } = await Audio.requestPermissionsAsync());
+      }
+      if (!granted) {
+        alert('Please enable microphone access in Settings to record voice notes.');
         return;
       }
 

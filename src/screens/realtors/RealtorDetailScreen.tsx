@@ -59,6 +59,7 @@ import {
   uploadRealtorProfilePicture, 
   removeRealtorProfilePicture 
 } from '../../utils/profilePicture';
+import { screenTop } from '../../lib/screenTop';
 
 const INK = '#0B1220';
 
@@ -1377,7 +1378,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: screenTop(60, 40),
     paddingBottom: 16,
     paddingHorizontal: 16,
     borderBottomLeftRadius: 24,

@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { formatStatus, STATUSES } from '../../lib/leadsHelpers';
 import { PIPELINE_STAGE_KEYS, pipelineProgress } from './leadPipeline';
+import { sheetBottom } from '../../lib/screenTop';
 
 const OFF_PIPELINE = STATUSES.filter((s) => !(PIPELINE_STAGE_KEYS as readonly string[]).includes(s));
 
@@ -102,7 +103,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 22,
     paddingTop: 8,
     paddingHorizontal: 20,
-    paddingBottom: 34,
+    paddingBottom: sheetBottom(34),
   },
   grabber: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: '#CBD5E1', marginBottom: 12 },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },

@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColors } from '../../styles/theme';
+import { screenTop } from '../../lib/screenTop';
 
 interface ScenariosTabScreenProps {
   onClose?: () => void;
@@ -49,7 +50,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: screenTop(60, 40),
     paddingBottom: 16,
     paddingHorizontal: 16,
     borderBottomLeftRadius: 24,

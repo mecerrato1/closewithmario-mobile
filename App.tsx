@@ -78,6 +78,7 @@ import {
 } from './src/lib/notifications';
 import { runSignOut } from './src/features/session/signOutCleanup';
 import { styles } from './src/styles/appStyles';
+import { sheetBottom } from './src/lib/screenTop';
 import { useThemeColors } from './src/styles/theme';
 import { PUBLIC_BRAND } from './src/brand/brands';
 import { getAvatarUrl } from './src/utils/profilePicture';
@@ -103,6 +104,8 @@ import {
   type LeadCountContext,
 } from './src/features/leads/leadListPresentation';
 import { queryIncompleteTodayCallbacks } from './src/features/leads/todayCallbacksQuery';
+import { useAndroidBack } from './src/lib/useAndroidBack';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Enable LayoutAnimation on Android
 if (
@@ -1416,6 +1419,22 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
       </View>
     );
   };
+
+  // Android Back closes whatever is on top, one step at a time. Settings handles its own.
+  useAndroidBack(
+    !showProfileSettings
+      && (showTeamManagement || showAdsLibrary || showQuickCaptures || Boolean(selectedLead) || showTodayCalls || !showDashboard),
+    () => {
+      if (showTeamManagement) setShowTeamManagement(false);
+      else if (showAdsLibrary) setShowAdsLibrary(false);
+      else if (showQuickCaptures) {
+        setShowQuickCaptures(false);
+        setQuickCaptureStartOnAdd(false);
+      } else if (selectedLead) closeSelectedLead();
+      else if (showTodayCalls) setShowTodayCalls(false);
+      else returnToLeadDashboard();
+    }
+  );
 
   // Show Team Management screen for super admins
   if (showTeamManagement) {
@@ -3178,7 +3197,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           activeOpacity={1}
           onPress={() => setShowFabActionSheet(false)}
         >
-          <View style={{ backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: Platform.OS === 'ios' ? 34 : 16, paddingTop: 12 }}>
+          <View style={{ backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: sheetBottom(34, 16), paddingTop: 12 }}>
             <View style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: '#D1D5DB', alignSelf: 'center', marginBottom: 16 }} />
             <TouchableOpacity accessibilityRole="button"
               style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14, gap: 14 }}
@@ -3792,9 +3811,11 @@ function RootApp() {
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
       <AppLockProvider>
         <RootApp />
       </AppLockProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

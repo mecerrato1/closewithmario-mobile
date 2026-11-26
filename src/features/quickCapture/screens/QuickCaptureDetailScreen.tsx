@@ -32,6 +32,7 @@ import SelectRealtorModal from '../components/SelectRealtorModal';
 import type { QuickCapture, QuickCaptureAttachment } from '../types';
 import { findMatchingLeads, searchLeads, mergeIntoExistingLead, type MatchedLead } from '../services/leadMatchService';
 import LeadMergeView from '../components/LeadMergeView';
+import { screenTop } from '../../../lib/screenTop';
 
 const INK = '#0B1220';
 
@@ -1036,7 +1037,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: screenTop(60, 40),
     paddingBottom: 16,
     paddingHorizontal: 16,
     backgroundColor: INK,

@@ -19,6 +19,7 @@ import { useRealtors } from '../../hooks/useRealtors';
 import { AssignedRealtor, RelationshipStage } from '../../lib/types/realtors';
 import type { UserRole } from '../../lib/roles';
 import RealtorCard from '../../components/realtors/RealtorCard';
+import { screenTop } from '../../lib/screenTop';
 
 const INK = '#0B1220';
 
@@ -341,7 +342,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: screenTop(60, 40),
     paddingBottom: 16,
     paddingHorizontal: 16,
     borderBottomLeftRadius: 24,

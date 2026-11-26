@@ -14,6 +14,7 @@ import { useSuperAdminMode } from '../features/session/useSuperAdminMode';
 import { loadAssistantAccess } from '../features/session/assistantAccess';
 import { configureWorkspace, resetWorkspace } from '../features/session/workspace';
 import { readWorkspaceMode } from '../features/session/workspaceMemory';
+import { useAndroidBack } from '../lib/useAndroidBack';
 
 interface AuthenticatedRootProps {
   session: Session;
@@ -96,6 +97,12 @@ export default function AuthenticatedRoot({
       setActiveTab('leads');
     }
   }, [notificationLead]);
+
+  // Back from any other tab returns to the dashboard; from there it leaves the app.
+  useAndroidBack(activeTab !== 'leads', () => {
+    setHasClickedLeadsTab(false);
+    setActiveTab('leads');
+  });
 
   if (userRole === null) {
     return (

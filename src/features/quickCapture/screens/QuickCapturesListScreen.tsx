@@ -16,6 +16,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useQuickCaptures } from '../hooks/useQuickCaptures';
 import type { QuickCapture, QuickCaptureStatus } from '../types';
+import { screenTop } from '../../../lib/screenTop';
 
 interface QuickCapturesListScreenProps {
   onCapturePress: (capture: QuickCapture) => void;
@@ -286,7 +287,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9FAFB',
   },
   header: {
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: screenTop(60, 40),
     paddingBottom: 16,
     paddingHorizontal: 16,
     backgroundColor: INK,

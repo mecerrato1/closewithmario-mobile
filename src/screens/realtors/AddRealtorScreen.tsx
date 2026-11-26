@@ -28,6 +28,7 @@ import {
   uploadRealtorProfilePicture 
 } from '../../utils/profilePicture';
 import { getDeviceContacts, PickedContact } from '../../utils/vcard';
+import { screenTop } from '../../lib/screenTop';
 
 interface AddRealtorScreenProps {
   userId: string;
@@ -747,7 +748,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: screenTop(60, 40),
     paddingBottom: 16,
     paddingHorizontal: 16,
     borderBottomLeftRadius: 24,
@@ -1059,7 +1060,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: screenTop(60, 40),
     paddingBottom: 16,
     paddingHorizontal: 16,
   },

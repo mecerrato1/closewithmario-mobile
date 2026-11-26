@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { formatStatus, STATUS_COLOR_MAP } from '../../lib/leadsHelpers';
 import { PIPELINE_STAGE_KEYS, pipelineProgress } from './leadPipeline';
+import { screenTop } from '../../lib/screenTop';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -143,7 +144,7 @@ export function LeadDetailHeader<K extends string>({
 }
 
 const styles = StyleSheet.create({
-  header: { backgroundColor: '#0B1220', paddingTop: Platform.OS === 'ios' ? 60 : 40, paddingHorizontal: 16 },
+  header: { backgroundColor: '#0B1220', paddingTop: screenTop(60, 40), paddingHorizontal: 16 },
   top: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 44 },
   title: { flex: 1 },
   name: { color: '#FFFFFF', fontSize: 22, fontWeight: '800' },

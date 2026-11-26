@@ -47,6 +47,7 @@ import {
   formatDPAForText,
 } from '../utils/dpaCalculations';
 import DPAEntryModal from '../components/DPAEntryModal';
+import { screenTop, sheetBottom } from '../lib/screenTop';
 
 const STORAGE_KEY = '@mortgage_calculator_inputs';
 const INK = '#0B1220';
@@ -447,7 +448,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       alignItems: 'center',
       justifyContent: 'space-between',
       paddingHorizontal: 16,
-      paddingTop: Platform.OS === 'ios' ? 60 : 16,
+      paddingTop: screenTop(60, 16),
       paddingBottom: 16,
       backgroundColor: INK,
       borderBottomWidth: 1,
@@ -725,7 +726,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       paddingTop: 20,
-      paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+      paddingBottom: sheetBottom(40, 20),
       maxHeight: '70%',
     },
     modalHeader: {

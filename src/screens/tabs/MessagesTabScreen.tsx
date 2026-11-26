@@ -31,6 +31,8 @@ import type {
   PendingScenarioUpdateChange,
   ThreadSource,
 } from '../../features/messages/messageTypes';
+import { screenTop } from '../../lib/screenTop';
+import { useAndroidBack } from '../../lib/useAndroidBack';
 
 type FilterMode = 'all' | 'unread';
 
@@ -263,6 +265,14 @@ export default function MessagesTabScreen({
     void refresh();
   }, [refresh]);
 
+  const closeThread = () => {
+    const isScenarioUpdate =
+      screenState.screen === 'thread' && screenState.conversation.channel === 'scenario_update';
+    setScreenState({ screen: 'list' });
+    void reload(isScenarioUpdate);
+  };
+  useAndroidBack(screenState.screen === 'thread', closeThread);
+
   if (screenState.screen === 'thread') {
     const conversation = screenState.conversation;
     const isScenarioUpdate = conversation.channel === 'scenario_update';
@@ -287,7 +297,7 @@ export default function MessagesTabScreen({
         ]}
       >
         <SafeAreaView
-          style={[styles.container, { backgroundColor: colors.background }]}
+          style={[styles.container, { backgroundColor: colors.background, paddingTop: screenTop(0, 0) }]}
         >
           <View
             style={[
@@ -300,10 +310,7 @@ export default function MessagesTabScreen({
           >
             <TouchableOpacity
               style={styles.threadBackButton}
-              onPress={() => {
-                setScreenState({ screen: 'list' });
-                void reload(isScenarioUpdate);
-              }}
+              onPress={closeThread}
             >
               <Ionicons name="chevron-back" size={22} color={ACCENT} />
             </TouchableOpacity>
@@ -829,7 +836,7 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: screenTop(20, 20),
     paddingBottom: 24,
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,

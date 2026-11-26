@@ -8,6 +8,7 @@ import AddRealtorScreen from '../realtors/AddRealtorScreen';
 import { AssignedRealtor } from '../../lib/types/realtors';
 import { supabase } from '../../lib/supabase';
 import { getUserTeamMemberId, type UserRole } from '../../lib/roles';
+import { useAndroidBack } from '../../lib/useAndroidBack';
 
 type ScreenState =
   | { screen: 'list' }
@@ -23,6 +24,7 @@ interface RealtorsTabScreenProps {
 
 export default function RealtorsTabScreen({ session, onClose, onNavigateToLead, userRole }: RealtorsTabScreenProps) {
   const [screenState, setScreenState] = useState<ScreenState>({ screen: 'list' });
+  useAndroidBack(screenState.screen !== 'list', () => setScreenState({ screen: 'list' }));
   const [refreshKey, setRefreshKey] = useState(0);
   const [currentLOInfo, setCurrentLOInfo] = useState<{ firstName: string; lastName: string; phone: string; email: string; aiDraftAccess?: boolean } | null>(null);
 

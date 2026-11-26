@@ -23,6 +23,7 @@ import {
   generateDPAId,
 } from '../utils/dpaTypes';
 import { calculateDPAAmount, calculateDPAPayment } from '../utils/dpaCalculations';
+import { sheetBottom } from '../lib/screenTop';
 
 interface DPAEntryModalProps {
   visible: boolean;
@@ -196,6 +197,7 @@ export default function DPAEntryModal({
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       maxHeight: '90%',
+      paddingBottom: sheetBottom(0),
     },
     modalHeader: {
       flexDirection: 'row',

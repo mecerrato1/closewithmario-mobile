@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useWorkspace } from './useWorkspace';
 import { describeAssisted, isAssisting, setAssistedLoanOfficer, type WorkspaceMode } from './workspace';
 import { chooseWorkspaceMode } from './workspaceMemory';
+import { sheetBottom } from '../../lib/screenTop';
 
 /**
  * Says whose leads are on screen and switches between them. Renders nothing for
@@ -128,7 +129,7 @@ const styles = StyleSheet.create({
   },
   dropText: { color: '#451A03', fontSize: 12, fontWeight: '700', flexShrink: 1 },
   shade: { flex: 1, backgroundColor: 'rgba(11,18,32,0.45)' },
-  sheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, paddingBottom: 34 },
+  sheet: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 16, paddingBottom: sheetBottom(34) },
   sheetTitle: { fontSize: 15, fontWeight: '700', color: '#0B1220', marginBottom: 6 },
   sheetList: { maxHeight: 360 },
   option: {

@@ -25,6 +25,7 @@ import { useQuickCaptureAttachments } from '../hooks/useQuickCaptureAttachments'
 import QuickCaptureAttachmentStrip from '../components/QuickCaptureAttachmentStrip';
 import SelectRealtorModal from '../components/SelectRealtorModal';
 import type { CreateQuickCapturePayload } from '../types';
+import { screenTop } from '../../../lib/screenTop';
 
 const INK = '#0B1220';
 
@@ -502,7 +503,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: screenTop(60, 40),
     paddingBottom: 16,
     paddingHorizontal: 16,
     backgroundColor: INK,

@@ -9,6 +9,7 @@ import { StatusBar } from 'expo-status-bar';
 import { PUBLIC_BRAND } from '../../brand/brands';
 import { GIO_STARTERS, MAX_QUESTION_LENGTH, type GioMessage, type GioMode } from './gioChat';
 import { GIO } from './gioImages';
+import { screenTop } from '../../lib/screenTop';
 
 type Props = {
   visible: boolean;
@@ -118,7 +119,7 @@ export function GioScreen({ visible, firstName, messages, thinking, error, onAsk
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: PUBLIC_BRAND.colors.canvas },
-  header: { backgroundColor: PUBLIC_BRAND.colors.primary, paddingTop: 56, paddingBottom: 12, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  header: { backgroundColor: PUBLIC_BRAND.colors.primary, paddingTop: screenTop(56, 40), paddingBottom: 12, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', gap: 8 },
   back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   title: { color: '#FFFFFF', fontSize: 19, fontWeight: '700' },
   subtitle: { color: '#BFD3FB', fontSize: 12 },

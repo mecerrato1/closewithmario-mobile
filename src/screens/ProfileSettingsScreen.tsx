@@ -31,6 +31,7 @@ import {
   removeCustomProfilePicture,
   getAvatarUrl,
 } from '../utils/profilePicture';
+import { screenTop, sheetBottom } from '../lib/screenTop';
 
 const LANGUAGE_MAP: Record<string, string> = {
   en: 'English',
@@ -1179,7 +1180,7 @@ const localStyles = StyleSheet.create({
   },
   header: {
     backgroundColor: '#0B1220',
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: screenTop(60, 40),
     paddingHorizontal: 16,
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
@@ -1406,6 +1407,7 @@ const localStyles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
+    paddingBottom: sheetBottom(20),
     maxHeight: '85%',
   },
   modalHeader: {

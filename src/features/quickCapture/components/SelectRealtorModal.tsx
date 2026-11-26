@@ -17,6 +17,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRealtors } from '../../../hooks/useRealtors';
 import type { AssignedRealtor } from '../../../lib/types/realtors';
+import { sheetBottom } from '../../../lib/screenTop';
 
 interface SelectRealtorModalProps {
   visible: boolean;
@@ -235,7 +236,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '80%',
-    paddingBottom: Platform.OS === 'ios' ? 34 : 16,
+    paddingBottom: sheetBottom(34, 16),
   },
   header: {
     flexDirection: 'row',

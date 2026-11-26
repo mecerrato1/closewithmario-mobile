@@ -8,6 +8,7 @@ import QuickCapturesListScreen from './screens/QuickCapturesListScreen';
 import AddQuickCaptureScreen from './screens/AddQuickCaptureScreen';
 import QuickCaptureDetailScreen from './screens/QuickCaptureDetailScreen';
 import type { QuickCapture } from './types';
+import { useAndroidBack } from '../../lib/useAndroidBack';
 
 type ScreenState =
   | { screen: 'list' }
@@ -57,6 +58,8 @@ export default function QuickCaptureTab({
   const handleBack = useCallback(() => {
     setScreenState({ screen: 'list' });
   }, []);
+
+  useAndroidBack(screenState.screen !== 'list', handleBack);
 
   const handleUpdate = useCallback(() => {
     setRefreshKey((k) => k + 1);

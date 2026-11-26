@@ -1,5 +1,6 @@
 import { StyleSheet, Platform } from 'react-native';
 import Constants from 'expo-constants';
+import { screenTop, sheetBottom } from '../lib/screenTop';
 
 export const styles = StyleSheet.create({
   container: {
@@ -7,7 +8,7 @@ export const styles = StyleSheet.create({
     backgroundColor: '#F5F7FA',
   },
   headerContainer: {
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: screenTop(60, 40),
     paddingBottom: 20,
     paddingHorizontal: 20,
     backgroundColor: '#2563EB',
@@ -198,7 +199,7 @@ export const styles = StyleSheet.create({
     paddingBottom: 90,
   },
   leadsTopBar: {
-    paddingTop: Platform.OS === 'ios' ? 62 : 42,
+    paddingTop: screenTop(62, 42),
     paddingHorizontal: 16,
   },
   leadsTopRow: { flexDirection: 'row', alignItems: 'center', gap: 16, minHeight: 36, paddingBottom: 6 },
@@ -653,7 +654,7 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingTop: screenTop(60, 40),
     paddingBottom: 16,
     paddingHorizontal: 20,
     backgroundColor: '#0B1220',
@@ -3151,6 +3152,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   addLeadModalContainer: {
+    paddingBottom: sheetBottom(0),
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
