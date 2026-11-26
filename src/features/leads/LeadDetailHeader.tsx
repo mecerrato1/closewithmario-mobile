@@ -93,10 +93,11 @@ export function LeadDetailHeader<K extends string>({
               accessibilityLabel={`Status ${statusLabel}, change`}
               onPress={onStatusPress}
               hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
-              style={[styles.pill, { backgroundColor: statusColor.bg }]}
+              style={styles.pill}
             >
-              <Text style={[styles.pillText, { color: statusColor.text }]}>{statusLabel}</Text>
-              <Ionicons name="chevron-down" size={13} color={statusColor.text} />
+              <View style={[styles.pillDot, { backgroundColor: statusColor.text }]} />
+              <Text style={styles.pillText}>{statusLabel}</Text>
+              <Ionicons name="chevron-down" size={13} color="#94A3B8" />
             </TouchableOpacity>
             <View
               style={styles.progress}
@@ -150,8 +151,9 @@ const styles = StyleSheet.create({
   phone: { color: '#94A3B8', fontSize: 13, marginTop: 1 },
   position: { color: '#94A3B8', fontSize: 12, marginHorizontal: -6 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8 },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 4 },
-  pillText: { fontSize: 13, fontWeight: '700' },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 5, backgroundColor: '#1E2638' },
+  pillDot: { width: 8, height: 8, borderRadius: 4 },
+  pillText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
   progress: { flex: 1, flexDirection: 'row', gap: 4 },
   segment: { flex: 1, height: 4, borderRadius: 2, backgroundColor: '#334155' },
   segmentOn: { backgroundColor: '#3B82F6' },
