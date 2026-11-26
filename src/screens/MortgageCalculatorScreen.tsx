@@ -919,7 +919,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
                 flexDirection: 'row',
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: '#10B981',
+                backgroundColor: '#2563EB',
                 borderRadius: 12,
                 paddingVertical: 14,
                 gap: 8,
