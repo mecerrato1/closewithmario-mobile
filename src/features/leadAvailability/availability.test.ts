@@ -4,9 +4,10 @@ import { describe, it } from 'node:test';
 import { hoursSummary, showsAvailabilitySwitch } from './availability';
 
 describe('showsAvailabilitySwitch', () => {
-  it('is for approved members and administrators', () => {
+  it('is only for approved members', () => {
     assert.equal(showsAvailabilitySwitch({ isAdmin: false, membership: { status: 'approved' } }), true);
-    assert.equal(showsAvailabilitySwitch({ isAdmin: true, membership: null }), true);
+    // Being an administrator is not approval.
+    assert.equal(showsAvailabilitySwitch({ isAdmin: true, membership: null }), false);
     for (const status of ['none', 'requested', 'declined', 'removed']) {
       assert.equal(showsAvailabilitySwitch({ isAdmin: false, membership: { status } }), false);
     }

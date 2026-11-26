@@ -1,12 +1,12 @@
-// Mirrors the website's "My new leads" rules (leadAvailabilitySummary and showsProgramTools).
+// Mirrors the website's "My new leads" hours summary.
 
 export type ProgramSchedule = Record<string, [string, string]>;
 
-/** Only approved Lead Program members and administrators get the switch. */
+/** Only loan officers approved for the Meta Lead Program get the switch, administrators included. */
 export function showsAvailabilitySwitch(response: unknown): boolean {
   if (!response || typeof response !== 'object') return false;
-  const { isAdmin, membership } = response as { isAdmin?: unknown; membership?: { status?: unknown } | null };
-  return isAdmin === true || membership?.status === 'approved';
+  const { membership } = response as { membership?: { status?: unknown } | null };
+  return membership?.status === 'approved';
 }
 
 function localTime(at: Date, timezone: string) {
