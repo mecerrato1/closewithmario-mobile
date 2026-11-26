@@ -1,5 +1,6 @@
 // src/screens/MortgageCalculatorScreen.tsx
 import React, { useState, useEffect, useMemo } from 'react';
+import { GIO } from '../features/gio/gioImages';
 import { StatusBar } from 'expo-status-bar';
 import {
   View,
@@ -15,6 +16,7 @@ import {
   Linking,
   Alert,
   Clipboard,
+  Image,
 } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -763,7 +765,7 @@ export default function MortgageCalculatorScreen({ onClose }: MortgageCalculator
       {/* Header */}
       <View style={styles.header}>
         <StatusBar style="light" />
-        <View style={{ width: 40 }} />
+        <Image source={GIO.calculator} style={{ width: 40, height: 46 }} resizeMode="contain" accessibilityElementsHidden />
         <Text style={styles.headerTitle}>Mortgage Calculator</Text>
         <TouchableOpacity onPress={onClose} style={styles.closeButton}>
           <Ionicons name="close" size={28} color="#FFFFFF" />

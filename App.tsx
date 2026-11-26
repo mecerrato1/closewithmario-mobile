@@ -4,6 +4,10 @@ import { LatestLeadRow } from './src/features/dashboard/LatestLeadRow';
 import { CallQueueRow } from './src/features/today/CallQueueRow';
 import { TodayCallsScreen } from './src/features/today/TodayCallsScreen';
 import { useCallQueue } from './src/features/today/useCallQueue';
+import { CaughtUp } from './src/features/gio/CaughtUp';
+import { GIO } from './src/features/gio/gioImages';
+import { GioScreen } from './src/features/gio/GioScreen';
+import { useGio } from './src/features/gio/useGio';
 import type { CallQueueFilter, CallQueueItem } from './src/features/today/callQueue';
 import { leadSourceLine } from './src/features/dashboard/leadSummary';
 import { isTextSuggestion, readableStatuses, suggestedMessage } from './src/features/leads/followUpText';
@@ -397,6 +401,8 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
     loanOfficerId: callQueueLoanOfficer,
     pageSize: 3,
   });
+  const gio = useGio(session?.user?.id, session?.user?.email, usesCallQueue);
+  const [showGio, setShowGio] = useState(false);
   const openCallQueueItem = (item: CallQueueItem, action?: 'call' | 'text') =>
     openLeadFromSelection(
       { source: item.leadSource === 'meta' ? 'meta' : 'lead', id: item.leadId },
@@ -2148,6 +2154,11 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 ))}
               </Animated.View>
             </View>
+            {gio.available ? (
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel="Ask Gio" style={styles.gioHeaderButton} onPress={() => setShowGio(true)}>
+                <Image source={GIO.chat} style={styles.gioHeaderImage} resizeMode="contain" />
+              </TouchableOpacity>
+            ) : null}
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                 {/* Notification Bell */}
                 <TouchableOpacity accessibilityRole="button"
@@ -2363,10 +2374,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                       </View>
                     )
                   ) : todayCalls.page.items.length === 0 ? (
-                    <View style={styles.dashEmptyRow}>
-                      <Ionicons name="checkmark-circle-outline" size={18} color="#047857" />
-                      <Text style={styles.dashEmptyText}>You're caught up for today</Text>
-                    </View>
+                    <CaughtUp />
                   ) : (
                     <>
                       {todayCalls.page.items.map((item, index) => (
@@ -2555,6 +2563,20 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
               ))}
           </View>
         </Animated.ScrollView>
+        {gio.available ? (
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Ask Gio" style={styles.gioFab} onPress={() => setShowGio(true)} activeOpacity={0.85}>
+            <Image source={GIO.wave} style={styles.gioFabImage} resizeMode="contain" />
+          </TouchableOpacity>
+        ) : null}
+        <GioScreen
+          visible={showGio}
+          firstName={userFirstName === 'there' ? null : userFirstName}
+          messages={gio.messages}
+          thinking={gio.thinking}
+          error={gio.error}
+          onAsk={(question, mode) => void gio.ask(question, mode)}
+          onClose={() => setShowGio(false)}
+        />
       </View>
     );
   }

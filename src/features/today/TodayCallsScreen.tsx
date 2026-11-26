@@ -7,6 +7,7 @@ import { PUBLIC_BRAND } from '../../brand/brands';
 import { CALL_QUEUE_FILTERS, callSection, type CallQueueFilter, type CallQueueItem, type CallQueueScope } from './callQueue';
 import { CallQueueRow } from './CallQueueRow';
 import { useCallQueue } from './useCallQueue';
+import { CaughtUp } from '../gio/CaughtUp';
 
 type Props = {
   scope: CallQueueScope;
@@ -88,10 +89,10 @@ export function TodayCallsScreen({ scope, loanOfficerId, bucket, onBucketChange,
             <TouchableOpacity accessibilityRole="button" style={styles.state} onPress={() => void refresh()}>
               <Text style={styles.stateText}>Couldn't load the call list. Tap to retry.</Text>
             </TouchableOpacity>
+          ) : bucket === 'all' ? (
+            <CaughtUp />
           ) : (
-            <Text style={[styles.state, styles.stateText]}>
-              {bucket === 'all' ? "You're caught up for today." : 'No contacts in this category.'}
-            </Text>
+            <Text style={[styles.state, styles.stateText]}>No contacts in this category.</Text>
           )
         }
         ListFooterComponent={loading && items.length > 0 ? <ActivityIndicator style={styles.footer} color="#2563EB" /> : null}
