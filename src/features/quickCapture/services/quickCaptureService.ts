@@ -76,12 +76,21 @@ export async function listQuickCaptures(
   options: ListQuickCapturesOptions = {}
 ): Promise<{ data: QuickCapture[]; error: Error | null }> {
   try {
+    // The list is your own captures, as on the website. Admins can read every
+    // account's rows, so the database alone does not narrow it.
+    const { data: auth } = await supabase.auth.getSession();
+    const userId = auth.session?.user.id;
+    if (!userId) {
+      return { data: [], error: new Error('Sign in again to see your quick leads.') };
+    }
+
     let query = supabase
       .from('quick_captures')
       .select(`
         *,
         realtors ( id, first_name, last_name )
       `)
+      .eq('created_by_user_id', userId)
       .order('last_touched_at', { ascending: false });
 
     if (options.status) {
