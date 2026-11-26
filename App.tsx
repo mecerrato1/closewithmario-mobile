@@ -1,6 +1,10 @@
 import { StatusBar } from 'expo-status-bar';
 import { senderNames } from './src/features/leads/senderName';
 import { LatestLeadRow } from './src/features/dashboard/LatestLeadRow';
+import { CallQueueRow } from './src/features/today/CallQueueRow';
+import { TodayCallsScreen } from './src/features/today/TodayCallsScreen';
+import { useCallQueue } from './src/features/today/useCallQueue';
+import type { CallQueueFilter, CallQueueItem } from './src/features/today/callQueue';
 import { leadSourceLine } from './src/features/dashboard/leadSummary';
 import { isTextSuggestion, readableStatuses, suggestedMessage } from './src/features/leads/followUpText';
 import { fetchSenderContact } from './src/lib/senderContact';
@@ -381,8 +385,26 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   // The dashboard list starts at the top every time it comes back on screen, so its
   // header needs a fresh value too. Reusing the old one left the header collapsed with a
   // gap above the content.
+  // Today is the website's call list. Realtors and buyers have no list there.
+  const [showTodayCalls, setShowTodayCalls] = useState(false);
+  const [todayBucket, setTodayBucket] = useState<CallQueueFilter>('all');
+  const usesCallQueue = roleReady && userRole !== 'buyer' && userRole !== 'realtor';
+  const callQueueScope = userRole === 'super_admin' ? 'all' : 'mine';
+  const callQueueLoanOfficer = userRole === 'super_admin' ? selectedLOFilter : null;
+  const todayCalls = useCallQueue({
+    enabled: usesCallQueue,
+    scope: callQueueScope,
+    loanOfficerId: callQueueLoanOfficer,
+    pageSize: 3,
+  });
+  const openCallQueueItem = (item: CallQueueItem, action?: 'call' | 'text') =>
+    openLeadFromSelection(
+      { source: item.leadSource === 'meta' ? 'meta' : 'lead', id: item.leadId },
+      { action }
+    );
+
   const dashboardOnScreen =
-    showDashboard && !selectedLead && !showTeamManagement && !showAdsLibrary &&
+    showDashboard && !showTodayCalls && !selectedLead && !showTeamManagement && !showAdsLibrary &&
     !showProfileSettings && !showQuickCaptures;
   const dashboardScrollY = useMemo(() => new Animated.Value(0), [dashboardOnScreen]);
   const DASHBOARD_HEADER_EXPANDED = Platform.OS === 'ios' ? 176 : 164;
@@ -662,6 +684,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
   useEffect(() => {
     if (leadsTabPresses === seenLeadsTabPresses.current) return;
     seenLeadsTabPresses.current = leadsTabPresses;
+    setShowTodayCalls(false);
     setShowDashboard(false);
   }, [leadsTabPresses]);
 
@@ -1733,6 +1756,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           setNotificationTargetTab(null); // Reset notification target
           setNotificationTargetLead(null);
           refreshTodayCallbacks(); // Refresh callbacks when returning to dashboard
+          void todayCalls.refresh();
           void refreshLeadDirectory();
         }}
         onNavigate={(leadRef) => openLeadFromSelection(leadRef)}
@@ -1793,6 +1817,22 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
             toCrmLeadSummary(source, updatedLead)
           );
         }}
+      />
+    );
+  }
+
+  if (showTodayCalls) {
+    return (
+      <TodayCallsScreen
+        scope={callQueueScope}
+        loanOfficerId={callQueueLoanOfficer}
+        bucket={todayBucket}
+        onBucketChange={setTodayBucket}
+        onBack={() => {
+          setShowTodayCalls(false);
+          void todayCalls.refresh();
+        }}
+        onOpen={openCallQueueItem}
       />
     );
   }
@@ -2190,7 +2230,10 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           refreshControl={
             <RefreshControl 
               refreshing={refreshing} 
-              onRefresh={onRefresh}
+              onRefresh={() => {
+                void onRefresh();
+                void todayCalls.refresh();
+              }}
               progressViewOffset={DASHBOARD_HEADER_EXPANDED} // Ensure spinner shows below header
             />
           }
@@ -2203,6 +2246,7 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
           <View style={styles.dashSectionHeader}>
             <Text style={[styles.dashSectionTitle, { color: colors.textPrimary }]}>
               {showCallbackHistory ? 'Callback history' : 'Today'}
+              {!showCallbackHistory && todayCalls.page ? ` · ${todayCalls.page.allTotal} to call` : ''}
             </Text>
             <TouchableOpacity accessibilityRole="button"
               hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
@@ -2303,13 +2347,54 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                 })
               )}
             </View>
-          ) : todayCallbacks.length === 0 ? (
-            <View style={[styles.dashCard, styles.dashEmptyRow]}>
-              <Ionicons name="calendar-outline" size={18} color="#1D4ED8" />
-              <Text style={styles.dashEmptyText}>No callbacks scheduled today</Text>
-            </View>
           ) : (
-            <View style={styles.dashList}>
+            <>
+              {usesCallQueue ? (
+                <View style={styles.dashCard}>
+                  {!todayCalls.page ? (
+                    todayCalls.error ? (
+                      <TouchableOpacity accessibilityRole="button" style={styles.dashEmptyRow} onPress={() => void todayCalls.refresh()}>
+                        <Text style={styles.dashEmptyText}>Couldn't load today's calls. Tap to retry.</Text>
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={styles.dashEmptyRow}>
+                        <Text style={styles.dashEmptyText}>Loading today's calls…</Text>
+                      </View>
+                    )
+                  ) : todayCalls.page.items.length === 0 ? (
+                    <View style={styles.dashEmptyRow}>
+                      <Ionicons name="checkmark-circle-outline" size={18} color="#047857" />
+                      <Text style={styles.dashEmptyText}>You're caught up for today</Text>
+                    </View>
+                  ) : (
+                    <>
+                      {todayCalls.page.items.map((item, index) => (
+                        <CallQueueRow
+                          key={`${item.leadSource}-${item.leadId}`}
+                          item={item}
+                          first={index === 0}
+                          onOpen={() => openCallQueueItem(item)}
+                          onCall={() => openCallQueueItem(item, 'call')}
+                          onText={() => openCallQueueItem(item, 'text')}
+                        />
+                      ))}
+                      <TouchableOpacity accessibilityRole="button" style={styles.dashSeeAll} onPress={() => setShowTodayCalls(true)}>
+                        <Text style={styles.dashSectionLink}>See all {todayCalls.page.allTotal}</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </View>
+              ) : todayCallbacks.length === 0 ? (
+                <View style={[styles.dashCard, styles.dashEmptyRow]}>
+                  <Ionicons name="calendar-outline" size={18} color="#1D4ED8" />
+                  <Text style={styles.dashEmptyText}>No callbacks scheduled today</Text>
+                </View>
+              ) : null}
+
+              {/* Your own callbacks keep their swipe actions: Done and Delete. */}
+              {todayCallbacks.length > 0 ? (
+                <View style={styles.dashList}>
+                  {usesCallQueue ? <Text style={styles.dashSubheading}>Your callbacks today · swipe to finish</Text> : null}
               {todayCallbacks.length > 0 && todayCallbacks.map((cb) => {
                 const when = cb.scheduled_for ? new Date(cb.scheduled_for) : null;
                 const timeStr = when
@@ -2387,7 +2472,9 @@ function LeadsScreen({ onSignOut, session, notificationLead, onNotificationHandl
                   </Swipeable>
                 );
               })}
-            </View>
+                </View>
+              ) : null}
+            </>
           )}
 
           <View style={styles.dashSectionHeader}>

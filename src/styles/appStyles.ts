@@ -2333,6 +2333,8 @@ export const styles = StyleSheet.create({
   dashSectionLink: { color: '#1D4ED8', fontSize: 14, fontWeight: '600' },
   dashCard: { backgroundColor: '#FFFFFF', borderColor: '#E2E8F0', borderWidth: 1, borderRadius: 14, marginHorizontal: 14, overflow: 'hidden' },
   dashList: { marginHorizontal: 14 },
+  dashSeeAll: { alignItems: 'center', justifyContent: 'center', minHeight: 44, borderTopWidth: 1, borderTopColor: '#EEF2F7' },
+  dashSubheading: { color: '#64748B', fontSize: 12, fontWeight: '600', marginTop: 10, marginBottom: 6, marginLeft: 4 },
   dashEmptyRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14 },
   dashEmptyText: { color: '#64748B', fontSize: 13 },
   dashActionRow: { flexDirection: 'row', marginTop: 12, marginHorizontal: 14, gap: 10 },
