@@ -7,6 +7,7 @@ import { API_BASE_URL } from '../../lib/apiBaseUrl';
 import { authenticatedFetch } from '../../lib/authenticatedFetch';
 import { supabase } from '../../lib/supabase';
 import MfaEnrollment from '../../screens/MfaEnrollment';
+import { DeviceList } from './DeviceList';
 import { confirmedRecoveryPhone, maskedPhone, normalizeRecoveryPhone } from './settingsData';
 import { ui } from './settingsStyles';
 
@@ -199,6 +200,7 @@ export function SecuritySettings({ onSignOut }: { onSignOut: () => void }) {
   const [phoneAvailable, setPhoneAvailable] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [deviceRefresh, setDeviceRefresh] = useState(0);
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
 
   const reload = useCallback(async () => {
@@ -242,6 +244,7 @@ export function SecuritySettings({ onSignOut }: { onSignOut: () => void }) {
             }
           }
           setSigningOut(false);
+          setDeviceRefresh((count) => count + 1);
           setMessage(
             failed ? { text: 'Could not sign out other devices. Please try again.', error: true } : { text: 'Other devices are signed out.' }
           );
@@ -267,6 +270,8 @@ export function SecuritySettings({ onSignOut }: { onSignOut: () => void }) {
         onPress={() => setOpen(open === 'phone' ? null : 'phone')}
       />
       {open === 'phone' ? <RecoveryPhone confirmed={phone} available={phoneAvailable} reload={reload} /> : null}
+      <View style={ui.divider} />
+      <DeviceList refreshKey={deviceRefresh} />
       <View style={ui.divider} />
       <Row title={signingOut ? 'Signing out…' : 'Sign out other devices'} onPress={signingOut ? () => {} : signOutOthers} />
       {message ? <Text style={message.error ? ui.error : ui.notice}>{message.text}</Text> : null}

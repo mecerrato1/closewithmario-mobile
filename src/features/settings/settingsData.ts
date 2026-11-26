@@ -43,3 +43,10 @@ export function confirmedRecoveryPhone(user: PhoneUser): string | null {
 }
 
 export const maskedPhone = (phone: string) => `••• ••• ${phone.slice(-4)}`;
+
+/** "Nov 26, 2026", or empty when the server sent no usable date. */
+export function shortDate(value: string | null | undefined): string {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
